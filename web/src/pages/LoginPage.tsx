@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -8,7 +8,6 @@ import { useAuth } from '@/hooks/useAuth'
 
 export function LoginPage() {
   const { signInWithMagicLink } = useAuth()
-  const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -25,39 +24,45 @@ export function LoginPage() {
       return
     }
     setSent(true)
-    const redirect = sessionStorage.getItem('post_auth_redirect')
-    if (redirect) navigate(redirect)
   }
 
   return (
-    <Card className="mx-auto max-w-md border-fifa-green/30">
-      <CardTitle className="text-fifa-green">Sign in with email</CardTitle>
-      <CardDescription className="mt-1">
-        We&apos;ll send a magic link — no password needed. Banter optional.
-      </CardDescription>
-      {sent ? (
-        <p className="mt-4 text-sm text-[var(--muted)]">
-          Check your inbox for the link. You can close this tab after clicking it.
-        </p>
-      ) : (
-        <form onSubmit={onSubmit} className="mt-4 space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              required
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? 'Sending…' : 'Send magic link'}
-          </Button>
-        </form>
-      )}
-    </Card>
+    <div className="mx-auto max-w-md space-y-4">
+      <Card className="border-fifa-green/30">
+        <CardTitle className="text-fifa-green">Sign in to your account</CardTitle>
+        <CardDescription className="mt-1">
+          Use the email you joined with. We&apos;ll send a magic link — no password.
+        </CardDescription>
+        {sent ? (
+          <p className="mt-4 text-sm text-[var(--muted)]">
+            Check your inbox for the link. After signing in you&apos;ll see all pools tied to this
+            email.
+          </p>
+        ) : (
+          <form onSubmit={onSubmit} className="mt-4 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                required
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+            {error && <p className="text-sm text-red-600">{error}</p>}
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? 'Sending…' : 'Send magic link'}
+            </Button>
+          </form>
+        )}
+      </Card>
+      <p className="text-center text-sm text-[var(--muted)]">
+        <Link to="/" className="underline">
+          Back to home
+        </Link>
+      </p>
+    </div>
   )
 }

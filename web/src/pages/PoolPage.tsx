@@ -1,12 +1,13 @@
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Copy, Shield } from 'lucide-react'
+import { CalendarDays, Share2, Shield } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { CoManagerBanner } from '@/components/CoManagerBanner'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { formatPoints } from '@/lib/utils'
+import { getInviteUrl } from '@/lib/urls'
 
 export function PoolPage() {
   const { poolId } = useParams<{ poolId: string }>()
@@ -84,12 +85,19 @@ export function PoolPage() {
   if (!poolQuery.data) return <p className="text-red-600">Pool not found.</p>
 
   const pool = poolQuery.data
-  const inviteUrl = `${window.location.origin}/join/${pool.invite_code}`
+  const inviteUrl = getInviteUrl(pool.invite_code)
   const member = memberQuery.data
   const team = assignedTeamQuery.data
+  const isHost = user?.id === pool.host_user_id
 
-  const copyInvite = async () => {
-    await navigator.clipboard.writeText(inviteUrl)
+  const shareInvite = async () => {
+    const text = `Join my WC26 pool "${pool.name}": ${inviteUrl}`
+    if (navigator.share) {
+      await navigator.share({ title: pool.name, text, url: inviteUrl })
+    } else {
+      await navigator.clipboard.writeText(inviteUrl)
+      alert('Invite link copied to clipboard.')
+    }
   }
 
   return (
@@ -97,12 +105,19 @@ export function PoolPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">{pool.name}</h1>
-          <p className="text-sm text-[var(--muted)]">FIFA World Cup 2026 · Cooper pool</p>
+          <p className="text-sm text-[var(--muted)]">World Cup 2026</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={copyInvite}>
-            <Copy className="h-4 w-4" /> Copy invite
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={shareInvite}>
+            <Share2 className="h-4 w-4" /> Share link
           </Button>
+          {member && (
+            <Button asChild variant="outline" size="sm">
+              <Link to={`/pools/${pool.id}/fixtures`}>
+                <CalendarDays className="h-4 w-4" /> Fixtures
+              </Link>
+            </Button>
+          )}
           {isSuperAdmin && (
             <Button asChild variant="outline" size="sm">
               <Link to={`/admin?pool=${pool.id}`}>
@@ -115,17 +130,22 @@ export function PoolPage() {
 
       {!member && user && (
         <Card>
-          <CardTitle>Not in this pool yet</CardTitle>
+          <CardTitle>{isHost ? 'Join your pool as a player' : 'Not in this pool yet'}</CardTitle>
+          <CardDescription className="mt-1">
+            {isHost
+              ? 'Hosts need to join to get a team assignment and points in this pool.'
+              : 'Use the invite link to join with your display name.'}
+          </CardDescription>
           <Button asChild className="mt-3">
-            <Link to={`/join/${pool.invite_code}`}>Join this pool</Link>
+            <Link to={`/join/${pool.invite_code}`}>Join pool</Link>
           </Button>
         </Card>
       )}
 
       {member && team && (
-        <Card className="border-fifa-green/40">
+        <Card className="border-[var(--team-primary)]/50">
           <CardTitle>Your team: {team.name}</CardTitle>
-          <CardDescription>{team.fifa_code} · assigned for the full tournament</CardDescription>
+          <CardDescription>{team.fifa_code} · assigned for this pool only</CardDescription>
           <div className="mt-3">
             <CoManagerBanner
               poolId={pool.id}
@@ -138,9 +158,9 @@ export function PoolPage() {
       )}
 
       <section>
-        <h2 className="mb-3 text-lg font-semibold text-fifa-gold">Odds points leaderboard</h2>
+        <h2 className="mb-3 text-lg font-semibold">Odds points leaderboard</h2>
         <p className="mb-3 text-sm text-[var(--muted)]">
-          Points = decimal win odds when your assigned team wins (underdogs climb faster).
+          Win = match win odds. Draw = draw odds for both teams involved.
         </p>
         <div className="space-y-2">
           {oddsLb.data?.map((row, i) => (
@@ -152,20 +172,19 @@ export function PoolPage() {
                 #{i + 1} {row.display_name}{' '}
                 <span className="text-[var(--muted)]">({row.team_name})</span>
               </span>
-              <span className="font-bold text-fifa-green">{formatPoints(row.total_points)} pts</span>
+              <span className="font-bold text-[var(--team-primary)]">
+                {formatPoints(row.total_points)} pts
+              </span>
             </div>
           ))}
           {!oddsLb.data?.length && (
-            <p className="text-sm text-[var(--muted)]">No points yet — wins + odds sync required.</p>
+            <p className="text-sm text-[var(--muted)]">No points yet.</p>
           )}
         </div>
       </section>
 
       <section>
-        <h2 className="mb-3 text-lg font-semibold text-fifa-green">Tournament standing</h2>
-        <p className="mb-3 text-sm text-[var(--muted)]">
-          Teams ranked by progress (winner first, early exits last). Co-managers share one row.
-        </p>
+        <h2 className="mb-3 text-lg font-semibold">Tournament standing</h2>
         <div className="space-y-2">
           {tournamentLb.data?.map((row, i) => (
             <div
@@ -182,13 +201,7 @@ export function PoolPage() {
               </div>
               <p className="text-xs text-[var(--muted)] mt-1">
                 Managers: {row.manager_names.join(', ')}
-                {row.co_manager_count > 1 && ` (${row.co_manager_count} owners)`}
               </p>
-              {row.group_letter && (
-                <p className="text-xs text-[var(--muted)]">
-                  Group {row.group_letter}: {row.group_points} pts · GD {row.group_goal_difference}
-                </p>
-              )}
             </div>
           ))}
         </div>

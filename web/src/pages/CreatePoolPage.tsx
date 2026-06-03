@@ -12,17 +12,25 @@ export function CreatePoolPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [name, setName] = useState('')
+  const [displayName, setDisplayName] = useState('')
 
   const createPool = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error('Not signed in')
-      const { data, error } = await supabase
+      const { data: pool, error } = await supabase
         .from('pools')
         .insert({ name: name.trim(), host_user_id: user.id })
         .select()
         .single()
       if (error) throw error
-      return data
+
+      const { error: joinError } = await supabase.rpc('join_pool', {
+        p_pool_id: pool.id,
+        p_display_name: displayName.trim() || 'Host',
+      })
+      if (joinError) throw joinError
+
+      return pool
     },
     onSuccess: (pool) => navigate(`/pools/${pool.id}`),
   })
@@ -31,7 +39,7 @@ export function CreatePoolPage() {
     <Card className="max-w-md mx-auto">
       <CardTitle>Create a pool</CardTitle>
       <CardDescription className="mt-1">
-        You&apos;ll get a unique invite link to share with your group.
+        You&apos;ll join automatically with your own team assignment in this pool.
       </CardDescription>
       <form
         className="mt-4 space-y-4"
@@ -50,11 +58,21 @@ export function CreatePoolPage() {
             onChange={(e) => setName(e.target.value)}
           />
         </div>
+        <div className="space-y-2">
+          <Label htmlFor="displayName">Your name in this pool</Label>
+          <Input
+            id="displayName"
+            required
+            placeholder="Cooper"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+          />
+        </div>
         {createPool.error && (
           <p className="text-sm text-red-600">{(createPool.error as Error).message}</p>
         )}
         <Button type="submit" className="w-full" disabled={createPool.isPending}>
-          {createPool.isPending ? 'Creating…' : 'Create pool'}
+          {createPool.isPending ? 'Creating…' : 'Create & join pool'}
         </Button>
       </form>
     </Card>

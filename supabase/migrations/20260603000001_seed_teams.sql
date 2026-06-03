@@ -1,13 +1,13 @@
--- Placeholder 48-team seed for development (update fifa codes when draw is final)
+-- 48 teams — FIFA World Cup 2026 draw (groups A–L)
 insert into public.teams (fifa_code, name, group_letter) values
   ('MEX', 'Mexico', 'A'),
   ('RSA', 'South Africa', 'A'),
   ('KOR', 'Korea Republic', 'A'),
-  ('UNK1', 'Group A Team 4', 'A'),
+  ('CZE', 'Czechia', 'A'),
   ('CAN', 'Canada', 'B'),
   ('QAT', 'Qatar', 'B'),
   ('SUI', 'Switzerland', 'B'),
-  ('UNK2', 'Group B Team 4', 'B'),
+  ('BIH', 'Bosnia and Herzegovina', 'B'),
   ('BRA', 'Brazil', 'C'),
   ('MAR', 'Morocco', 'C'),
   ('HAI', 'Haiti', 'C'),
@@ -15,7 +15,7 @@ insert into public.teams (fifa_code, name, group_letter) values
   ('USA', 'United States', 'D'),
   ('PAR', 'Paraguay', 'D'),
   ('AUS', 'Australia', 'D'),
-  ('UNK3', 'Group D Team 4', 'D'),
+  ('TUR', 'Türkiye', 'D'),
   ('GER', 'Germany', 'E'),
   ('CUW', 'Curaçao', 'E'),
   ('CIV', 'Côte d''Ivoire', 'E'),
@@ -23,7 +23,7 @@ insert into public.teams (fifa_code, name, group_letter) values
   ('NED', 'Netherlands', 'F'),
   ('JPN', 'Japan', 'F'),
   ('TUN', 'Tunisia', 'F'),
-  ('UNK4', 'Group F Team 4', 'F'),
+  ('SWE', 'Sweden', 'F'),
   ('BEL', 'Belgium', 'G'),
   ('EGY', 'Egypt', 'G'),
   ('IRN', 'Iran', 'G'),
@@ -35,7 +35,7 @@ insert into public.teams (fifa_code, name, group_letter) values
   ('FRA', 'France', 'I'),
   ('SEN', 'Senegal', 'I'),
   ('NOR', 'Norway', 'I'),
-  ('UNK5', 'Group I Team 4', 'I'),
+  ('IRQ', 'Iraq', 'I'),
   ('ARG', 'Argentina', 'J'),
   ('ALG', 'Algeria', 'J'),
   ('AUT', 'Austria', 'J'),
@@ -43,9 +43,9 @@ insert into public.teams (fifa_code, name, group_letter) values
   ('POR', 'Portugal', 'K'),
   ('ENG', 'England', 'K'),
   ('CRO', 'Croatia', 'K'),
-  ('UNK6', 'Group K Team 4', 'K'),
-  ('COL', 'Colombia', 'L'),
-  ('UZB', 'Uzbekistan', 'L'),
-  ('UNK7', 'Group L Team 3', 'L'),
-  ('UNK8', 'Group L Team 4', 'L')
+  ('COL', 'Colombia', 'K'),
+  ('UZB', 'Uzbekistan', 'K'),
+  ('COD', 'Congo DR', 'K'),
+  ('PAN', 'Panama', 'L'),
+  ('GHA', 'Ghana', 'L')
 on conflict (fifa_code) do nothing;

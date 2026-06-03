@@ -9,10 +9,12 @@ import { ThemeProvider } from '@/hooks/useTheme'
 import { AdminPage } from '@/pages/AdminPage'
 import { AuthCallbackPage } from '@/pages/AuthCallbackPage'
 import { CreatePoolPage } from '@/pages/CreatePoolPage'
+import { FixturesPage } from '@/pages/FixturesPage'
 import { HomePage } from '@/pages/HomePage'
 import { JoinPoolPage } from '@/pages/JoinPoolPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { PoolPage } from '@/pages/PoolPage'
+import { PoolShell } from '@/pages/PoolShell'
 
 const queryClient = new QueryClient()
 const basename = getRouterBasename()
@@ -36,6 +38,7 @@ export default function App() {
                 <Route index element={<HomePage />} />
                 <Route path="login" element={<LoginPage />} />
                 <Route path="auth/callback" element={<AuthCallbackPage />} />
+                <Route path="join" element={<JoinPoolPage />} />
                 <Route path="join/:inviteCode" element={<JoinPoolPage />} />
                 <Route
                   path="pools/new"
@@ -49,10 +52,13 @@ export default function App() {
                   path="pools/:poolId"
                   element={
                     <ProtectedRoute>
-                      <PoolPage />
+                      <PoolShell />
                     </ProtectedRoute>
                   }
-                />
+                >
+                  <Route index element={<PoolPage />} />
+                  <Route path="fixtures" element={<FixturesPage />} />
+                </Route>
                 <Route
                   path="admin"
                   element={
