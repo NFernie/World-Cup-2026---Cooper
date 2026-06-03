@@ -3,7 +3,8 @@ name: Deploy Database Migrations
 on:
   push:
     branches:
-      - main # Triggers the workflow every time you push to the main branch
+      - main
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -13,20 +14,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Run Supabase Boot
+      - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
           version: latest
 
+      # Only SUPABASE_ACCESS_TOKEN should use the SUPABASE_ prefix here.
+      # Other secrets passed as DB_PASSWORD avoid viper config parse conflicts.
       - name: Link Supabase project
-        run: supabase link --project-ref "$SUPABASE_PROJECT_REF" -p "$SUPABASE_DB_PASSWORD" --yes
+        run: supabase link --project-ref fyiegingyipqtxaiopng -p "$DB_PASSWORD" --yes
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-          SUPABASE_PROJECT_REF: fyiegingyipqtxaiopng
+          DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
       - name: Push Database Migrations
         run: supabase db push --linked --yes
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}

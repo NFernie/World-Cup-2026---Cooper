@@ -1,5 +1,5 @@
-[project]
-id = "world-cup-2026-cooper"
+# https://supabase.com/docs/guides/local-development/cli/config
+project_id = "world-cup-2026-cooper"
 
 [api]
 enabled = true
@@ -10,7 +10,10 @@ major_version = 15
 [auth]
 enabled = true
 site_url = "http://localhost:5173"
-additional_redirect_urls = ["http://localhost:5173/**"]
+additional_redirect_urls = [
+  "http://localhost:5173/**",
+  "https://nfernie.github.io/World-Cup-2026---Cooper/**",
+]
 
 [auth.email]
 enable_signup = true
