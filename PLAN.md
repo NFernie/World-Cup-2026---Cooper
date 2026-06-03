@@ -492,6 +492,8 @@ I believe the Questionaire has been responded to throughout the plan.md file. Re
 2. Produce **technical spec v2** (migrations, API choice, exact RLS policies).  
 3. Begin **Phase 1** implementation on branch `cursor/world-cup-tipping-impl-6427`.
 
+Capture a summary at each prompt which will allow us re-run the process in a live demo. Create .md files. time stamp and prompt number. 
+
 ---
 
 *This document is the living plan for World-Cup-2026---Cooper. Implementation should not start until §2 and §13 critical items are resolved.*
