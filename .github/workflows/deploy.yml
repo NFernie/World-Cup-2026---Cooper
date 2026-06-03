@@ -18,10 +18,15 @@ jobs:
         with:
           version: latest
 
-      - name: Push Database Migrations
-        run: supabase db push --method direct
+      - name: Link Supabase project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF" -p "$SUPABASE_DB_PASSWORD" --yes
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-          # Replace 'your-ref-id' with your actual Supabase project reference string
           SUPABASE_PROJECT_REF: fyiegingyipqtxaiopng
+
+      - name: Push Database Migrations
+        run: supabase db push --linked --yes
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
