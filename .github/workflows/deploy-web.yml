@@ -42,6 +42,21 @@ jobs:
         working-directory: web
         run: npm ci
 
+      - name: Verify Supabase build secrets
+        run: |
+          if [ -z "${{ secrets.VITE_SUPABASE_URL }}" ]; then
+            echo "::error::Missing secret VITE_SUPABASE_URL (Project URL from Supabase → Settings → API)"
+            exit 1
+          fi
+          if [ -z "${{ secrets.VITE_SUPABASE_ANON_KEY }}" ]; then
+            echo "::error::Missing secret VITE_SUPABASE_ANON_KEY (anon public key from Supabase → Settings → API)"
+            exit 1
+          fi
+          case "${{ secrets.VITE_SUPABASE_URL }}" in
+            https://*) ;;
+            *) echo "::error::VITE_SUPABASE_URL must start with https://"; exit 1 ;;
+          esac
+
       - name: Build
         working-directory: web
         env:

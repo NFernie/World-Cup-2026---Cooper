@@ -1,7 +1,9 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { ConfigErrorScreen } from '@/components/ConfigErrorScreen'
 import { Layout } from '@/components/Layout'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
+import { getRouterBasename, isSupabaseConfigured } from '@/lib/env'
 import { AuthProvider } from '@/hooks/useAuth'
 import { ThemeProvider } from '@/hooks/useTheme'
 import { AdminPage } from '@/pages/AdminPage'
@@ -13,13 +15,22 @@ import { LoginPage } from '@/pages/LoginPage'
 import { PoolPage } from '@/pages/PoolPage'
 
 const queryClient = new QueryClient()
+const basename = getRouterBasename()
 
 export default function App() {
+  if (!isSupabaseConfigured) {
+    return (
+      <ThemeProvider>
+        <ConfigErrorScreen />
+      </ThemeProvider>
+    )
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <AuthProvider>
-          <BrowserRouter basename={import.meta.env.BASE_URL}>
+          <BrowserRouter basename={basename}>
             <Routes>
               <Route element={<Layout />}>
                 <Route index element={<HomePage />} />

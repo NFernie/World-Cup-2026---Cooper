@@ -1,15 +1,14 @@
 import { createClient } from '@supabase/supabase-js'
+import { getConfigError, isSupabaseConfigured, supabaseAnonKey, supabaseUrl } from '@/lib/env'
 
-const url = import.meta.env.VITE_SUPABASE_URL
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+const configError = getConfigError()
 
-if (!url || !anonKey) {
-  console.warn(
-    'Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY — copy web/.env.example to web/.env.local',
-  )
+if (configError) {
+  console.error(configError)
 }
 
-export const supabase = createClient(
-  url ?? 'https://placeholder.supabase.co',
-  anonKey ?? 'placeholder',
-)
+export const supabaseConfigError = configError
+
+export const supabase = isSupabaseConfigured
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : createClient('https://invalid.local', 'invalid')
