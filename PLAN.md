@@ -48,6 +48,8 @@ These are **blocking product decisions**. Please answer inline (reply in chat or
 
 **Recommendation:** Mobile-first, dark/light toggle, shadcn/ui + Tailwind, casual-competitive tone (not corporate).
 
+**Developer Response 2.1: Mobile-first, dark/light toggle, shadcn/ui + Tailwind, casual-competitive tone (not corporate). "Overall Vibe" Align it with a Fifa Adjacent feel
+
 ---
 
 ### 2.2 Fixtures & results — automatic refresh?
@@ -61,7 +63,11 @@ These are **blocking product decisions**. Please answer inline (reply in chat or
 
 **Recommendation:** Automated sync via a football data API on a schedule (e.g. every 5–15 minutes during match windows) **plus** an admin “override score” screen. Live minute-by-minute is optional complexity for v1.
 
+**Developer Response 2.2: Automated sync via a football data API on a schedule every 5mins during match windows **plus** an admin “override score” screen. stick to a low budget external API. 
+
 ---
+
+
 
 ### 2.3 What is a “tip”?
 
@@ -73,6 +79,8 @@ These are **blocking product decisions**. Please answer inline (reply in chat or
 | T4 | **Edits after submit?** | Locked at kickoff · Editable until lock · Unlimited until lock |
 | T5 | **Scoring** | You define points (see §4.3) — need your preferred table |
 
+
+**Developer response 2.3: Users will be assigned a team which will remain their team for the whole tournament eg constantly picked. They will receive points for every match the assinged team plays in. Points will be assigned based on betting odds on a per game basis. Eg If Argentina wins and has 2:1 chance to win, the player gets 2 points. There needs to be two leaderboards, the where the teams are ranked in terms of what stage of the competion they get to and where they sit in their groups. Team that wins the world cup first, runner - up second, team that scores the least total points (from wins, draws, losses) from the start of the comp comes last etc. A seperate leaderboard needs to exist where points are counted based on betting odds, so if a smaller/lower ranked team with low chance to win individual matches have a high win rate they have chance to place higher on the second leaderboard. 
 ---
 
 ### 2.4 Pool structure & users
@@ -85,6 +93,7 @@ These are **blocking product decisions**. Please answer inline (reply in chat or
 | P4 | **Display names** | Real name · Nickname · Email hidden on leaderboard |
 | P5 | **Roles** | Player only · Player + Admin · Super-admin (you) |
 
+**Developer response 2.4: P1 - Many possible pools. A host will set a competition up and send invites via a URL to email, whatsapp etc. Expected headcount is unknown, however if players are >48 teams will need to be assinged to >1 person. Ensure all teams are assigned before double ups occur. User enters a chosen name. Player only and Super-Admin. 
 ---
 
 ### 2.5 “Assigned team” — what does it mean?
@@ -98,6 +107,8 @@ This is critical because you mentioned **48+ users** and **sharing teams**.
 | A3 | **When is assignment final?** | On signup · After email verified · Admin can reassign until tournament starts |
 
 **Please pick A1 explicitly** — it drives database design and fairness rules.
+
+**Developer response 2.5: Automatic assigning of teams is just for fairness. See response 2.3 for scoring system. You only score points for matches your team is automatically assigned to. Assignment is decided and final on signup, admin can reassign at any stage. 
 
 ---
 
@@ -138,6 +149,8 @@ flowchart TB
 | Backend | **Supabase** | Auth, DB, RLS, cron in one place |
 | Auth | **Email OTP or Magic Link** | “Loose auth” — no password management |
 | Hosting | Vercel / Netlify / Cloudflare Pages | Static SPA + env keys |
+
+**Developer response 3: Stick to the recommended architecture
 
 **Alternative path:** Next.js App Router + Supabase SSR if you want SEO or server components later — heavier for a friends-only pool.
 
@@ -182,6 +195,8 @@ flowchart TB
 
 - **Third-place qualifiers:** Users do **not** need to predict “which 3rd place teams advance” unless you add a **bonus question** round before R32.  
 - **104 matches:** Consider tipping **only group stage (72)** for v1 to reduce fatigue, unless your group is keen.
+
+**Developer response 4: See previous responses for how scoring is to work. Two leaderboards, one for overall place in the competition. One for points based on betting odds so lower ranked teams can get higher scores. 
 
 ---
 
@@ -236,6 +251,7 @@ flowchart TB
 - **Admin** can correct a match and re-run scoring.  
 - **Notifications** (optional v2): email when your tip is scored or you move on leaderboard.
 
+**Developer response 5: Path C — Hybrid (recommended for Cooper pool) - willing to sign up to an API for 6 weeks, 15 minute delay after fulltime is acceptable, only final results. I belive aforementioned betting odds are available in the api-football.com API. We need to ensure it runs as a Server-to-API Request to limit the number of requests made per day. Limit the requests to for scores/results to only after the match is completed. Limit the requests for betting odds to update 2 hrs before the matches start.  
 ---
 
 ## 6. More than 48 users — team assignment strategies
@@ -256,6 +272,8 @@ There are exactly **48 national teams** in the tournament. If **more than 48 use
 
 **Recommendation:** **S2 (balanced random)** on authorization, with:
 
+**Developer response 6.1: Set up a "Round Robin queue" The first joiner gets assigned a team randomly (48 teams) (equal chance per team) and then the next joiner gets assigned a team minus the possbility of the team that has already been assigned to the first user (47 teams). Once all teams have been assigned user # 49 gets assigned a random team from the full list of 48 teams etc etc. Provide this message for the instance of co managing - Display: “You’re co-managing **Japan** with @alex and @sam (3 owners)”.  
+
 - `teams.max_owners` optional (e.g. max 3 per nation for 144 users).  
 - Display: “You’re co-managing **Japan** with @alex and @sam (3 owners)”.  
 - Side leaderboard: sum of **all co-managers’** main tipping points, or average — **you must choose**.
@@ -269,6 +287,11 @@ There are exactly **48 national teams** in the tournament. If **more than 48 use
 | C3 | Should co-managers see each other’s tips before lock? (Usually **no**) |
 | C4 | Reassignment if someone drops out? Admin only? |
 
+**Developer response 6.2: 
+C1: Unlimited
+C2: No changes to scoring for co-managers. Scoring applied to user, the co-managed team will just appear in the leaderboard as per a single managed team. However the manager name will have both users attached. 
+C3: No
+C4: No automatic reassingment, Admin decision. 
 ---
 
 ## 7. Authentication — “loose email auth” paths
@@ -282,6 +305,8 @@ There are exactly **48 national teams** in the tournament. If **more than 48 use
 
 **Recommendation:** **E1 or E2** via Supabase Auth.
 
+**Developer response 7: E1 
+
 ### 7.1 Access control add-ons
 
 | Add-on | Purpose |
@@ -292,7 +317,11 @@ There are exactly **48 national teams** in the tournament. If **more than 48 use
 
 **Interrogation:** Should **anyone with the link** join, or only people you add by email first?
 
+**Developer response 7.1: Anyone with the link can join. Links shared are tied back to the group set up by the host. Eg a group that Cooper people will recieve and a group that family recieve need seperate links. 
+
 ---
+
+
 
 ## 8. Data model (draft)
 
@@ -452,6 +481,8 @@ Please answer in chat (numbered). Short answers are fine.
 8. **Admin:** Who are admins besides you?  
 9. **Timeline:** Must MVP be ready before first match (11 Jun 2026)? Any hard internal deadline?  
 10. **Anything else:** Grand final party rules, prizes, disqualification, etc.?
+
+I believe the Questionaire has been responded to throughout the plan.md file. Refer to 'Developer Responses' lines. 
 
 ---
 

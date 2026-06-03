@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@theme {
+  --color-fifa-green: #00a651;
+  --color-fifa-gold: #c9a227;
+  --color-fifa-navy: #0b1f3a;
+  --font-sans: "Segoe UI", system-ui, sans-serif;
+}
+
+:root {
+  --background: #f4f7f5;
+  --foreground: #0b1f3a;
+  --card: #ffffff;
+  --muted: #5c6b7a;
+  --primary: #00a651;
+  --primary-foreground: #ffffff;
+  --border: #d8e3dc;
+}
+
+.dark {
+  --background: #071018;
+  --foreground: #e8f0ea;
+  --card: #0f1f2e;
+  --muted: #9fb0a8;
+  --primary: #00c85e;
+  --primary-foreground: #071018;
+  --border: #1e3344;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font-sans);
+  background: var(--background);
+  color: var(--foreground);
+}
+
+#root {
+  min-height: 100vh;
+}
