@@ -6,6 +6,7 @@ import {
   type ReactNode,
 } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
+import { getAuthRedirectUrl } from '@/lib/authRedirect'
 import { supabase } from '@/lib/supabase'
 
 type AuthContextValue = {
@@ -57,11 +58,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user])
 
   const signInWithMagicLink = async (email: string) => {
+    const emailRedirectTo = getAuthRedirectUrl()
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
+      options: { emailRedirectTo },
     })
     return { error: error as Error | null }
   }

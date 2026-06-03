@@ -13,6 +13,7 @@ site_url = "http://localhost:5173"
 additional_redirect_urls = [
   "http://localhost:5173/**",
   "https://nfernie.github.io/World-Cup-2026---Cooper/**",
+  "https://nfernie.github.io/World-Cup-2026---Cooper/auth/callback",
 ]
 
 [auth.email]

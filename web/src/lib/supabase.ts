@@ -9,6 +9,7 @@ if (configError) {
 
 export const supabaseConfigError = configError
 
-export const supabase = isSupabaseConfigured
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : createClient('https://invalid.local', 'invalid')
+export const supabase = createClient(
+  isSupabaseConfigured ? supabaseUrl : 'https://placeholder.supabase.co',
+  isSupabaseConfigured ? supabaseAnonKey : 'placeholder-key-not-used',
+)
