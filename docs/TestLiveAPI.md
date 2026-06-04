@@ -1,27 +1,103 @@
 # Test plan — live API-Football updates
 
-Use this checklist after the site is deployed and Supabase migrations through `20260603000003` are applied.
+Use this checklist after:
+
+- Supabase migrations through **`20260606000006`** are applied
+- The web app is deployed (GitHub Pages)
+- Edge functions are deployed with **exact names** (see [Step 0](#step-0--edge-functions-exist-and-are-named-correctly))
+
+Related: [supabase/functions/DASHBOARD-DEPLOY.md](../supabase/functions/DASHBOARD-DEPLOY.md) (browser copy/paste deploy).
+
+Project ref: `fyiegingyipqtxaiopng`  
+Base URL: `https://fyiegingyipqtxaiopng.supabase.co`
+
+---
+
+## Step 0 — Edge functions exist and are named correctly
+
+Supabase invokes functions by **slug in the URL**, not the display title in the dashboard.
+
+| Required slug (exact) | Purpose |
+|----------------------|---------|
+| `sync-match-results` | Finished scores + runs awards sync at end |
+| `sync-match-odds` | Pre-kickoff betting odds |
+| `sync-tournament-awards` | Golden Boot / Golden Glove + `api_football_team_id` mapping |
+
+### 0a — Dashboard check
+
+1. Supabase Dashboard → **Edge Functions**
+2. Confirm **three** functions whose slugs match the table above
+3. Common mistakes:
+   - Display name “Sync Match Results” is fine — slug must still be `sync-match-results`
+   - Underscores (`sync_match_results`) — **wrong** for this repo
+   - Short names (`match-results`, `tournament-awards`) — **wrong**; curl will 404
+
+### 0b — Quick HTTP check (no valid key needed)
+
+Replace `<slug>` and run from any terminal:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" -X POST \
+  "https://fyiegingyipqtxaiopng.supabase.co/functions/v1/<slug>" \
+  -H "Authorization: Bearer test"
+```
+
+| HTTP code | Meaning |
+|-----------|---------|
+| **401** | Function **exists** (auth rejected — expected with a fake token) |
+| **404** | Function **missing** or **wrong slug** — deploy or rename |
+| **500** | Function exists but env/secrets or runtime error — check logs |
+
+**Verified externally (2026-06):** `sync-match-results` → **401**; `sync-tournament-awards` and `sync-match-odds` → **404** until deployed.
+
+Re-check after you deploy in the dashboard.
+
+### 0c — Deploy if missing
+
+**CLI (one machine):**
+
+```bash
+supabase link --project-ref fyiegingyipqtxaiopng
+supabase secrets set API_FOOTBALL_KEY=your_key
+supabase functions deploy sync-match-results
+supabase functions deploy sync-match-odds
+supabase functions deploy sync-tournament-awards
+```
+
+**Browser:** follow [DASHBOARD-DEPLOY.md](../supabase/functions/DASHBOARD-DEPLOY.md).  
+Functions 2 & 3 need **three files** each (`index.ts` + `_shared/awards-sync.ts` + `_shared/fifa-code-map.ts`).  
+Import must be `./_shared/awards-sync.ts` — **not** `../_shared/` (module not found).
+
+---
 
 ## Prerequisites
 
 | Item | Verified |
 |------|----------|
-| `API_FOOTBALL_KEY` set in Supabase Edge secrets | ☐ |
-| `SUPABASE_SERVICE_ROLE_KEY` set | ☐ |
-| Edge functions deployed: `sync-match-results`, `sync-match-odds` | ☐ |
-| `API_FOOTBALL_LEAGUE_ID` / `API_FOOTBALL_SEASON` env vars correct for WC 2026 | ☐ |
-| Matches in DB have `external_id` matching API-Football fixture IDs | ☐ |
+| Migrations through `20260606000006` | ☐ |
+| `API_FOOTBALL_KEY` in Edge Functions → **Secrets** | ☐ |
+| All three function slugs pass [0b](#0b--quick-http-check-no-valid-key-needed) (401, not 404) | ☐ |
+| Optional secrets: `API_FOOTBALL_LEAGUE_ID=1`, `API_FOOTBALL_SEASON=2026` | ☐ |
+| Matches that should auto-sync have `external_id` = API fixture id | ☐ |
 
-## Phase 1 — Static data (no API)
+`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are injected automatically for deployed functions.
 
-1. Open home → sign in → confirm **Your pools** lists all memberships.
-2. Create pool → host auto-joins → **Share link** opens `/join/{code}` (no 404).
-3. Second user joins second pool → **different** `assigned_team_id` per pool in `pool_members`.
-4. **Fixtures** page shows sample matches, local kickoff times, odds columns.
-5. Finished draw (NED 1–1 JPN) awards **draw odds** to both assigned members after `recalculate_pool_member_points`.
+---
+
+## Phase 1 — Static app & database (no API)
+
+Auth is **username + password** (not magic link).
+
+| Step | Pass |
+|------|------|
+| Sign in on `https://nfernie.github.io/World-Cup-2026---Cooper/` | ☐ |
+| **Your pools** lists memberships | ☐ |
+| Create pool → share link `/join/{code}` works | ☐ |
+| Fixtures page shows matches, kickoff, odds columns | ☐ |
+| Pool page: Overall → tournament → odds → Golden Boot/Glove → boards | ☐ |
+| Sample finished draw NED 1–1 JPN awards draw odds | ☐ |
 
 ```sql
--- Verify draw points
 select pm.display_name, t.name, mmp.points, mmp.win_odds_decimal
 from member_match_points mmp
 join pool_members pm on pm.id = mmp.pool_member_id
@@ -31,70 +107,186 @@ join teams ta on ta.id = m.away_team_id
 where th.fifa_code = 'NED' and ta.fifa_code = 'JPN';
 ```
 
-## Phase 2 — Odds sync (`sync-match-odds`)
+---
 
-**Schedule:** hourly cron, or manual invoke.
+## Phase 2 — Tournament awards (`sync-tournament-awards`)
 
-1. Insert or update a `scheduled` match with `kickoff_at` in ~2 hours.
-2. Set `external_id` to a real API-Football fixture id.
-3. Invoke function; confirm `match_odds` row created.
-4. UI fixtures show home / draw / away decimals.
+Golden Boot / Golden Glove leaderboards read `teams.golden_boot_*` / `golden_glove_*`.  
+Placeholders (`Squad forward`, `No. 1 goalkeeper`) stay until this sync overwrites them **and** API returns player stats.
+
+### Invoke
+
+Dashboard → `sync-tournament-awards` → **Invoke**, or:
 
 ```bash
-curl -X POST "https://<ref>.supabase.co/functions/v1/sync-match-odds" \
-  -H "Authorization: Bearer $ANON_OR_SERVICE_KEY"
+curl -X POST "https://fyiegingyipqtxaiopng.supabase.co/functions/v1/sync-tournament-awards" \
+  -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY"
 ```
+
+(Service role: Project Settings → API.)
+
+### Expected response
+
+```json
+{
+  "ok": true,
+  "teamIds": 48,
+  "scorers": 0,
+  "goalkeepers": 40,
+  "expectedTeams": 48
+}
+```
+
+| Field | Healthy | Notes |
+|-------|---------|-------|
+| `teamIds` | ≈ `expectedTeams` (48) | API team ↔ DB `fifa_code` mapping |
+| `scorers` | > 0 during tournament | Often **0** before WC goals exist |
+| `goalkeepers` | > 0 if squads in API | May be low pre-tournament |
+
+### SQL verify
+
+```sql
+select count(*) filter (where api_football_team_id is not null) as linked,
+       count(*) as total
+from teams;
+
+select fifa_code, golden_boot_player_name, golden_glove_player_name, awards_synced_at
+from teams
+where fifa_code in ('ENG', 'BRA', 'NED');
+```
+
+| Pass | Criteria |
+|------|----------|
+| Plumbing | HTTP **200**, `linked` ≈ 48 |
+| Meaningful Boot names | `golden_boot_player_name` not `Squad forward` **and** `scorers` > 0 in JSON |
+| Pre-Cup demo | Use Admin → **Team awards** to type names manually |
+
+`fifa-code-map.ts` only lists **alias** codes (≈8 rows), not all 48 — direct code + name matching handles the rest.
+
+---
 
 ## Phase 3 — Results sync (`sync-match-results`)
 
-**Schedule:** every 5 minutes on match days.
+**Schedule (recommended):** every 5 minutes on match days.
 
-1. Wait until API reports fixture `FT`.
-2. Invoke `sync-match-results`.
-3. Confirm `matches.status = finished`, scores set, `scores_synced_at` populated.
-4. Leaderboard odds totals update without manual admin action.
+Also calls awards sync at the end of each run.
 
-## Phase 4 — Admin override (hybrid path)
+### Invoke
 
-1. Super-admin → override a score on finished match.
-2. Confirm `match_score_audit` row.
-3. Re-run `select recalculate_pool_member_points('<match_id>');`
-4. Leaderboard reflects new points.
+```bash
+curl -X POST "https://fyiegingyipqtxaiopng.supabase.co/functions/v1/sync-match-results" \
+  -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY"
+```
 
-## Phase 5 — Rate limits & cost
+### Pass criteria
 
 | Check | Pass |
 |-------|------|
-| No client-side calls to API-Football | ☐ |
-| Results only fetched for `FT` fixtures | ☐ |
-| Odds only fetched in pre-kickoff window | ☐ |
-| Daily request count within plan tier | ☐ |
+| HTTP 200, `"ok": true` | ☐ |
+| `updated` > 0 when API has `FT` fixtures linked in DB | ☐ |
+| `matches.status = finished`, scores set, `scores_synced_at` set | ☐ |
+| Leaderboard points update without admin | ☐ |
 
-## Phase 6 — Production smoke
+### Weak point: `external_id`
+
+Seed matches from `20260603000003` are inserted **without** `external_id`.  
+Results sync only updates rows where `matches.external_id` = API `fixture.id`.
+
+```sql
+select count(*) as matches,
+       count(*) filter (where external_id is not null) as with_api_id
+from matches;
+```
+
+If `with_api_id = 0`, expect `updated: 0` until you backfill ids from  
+`GET /fixtures?league=1&season=2026`.
+
+---
+
+## Phase 4 — Odds sync (`sync-match-odds`)
+
+**Schedule (recommended):** hourly.
+
+Only processes `scheduled` matches with `kickoff_at` in ~2 hours and a non-null `external_id`.
+
+### Invoke
+
+```bash
+curl -X POST "https://fyiegingyipqtxaiopng.supabase.co/functions/v1/sync-match-odds" \
+  -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY"
+```
+
+### Test one match manually
+
+```sql
+-- Use a real fixture id from API-Football
+update matches
+set external_id = 'REPLACE_WITH_FIXTURE_ID',
+    kickoff_at = now() + interval '2 hours',
+    status = 'scheduled'
+where id = (select id from matches limit 1);
+```
+
+Re-invoke → confirm `match_odds` row and `matches.odds_synced_at`.
+
+---
+
+## Phase 5 — Admin override (hybrid)
 
 | Step | Pass |
 |------|------|
-| Magic link on GitHub Pages URL | ☐ |
+| Super-admin overrides a finished match score | ☐ |
+| `match_score_audit` row created | ☐ |
+| `recalculate_pool_member_points` updates leaderboards | ☐ |
+| Team awards override Boot/Glove names when API empty | ☐ |
+
+---
+
+## Phase 6 — Rate limits & cost
+
+| Check | Pass |
+|-------|------|
+| No browser calls to API-Football | ☐ |
+| Results only for API `FT` fixtures | ☐ |
+| Odds only in pre-kickoff window | ☐ |
+| Awards Glove path: ~48 `/players?team=` calls per run (120ms delay) | ☐ |
+
+---
+
+## Phase 7 — Production smoke
+
+| Step | Pass |
+|------|------|
+| Username/password login on GitHub Pages | ☐ |
 | Join via share link | ☐ |
-| Team theme colours on pool pages only | ☐ |
-| Home page neutral (no team theme) | ☐ |
+| Team theme on pool pages only | ☐ |
+
+---
+
+## Goal scorecard (are live updates “working”?)
+
+| Facet | Working when… |
+|-------|----------------|
+| **Awards / team link** | Slug `sync-tournament-awards` → 401/200, SQL `linked` ≈ 48 |
+| **Boot/Glove names** | Above + API topscorers/GK data (or admin override) |
+| **Live scores** | Slug `sync-match-results` → 401/200, `external_id` set, API `FT` |
+| **Live odds** | Slug `sync-match-odds` → 401/200, `external_id` + kickoff window |
+
+**Not broken, just early:** 200 + `linked` ≈ 48 but `scorers: 0` and placeholder Boot names before the tournament.
+
+**Broken / incomplete:** Any required slug returns **404**, or 500 `Missing env configuration` (set `API_FOOTBALL_KEY` secret and redeploy).
+
+---
 
 ## Rollback
 
-- Disable cron triggers.
-- Use admin UI for manual scores until API mapping is fixed.
-- Revert migration `20260603000003` only in dev — production should use forward fixes.
+- Disable Edge Function schedules
+- Admin UI for scores and team awards
+- Forward-fix migrations in production (do not revert `20260603` on live DB)
+
+---
 
 ## Logs
 
-- Supabase → Edge Functions → Logs for each sync invocation.
-- GitHub Actions → Deploy Database Migrations (schema changes).
-
-
-## Tournament awards (Golden Boot / Glove)
-
-```bash
-curl -X POST "$SUPABASE_URL/functions/v1/sync-tournament-awards"   -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY"
-```
-
-Also runs at the end of `sync-match-results`. Requires `API_FOOTBALL_LEAGUE_ID` and `API_FOOTBALL_SEASON` (defaults: World Cup `1`, `2026`).
+- Supabase → Edge Functions → select function → **Logs**
+- GitHub Actions → **Deploy Database Migrations** (schema only; functions deploy separately)
