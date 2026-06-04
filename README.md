@@ -12,7 +12,7 @@ Private multi-pool tipping competition for FIFA World Cup 2026. Each player is a
 | Layer | Tech |
 |-------|------|
 | Frontend | Vite, React, TypeScript, Tailwind CSS |
-| Backend | Supabase (Postgres, Auth magic link, RLS, Edge Functions) |
+| Backend | Supabase (Postgres, Auth username and password, RLS, Edge Functions) |
 | External | API-Football (server-side sync) |
 
 ## Quick start

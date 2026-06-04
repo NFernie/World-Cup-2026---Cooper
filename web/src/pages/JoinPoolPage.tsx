@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
@@ -17,12 +17,18 @@ export function JoinPoolPage() {
   const inviteFromQuery = searchParams.get('code') ?? ''
   const initialCode = inviteCodeParam ?? inviteFromQuery
 
-  const { user, loading: authLoading } = useAuth()
+  const { user, username: authUsername, loading: authLoading } = useAuth()
   
   const [mode, setMode] = useState<'invite' | 'name'>('invite')
   const [inviteCode, setInviteCode] = useState(initialCode)
   const [poolName, setPoolName] = useState('')
   const [displayName, setDisplayName] = useState('')
+
+  useEffect(() => {
+    if (authUsername) {
+      setDisplayName((prev) => (prev ? prev : authUsername))
+    }
+  }, [authUsername])
 
   const poolByInviteQuery = useQuery({
     queryKey: ['pool-by-invite', inviteCode],
@@ -82,7 +88,7 @@ export function JoinPoolPage() {
         <CardTitle>Sign in to join</CardTitle>
         <CardDescription className="mt-1">You need an account before joining a pool.</CardDescription>
         <Button asChild className="mt-4">
-          <Link to="/login">Sign in with magic link</Link>
+          <Link to="/login">Sign in</Link>
         </Button>
       </Card>
     )

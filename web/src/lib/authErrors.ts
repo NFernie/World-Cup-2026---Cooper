@@ -1,35 +1,26 @@
-/** User-facing auth errors (Supabase rate limits, etc.). */
+/** User-facing auth errors from Supabase Auth. */
 export function formatAuthError(message: string): string {
   const lower = message.toLowerCase()
 
-  if (
-    lower.includes('rate limit') ||
-    lower.includes('rate_limit') ||
-    lower.includes('over_email_send_rate_limit') ||
-    lower.includes('email rate limit exceeded')
-  ) {
-    return (
-      'Email limit reached. Supabase’s built-in mailer only allows a few auth emails per hour ' +
-      '(often 2–4). Wait about an hour, then try once. For production, set up custom SMTP under ' +
-      'Supabase → Authentication → SMTP Settings, then raise limits under Authentication → Rate Limits.'
-    )
+  if (lower.includes('invalid login credentials')) {
+    return 'Wrong username or password.'
   }
 
-  if (lower.includes('email address not authorized')) {
-    return (
-      'This email cannot receive messages from the default Supabase mailer. Add custom SMTP, ' +
-      'or use an email that is a member of your Supabase organization (testing only).'
-    )
+  if (
+    lower.includes('user already registered') ||
+    lower.includes('already been registered') ||
+    lower.includes('username already taken')
+  ) {
+    return 'That username is already taken. Try another or sign in.'
+  }
+
+  if (lower.includes('password should be at least')) {
+    return 'Password must be at least 6 characters.'
+  }
+
+  if (lower.includes('signup is disabled')) {
+    return 'New sign-ups are disabled. Contact the pool admin.'
   }
 
   return message
-}
-
-export function isRateLimitError(message: string): boolean {
-  const lower = message.toLowerCase()
-  return (
-    lower.includes('rate limit') ||
-    lower.includes('rate_limit') ||
-    lower.includes('over_email_send_rate_limit')
-  )
 }

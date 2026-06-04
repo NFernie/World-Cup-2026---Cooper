@@ -6,26 +6,24 @@ import {
   type ReactNode,
 } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
-import { getAuthRedirectUrl } from '@/lib/authRedirect'
-import { formatAuthError, isRateLimitError } from '@/lib/authErrors'
-import { canSendOtp, getOtpCooldownSeconds, recordOtpSent } from '@/lib/authOtpCooldown'
-import { hasVerifiedEmailBefore, markEmailVerified } from '@/lib/authStorage'
+import { formatAuthError } from '@/lib/authErrors'
+import { normalizeUsername, usernameToAuthEmail } from '@/lib/authUsername'
 import { supabase } from '@/lib/supabase'
 
-export type SignInResult = {
+export type AuthResult = {
   error: Error | null
-  isFirstTime: boolean
-  cooldownSeconds?: number
 }
 
 type AuthContextValue = {
   user: User | null
   session: Session | null
+  username: string | null
   loading: boolean
   isSuperAdmin: boolean
-  signInWithMagicLink: (email: string) => Promise<SignInResult>
+  checkUsernameAvailable: (username: string) => Promise<boolean>
+  signIn: (username: string, password: string) => Promise<AuthResult>
+  signUp: (username: string, password: string) => Promise<AuthResult>
   signOut: () => Promise<void>
-  getOtpCooldown: (email: string) => number
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -33,79 +31,90 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [user, setUser] = useState<User | null>(null)
+  const [username, setUsername] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
+
+  const loadProfile = async (userId: string) => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('username, is_super_admin')
+      .eq('id', userId)
+      .maybeSingle()
+
+    setUsername(data?.username ?? null)
+    setIsSuperAdmin(Boolean(data?.is_super_admin))
+  }
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session)
       setUser(data.session?.user ?? null)
-      if (data.session?.user?.email) markEmailVerified(data.session.user.email)
+      if (data.session?.user) {
+        void loadProfile(data.session.user.id)
+      }
       setLoading(false)
     })
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, nextSession) => {
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession)
       setUser(nextSession?.user ?? null)
       setLoading(false)
-      if (nextSession?.user?.email && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
-        markEmailVerified(nextSession.user.email)
+      if (nextSession?.user) {
+        void loadProfile(nextSession.user.id)
+      } else {
+        setUsername(null)
+        setIsSuperAdmin(false)
       }
     })
 
     return () => subscription.unsubscribe()
   }, [])
 
-  useEffect(() => {
-    if (!user) {
-      setIsSuperAdmin(false)
-      return
+  const checkUsernameAvailable = async (raw: string): Promise<boolean> => {
+    const name = normalizeUsername(raw)
+    const { data, error } = await supabase.rpc('is_username_available', {
+      p_username: name,
+    })
+    if (error) return false
+    return Boolean(data)
+  }
+
+  const signIn = async (rawUsername: string, password: string): Promise<AuthResult> => {
+    const name = normalizeUsername(rawUsername)
+    const { error } = await supabase.auth.signInWithPassword({
+      email: usernameToAuthEmail(name),
+      password,
+    })
+    if (error) {
+      return { error: new Error(formatAuthError(error.message)) }
     }
-    supabase
-      .from('profiles')
-      .select('is_super_admin')
-      .eq('id', user.id)
-      .maybeSingle()
-      .then(({ data }) => setIsSuperAdmin(Boolean(data?.is_super_admin)))
-  }, [user])
+    return { error: null }
+  }
 
-  const signInWithMagicLink = async (email: string): Promise<SignInResult> => {
-    const normalized = email.trim().toLowerCase()
-    const isFirstTime = !hasVerifiedEmailBefore(normalized)
+  const signUp = async (rawUsername: string, password: string): Promise<AuthResult> => {
+    const name = normalizeUsername(rawUsername)
 
-    const cooldownSeconds = getOtpCooldownSeconds(normalized)
-    if (!canSendOtp(normalized)) {
-      return {
-        error: new Error(`Please wait ${cooldownSeconds} seconds before requesting another email.`),
-        isFirstTime,
-        cooldownSeconds,
-      }
+    const available = await checkUsernameAvailable(name)
+    if (!available) {
+      return { error: new Error('That username is already taken. Try another.') }
     }
 
-    const emailRedirectTo = getAuthRedirectUrl()
-    const { error } = await supabase.auth.signInWithOtp({
-      email: normalized,
+    const { error } = await supabase.auth.signUp({
+      email: usernameToAuthEmail(name),
+      password,
       options: {
-        emailRedirectTo,
-        shouldCreateUser: true,
+        data: { username: name },
       },
     })
 
     if (error) {
-      const msg = error.message ?? 'Sign-in failed'
-      if (!isRateLimitError(msg)) {
-        recordOtpSent(normalized)
-      }
-      return {
-        error: new Error(formatAuthError(msg)),
-        isFirstTime,
-      }
+      return { error: new Error(formatAuthError(error.message)) }
     }
 
-    recordOtpSent(normalized)
-    return { error: null, isFirstTime }
+    return { error: null }
   }
 
   const signOut = async () => {
@@ -117,11 +126,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         session,
+        username,
         loading,
         isSuperAdmin,
-        signInWithMagicLink,
+        checkUsernameAvailable,
+        signIn,
+        signUp,
         signOut,
-        getOtpCooldown: getOtpCooldownSeconds,
       }}
     >
       {children}

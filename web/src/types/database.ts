@@ -53,6 +53,7 @@ export interface Database {
         Row: {
           id: string
           email: string | null
+          username: string
           is_super_admin: boolean
           created_at: string
         }
@@ -138,6 +139,10 @@ export interface Database {
       }
     }
     Functions: {
+      is_username_available: {
+        Args: { p_username: string }
+        Returns: boolean
+      }
       join_pool: {
         Args: { p_pool_id: string; p_display_name: string }
         Returns: Database['public']['Tables']['pool_members']['Row']

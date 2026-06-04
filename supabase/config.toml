@@ -9,6 +9,7 @@ major_version = 15
 
 [auth]
 enabled = true
+minimum_password_length = 6
 site_url = "http://localhost:5173"
 additional_redirect_urls = [
   "http://localhost:5173/**",

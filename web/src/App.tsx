@@ -7,7 +7,6 @@ import { getRouterBasename, isSupabaseConfigured } from '@/lib/env'
 import { AuthProvider } from '@/hooks/useAuth'
 import { ThemeProvider } from '@/hooks/useTheme'
 import { AdminPage } from '@/pages/AdminPage'
-import { AuthCallbackPage } from '@/pages/AuthCallbackPage'
 import { CreatePoolPage } from '@/pages/CreatePoolPage'
 import { FixturesPage } from '@/pages/FixturesPage'
 import { HomePage } from '@/pages/HomePage'
@@ -37,7 +36,6 @@ export default function App() {
               <Route element={<Layout />}>
                 <Route index element={<HomePage />} />
                 <Route path="login" element={<LoginPage />} />
-                <Route path="auth/callback" element={<AuthCallbackPage />} />
                 <Route path="join" element={<JoinPoolPage />} />
                 <Route path="join/:inviteCode" element={<JoinPoolPage />} />
                 <Route

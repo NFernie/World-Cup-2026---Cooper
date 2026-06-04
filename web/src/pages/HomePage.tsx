@@ -22,11 +22,11 @@ export function HomePage() {
         <Card>
           <CardTitle>Sign in to your account</CardTitle>
           <CardDescription className="mt-1">
-            Use your email to access pools you host or have joined.
+            Sign in with your username to access pools you host or have joined.
           </CardDescription>
           <Button asChild className="mt-4 w-full">
             <Link to="/login">
-              <LogIn className="h-4 w-4" /> Sign in with magic link
+              <LogIn className="h-4 w-4" /> Sign in
             </Link>
           </Button>
         </Card>
