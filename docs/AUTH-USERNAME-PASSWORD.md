@@ -16,7 +16,7 @@ Pool display names (`pool_members.display_name`) are chosen per pool when joinin
 
 | Step | Behavior |
 |------|----------|
-| Sign up | Username 3–20 chars `[a-z0-9_]`, password ≥ 6 chars |
+| Sign up | Username 3–24 chars: letters (any case), digits, _ . -, password ≥ 6 chars |
 | Uniqueness | `is_username_available()` RPC + DB unique index |
 | Sign in | Same username + password → immediate session |
 | Email confirmation | **Must be OFF** (`enable_confirmations = false`) |

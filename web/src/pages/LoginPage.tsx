@@ -78,7 +78,7 @@ export function LoginPage() {
         <CardDescription className="mt-1">
           {mode === 'signin'
             ? 'Use your username and password. Same account for every pool.'
-            : 'Pick a unique username (3–20 characters). No email required.'}
+            : 'Pick a unique username (3–24 characters). No email required.'}
         </CardDescription>
 
         <div className="mt-4 flex gap-2">
@@ -116,11 +116,11 @@ export function LoginPage() {
               type="text"
               required
               autoComplete="username"
-              placeholder="e.g. cooper_fc"
+              placeholder="e.g. Cooper_FC"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
             />
-            <p className="text-xs text-[var(--muted)]">Letters, numbers, underscores only.</p>
+            <p className="text-xs text-[var(--muted)]">Letters, numbers, letters, numbers, _ . -.</p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
