@@ -17,8 +17,15 @@ additional_redirect_urls = [
   "https://nfernie.github.io/World-Cup-2026---Cooper/auth/callback",
 ]
 
+# Username/password auth must not send mail on sign-up (built-in SMTP ~3/hour cap).
+[auth.rate_limit]
+sign_in_sign_ups = 60
+token_verifications = 30
+token_refresh = 150
+
 [auth.email]
 enable_signup = true
-# First sign-up: confirmation email. Returning users: magic link → landing page.
-enable_confirmations = true
-
+enable_confirmations = false
+double_confirm_changes = false
+secure_password_change = false
+max_frequency = "1s"

@@ -1,3 +1,13 @@
+## Username/password auth (current)
+
+WC26 no longer uses magic links. If you see **email rate limit** on **Sign up**, the hosted project is still trying to send **confirmation emails**.
+
+1. Dashboard → **Authentication** → **Providers** → **Email** → **Confirm email: OFF**
+2. Re-run **Deploy Database Migrations** on `main` (runs `config push` + disables autoconfirm mail)
+3. See [AUTH-USERNAME-PASSWORD.md](./AUTH-USERNAME-PASSWORD.md)
+
+---
+
 # Troubleshooting: "email rate limit exceeded"
 
 This error comes from **Supabase Auth**, not the WC26 app. The built-in Supabase email service is for testing only.

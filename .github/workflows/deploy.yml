@@ -37,3 +37,10 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
+      # Belt-and-braces: auto-confirm users without sending signup email (avoids built-in SMTP cap).
+      - name: Disable confirmation emails (Management API)
+        run: |
+          curl -sf -X PATCH "https://api.supabase.com/v1/projects/fyiegingyipqtxaiopng/config/auth"             -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"             -H "Content-Type: application/json"             -d '{"mailer_autoconfirm":true,"mailer_secure_email_change_enabled":false}'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+

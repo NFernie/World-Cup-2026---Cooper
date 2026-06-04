@@ -22,5 +22,26 @@ export function formatAuthError(message: string): string {
     return 'New sign-ups are disabled. Contact the pool admin.'
   }
 
+  if (
+    lower.includes('rate limit') ||
+    lower.includes('rate_limit') ||
+    lower.includes('over_email_send_rate_limit') ||
+    lower.includes('email rate limit exceeded')
+  ) {
+    return (
+      'Supabase email rate limit hit. Username/password sign-up should not send email — ' +
+      'your project likely still has Confirm email enabled. The project owner should run ' +
+      'Deploy Database Migrations (config push) or turn off Confirm email under ' +
+      'Authentication → Providers → Email. See docs/AUTH-USERNAME-PASSWORD.md.'
+    )
+  }
+
+  if (lower.includes('error sending confirmation') || lower.includes('error sending magic link')) {
+    return (
+      'Supabase tried to send a confirmation email and failed. Turn off Confirm email for ' +
+      'username/password auth (Dashboard → Authentication → Providers → Email).'
+    )
+  }
+
   return message
 }

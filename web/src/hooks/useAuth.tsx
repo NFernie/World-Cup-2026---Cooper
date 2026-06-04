@@ -102,7 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: new Error('That username is already taken. Try another.') }
     }
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email: usernameToAuthEmail(name),
       password,
       options: {
@@ -112,6 +112,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (error) {
       return { error: new Error(formatAuthError(error.message)) }
+    }
+
+    if (!data.session) {
+      return {
+        error: new Error(
+          'Account may have been created, but sign-in is blocked because Supabase still requires ' +
+          'email confirmation. Turn off Confirm email (see docs/AUTH-USERNAME-PASSWORD.md).',
+        ),
+      }
     }
 
     return { error: null }
