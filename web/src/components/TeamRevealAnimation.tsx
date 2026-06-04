@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { getFlagUrl } from '@/lib/flags'
+import { getFlagUrl, preloadFlags } from '@/lib/flags'
 import { getTeamTheme } from '@/lib/teamColors'
 
 type Team = { fifa_code: string; name: string }
@@ -10,13 +10,21 @@ type Props = {
   onComplete: () => void
 }
 
-/** Spin ~2.6s through flags, reveal assigned nation ~1.4s, then onComplete (~4s total). */
-const SPIN_TICKS = 36
-const REVEAL_MS = 1400
+/** ~8s flag carousel, ~5s reveal, then navigate (~13s total). */
+const SPIN_TICKS = 52
+const REVEAL_MS = 5000
+
+function delayForTick(t: number): number {
+  if (t < 18) return 140
+  if (t < 32) return 200
+  if (t < 44) return 280
+  return 380
+}
 
 export function TeamRevealAnimation({ allTeams, assigned, onComplete }: Props) {
   const [index, setIndex] = useState(0)
   const [phase, setPhase] = useState<'spin' | 'reveal'>('spin')
+  const [imgError, setImgError] = useState(false)
   const onCompleteRef = useRef(onComplete)
   onCompleteRef.current = onComplete
 
@@ -27,6 +35,22 @@ export function TeamRevealAnimation({ allTeams, assigned, onComplete }: Props) {
   const codes = useMemo(() => teams.map((t) => t.fifa_code), [teams])
   const assignedIndex = Math.max(0, codes.indexOf(assigned.fifa_code))
   const theme = getTeamTheme(assigned.fifa_code)
+
+  const currentCode =
+    phase === 'reveal' ? assigned.fifa_code : (codes[index] ?? assigned.fifa_code)
+  const currentName =
+    phase === 'reveal'
+      ? assigned.name
+      : (teams[index]?.name ?? assigned.name)
+
+  useEffect(() => {
+    preloadFlags(codes, 160)
+    preloadFlags([assigned.fifa_code], 320)
+  }, [codes, assigned.fifa_code])
+
+  useEffect(() => {
+    setImgError(false)
+  }, [currentCode, phase])
 
   useEffect(() => {
     document.documentElement.style.setProperty('--team-primary', theme.primary)
@@ -47,12 +71,6 @@ export function TeamRevealAnimation({ allTeams, assigned, onComplete }: Props) {
     let cancelled = false
     let tick = 0
     let timeoutId = 0
-
-    const delayForTick = (t: number) => {
-      if (t < 24) return 72
-      if (t < 32) return 110
-      return 180
-    }
 
     const runTick = () => {
       if (cancelled) return
@@ -79,13 +97,15 @@ export function TeamRevealAnimation({ allTeams, assigned, onComplete }: Props) {
     }
   }, [codes.length, assignedIndex])
 
-  const currentCode =
-    phase === 'reveal' ? assigned.fifa_code : (codes[index] ?? assigned.fifa_code)
+  const flagSrc = getFlagUrl(
+    currentCode,
+    phase === 'reveal' ? 320 : 160,
+  )
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4">
       <div
-        className="w-full max-w-sm rounded-2xl border-2 p-8 text-center shadow-2xl"
+        className="w-full max-w-md rounded-2xl border-2 p-8 text-center shadow-2xl"
         style={{
           borderColor: theme.primary,
           background: `linear-gradient(165deg, color-mix(in srgb, ${theme.primary} 35%, #111) 0%, #1a1a1a 100%)`,
@@ -93,30 +113,51 @@ export function TeamRevealAnimation({ allTeams, assigned, onComplete }: Props) {
       >
         {phase === 'spin' ? (
           <>
-            <p className="text-sm font-medium text-white/70">Selecting your nation…</p>
-            <div className="flag-carousel mx-auto mt-6 flex h-32 w-44 items-center justify-center overflow-hidden rounded-xl border border-white/20 bg-black/40">
-              <img
-                key={`${currentCode}-${index}`}
-                src={getFlagUrl(currentCode, 180)}
-                alt=""
-                className="h-24 w-36 rounded-md object-cover team-flag-spin shadow-lg"
-              />
+            <p className="text-base font-medium text-white/80">Selecting your nation…</p>
+            <div className="flag-carousel relative mx-auto mt-8 flex h-40 w-56 items-center justify-center overflow-hidden rounded-xl border border-white/25 bg-black/50">
+              {!imgError && flagSrc ? (
+                <img
+                  src={flagSrc}
+                  alt=""
+                  decoding="async"
+                  className="block h-32 w-48 rounded-md object-cover object-center team-flag-spin shadow-lg"
+                  onError={() => setImgError(true)}
+                />
+              ) : (
+                <div className="flex h-32 w-48 items-center justify-center rounded-md bg-white/10 text-3xl font-bold text-white">
+                  {currentCode}
+                </div>
+              )}
             </div>
-            <p className="mt-4 text-xs text-white/50">Spinning through {codes.length} teams</p>
+            <p className="mt-5 text-sm text-white/60">{currentName}</p>
+            <p className="mt-1 text-xs text-white/40">Spinning through {codes.length} teams</p>
           </>
         ) : (
           <>
-            <p className="text-lg font-bold" style={{ color: theme.primary }}>
+            <p className="text-xl font-bold" style={{ color: theme.primary }}>
               You&apos;ve been assigned
             </p>
-            <img
-              src={getFlagUrl(assigned.fifa_code, 220)}
-              alt={assigned.name}
-              className="mx-auto mt-5 h-28 w-44 rounded-lg object-cover shadow-2xl team-flag-reveal"
-              style={{ border: `3px solid ${theme.primary}` }}
-            />
-            <p className="mt-5 text-2xl font-bold text-white">{assigned.name}</p>
-            <p className="text-sm text-white/60">{assigned.fifa_code}</p>
+            <div className="relative mx-auto mt-6 flex h-44 w-60 items-center justify-center">
+              {!imgError && flagSrc ? (
+                <img
+                  src={flagSrc}
+                  alt={assigned.name}
+                  decoding="async"
+                  className="block h-36 w-56 rounded-lg object-cover object-center shadow-2xl team-flag-reveal"
+                  style={{ border: `4px solid ${theme.primary}` }}
+                  onError={() => setImgError(true)}
+                />
+              ) : (
+                <div
+                  className="flex h-36 w-56 items-center justify-center rounded-lg bg-white/10 text-4xl font-bold text-white team-flag-reveal"
+                  style={{ border: `4px solid ${theme.primary}` }}
+                >
+                  {assigned.fifa_code}
+                </div>
+              )}
+            </div>
+            <p className="mt-6 text-3xl font-bold text-white">{assigned.name}</p>
+            <p className="mt-2 text-base text-white/70">{assigned.fifa_code}</p>
           </>
         )}
       </div>

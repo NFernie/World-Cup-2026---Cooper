@@ -50,7 +50,32 @@ const FIFA_TO_ISO: Record<string, string> = {
   GHA: 'gh',
 }
 
-export function getFlagUrl(fifaCode: string, width = 120): string {
-  const iso = FIFA_TO_ISO[fifaCode.toUpperCase()] ?? fifaCode.toLowerCase().slice(0, 2)
-  return `https://flagcdn.com/w${width}/${iso}.png`
+/** flagcdn.com only serves specific widths (others return 404). */
+const FLAGCDN_WIDTHS = [20, 40, 80, 160, 320, 640] as const
+
+function flagcdnWidth(requested: number): number {
+  for (const w of FLAGCDN_WIDTHS) {
+    if (w >= requested) return w
+  }
+  return 640
+}
+
+export function getFlagUrl(fifaCode: string, width = 160): string {
+  const code = (fifaCode ?? '').trim().toUpperCase()
+  if (!code) return ''
+  const iso = FIFA_TO_ISO[code] ?? code.toLowerCase().slice(0, 2)
+  const w = flagcdnWidth(width)
+  return `https://flagcdn.com/w${w}/${iso}.png`
+}
+
+/** Warm browser cache for a list of FIFA codes. */
+export function preloadFlags(fifaCodes: string[], width = 160): void {
+  const seen = new Set<string>()
+  for (const code of fifaCodes) {
+    const key = code.toUpperCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    const img = new Image()
+    img.src = getFlagUrl(key, width)
+  }
 }
