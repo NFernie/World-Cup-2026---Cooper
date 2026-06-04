@@ -41,3 +41,5 @@ The app cannot bypass Supabase’s server-side hourly cap.
 ## Verify SMTP is working
 
 After configuring custom SMTP, send **one** test login. Check **Authentication** → **Logs** in Supabase for delivery errors.
+
+If you see **"Error sending magic link email"** (generic 500), see [TROUBLESHOOTING-MAGIC-LINK-EMAIL.md](./TROUBLESHOOTING-MAGIC-LINK-EMAIL.md). Resetting the user database does **not** fix that error.

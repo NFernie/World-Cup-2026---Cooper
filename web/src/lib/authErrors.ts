@@ -22,6 +22,19 @@ export function formatAuthError(message: string): string {
     )
   }
 
+  if (
+    lower.includes('error sending magic link') ||
+    lower.includes('error sending confirmation') ||
+    lower.includes('error sending invite') ||
+    lower.includes('error sending recovery')
+  ) {
+    return (
+      'Supabase could not send the sign-in email (mail server problem). This is not fixed by resetting the ' +
+      'database. Check Supabase → Authentication → Logs for the real error, then fix SMTP under ' +
+      'Authentication → SMTP Settings (custom SMTP + verified sender domain). See docs/TROUBLESHOOTING-MAGIC-LINK-EMAIL.md.'
+    )
+  }
+
   return message
 }
 
