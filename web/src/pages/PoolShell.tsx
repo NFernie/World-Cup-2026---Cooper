@@ -1,5 +1,6 @@
 import { Outlet, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { PoolWorldCupDecor } from '@/components/PoolWorldCupDecor'
 import { TeamThemeProvider } from '@/hooks/useTeamTheme'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
@@ -33,11 +34,13 @@ export function PoolShell() {
 
   return (
     <TeamThemeProvider fifaCode={fifaCode}>
-      <Outlet
-        context={
-          { assignedTeamId: memberQuery.data?.assigned_team_id } satisfies PoolOutletContext
-        }
-      />
+      <PoolWorldCupDecor>
+        <Outlet
+          context={
+            { assignedTeamId: memberQuery.data?.assigned_team_id } satisfies PoolOutletContext
+          }
+        />
+      </PoolWorldCupDecor>
     </TeamThemeProvider>
   )
 }

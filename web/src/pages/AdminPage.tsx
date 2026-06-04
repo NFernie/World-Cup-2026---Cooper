@@ -6,6 +6,7 @@ import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { supabase } from '@/lib/supabase'
+import { TeamAwardsAdmin, type TeamAwardRow } from '@/components/TeamAwardsAdmin'
 import { useAuth } from '@/hooks/useAuth'
 
 export function AdminPage() {
@@ -21,7 +22,7 @@ export function AdminPage() {
     queryKey: ['teams'],
     enabled: isSuperAdmin,
     queryFn: async () => {
-      const { data, error } = await supabase.from('teams').select('id, name, fifa_code').order('name')
+      const { data, error } = await supabase.from('teams').select('id, name, fifa_code, tournament_stage, global_fifa_rank, golden_boot_player_name, golden_boot_goals, golden_glove_player_name, golden_glove_clean_sheets').order('name')
       if (error) throw error
       return data ?? []
     },
@@ -107,6 +108,31 @@ export function AdminPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-members', poolId] }),
   })
 
+
+  const updateTeamAwards = useMutation({
+    mutationFn: async (payload: {
+      teamId: string
+      tournament_stage: string
+      global_fifa_rank: number | null
+      golden_boot_player_name: string | null
+      golden_boot_goals: number
+      golden_glove_player_name: string | null
+      golden_glove_clean_sheets: number
+    }) => {
+      const { teamId, ...rest } = payload
+      const { error } = await supabase.from('teams').update(rest).eq('id', teamId)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teams'] })
+      queryClient.invalidateQueries({ queryKey: ['leaderboard-golden-boot'] })
+      queryClient.invalidateQueries({ queryKey: ['leaderboard-golden-glove'] })
+      queryClient.invalidateQueries({ queryKey: ['board-eliminations'] })
+      queryClient.invalidateQueries({ queryKey: ['board-knockout'] })
+      queryClient.invalidateQueries({ queryKey: ['leaderboard-tournament'] })
+    },
+  })
+
   if (!isSuperAdmin) {
     return <p className="text-red-600">Super-admin access required.</p>
   }
@@ -156,6 +182,21 @@ export function AdminPage() {
             Save & recalculate points
           </Button>
         </form>
+      </Card>
+
+
+      <Card>
+        <CardTitle>Teams — awards &amp; tournament</CardTitle>
+        <CardDescription className="mt-1">
+          Golden Boot / Glove players, FIFA rank, and stage (eliminated, round_of_32, etc.).
+        </CardDescription>
+        <div className="mt-4">
+          <TeamAwardsAdmin
+            teams={(teamsQuery.data ?? []) as TeamAwardRow[]}
+            saving={updateTeamAwards.isPending}
+            onSave={(p) => updateTeamAwards.mutate(p)}
+          />
+        </div>
       </Card>
 
       {poolId && (

@@ -21,6 +21,11 @@ export interface Database {
           group_points: number
           group_goal_difference: number
           tournament_rank: number | null
+          global_fifa_rank: number | null
+          golden_boot_player_name: string | null
+          golden_boot_goals: number
+          golden_glove_player_name: string | null
+          golden_glove_clean_sheets: number
           created_at: string
         }
       }
@@ -124,6 +129,55 @@ export interface Database {
           manager_names: string[]
           pool_member_ids: string[]
           co_manager_count: number
+        }
+      }
+
+      leaderboard_golden_boot: {
+        Row: {
+          pool_id: string
+          team_id: string
+          team_name: string
+          fifa_code: string
+          golden_boot_player_name: string | null
+          golden_boot_goals: number
+          global_fifa_rank: number | null
+          pool_member_ids: string[]
+          boot_rank: number
+        }
+      }
+      leaderboard_golden_glove: {
+        Row: {
+          pool_id: string
+          team_id: string
+          team_name: string
+          fifa_code: string
+          golden_glove_player_name: string | null
+          golden_glove_clean_sheets: number
+          global_fifa_rank: number | null
+          pool_member_ids: string[]
+          glove_rank: number
+        }
+      }
+      board_group_eliminations: {
+        Row: {
+          team_id: string
+          team_name: string
+          fifa_code: string
+          tournament_stage: string
+          global_fifa_rank: number | null
+          tournament_rank: number | null
+          group_letter: string | null
+          group_position: number | null
+        }
+      }
+      board_knockout_qualifiers: {
+        Row: {
+          team_id: string
+          team_name: string
+          fifa_code: string
+          tournament_stage: string
+          global_fifa_rank: number | null
+          tournament_rank: number | null
         }
       }
       pool_team_co_managers: {

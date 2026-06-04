@@ -7,7 +7,7 @@ import {
 } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { formatAuthError } from '@/lib/authErrors'
-import { normalizeUsername, usernameToAuthEmail } from '@/lib/authUsername'
+import { normalizeUsername, normalizeUsernameForAuth, usernameToAuthEmail } from '@/lib/authUsername'
 import { supabase } from '@/lib/supabase'
 
 export type AuthResult = {
@@ -85,7 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = async (rawUsername: string, password: string): Promise<AuthResult> => {
     const name = normalizeUsername(rawUsername)
     const { error } = await supabase.auth.signInWithPassword({
-      email: usernameToAuthEmail(name),
+      email: usernameToAuthEmail(normalizeUsernameForAuth(name)),
       password,
     })
     if (error) {
@@ -103,10 +103,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const { data, error } = await supabase.auth.signUp({
-      email: usernameToAuthEmail(name),
+      email: usernameToAuthEmail(normalizeUsernameForAuth(name)),
       password,
       options: {
-        data: { username: name },
+        data: { username: normalizeUsername(name) },
       },
     })
 
