@@ -5,8 +5,7 @@
 #   VITE_SUPABASE_ANON_KEY
 #
 # Enable GitHub Pages (Settings → Pages → Source: GitHub Actions).
-# Add this redirect URL in Supabase Auth:
-#   https://<user>.github.io/World-Cup-2026---Cooper/auth/callback
+# Auth: username/password (no magic-link callback required).
 
 name: Deploy Web (GitHub Pages)
 
