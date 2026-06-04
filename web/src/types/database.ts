@@ -21,6 +21,8 @@ export interface Database {
           group_points: number
           group_goal_difference: number
           tournament_rank: number | null
+          api_football_team_id: number | null
+          awards_synced_at: string | null
           global_fifa_rank: number | null
           golden_boot_player_name: string | null
           golden_boot_goals: number

@@ -236,35 +236,7 @@ export function PoolPage() {
       )}
 
       <section>
-        <h2 className="mb-3 text-lg font-semibold">Odds points leaderboard</h2>
-        <p className="mb-3 text-sm text-[var(--muted)]">
-          Win = match win odds. Draw = draw odds for both teams involved. Teams only — no player names.
-        </p>
-        <div className="space-y-2">
-          {oddsLb.data?.map((row, i) => (
-            <LeaderboardRow
-              key={row.pool_member_id}
-              highlight={member?.id === row.pool_member_id}
-            >
-              <span className="font-medium">
-                #{i + 1} {row.team_name}
-                {member?.id === row.pool_member_id && (
-                  <span className="ml-1 text-xs font-normal text-fifa-green">(you)</span>
-                )}
-              </span>
-              <span className="font-bold text-[var(--team-primary)]">
-                {formatPoints(row.total_points)} pts
-              </span>
-            </LeaderboardRow>
-          ))}
-          {!oddsLb.data?.length && (
-            <p className="text-sm text-[var(--muted)]">No points yet.</p>
-          )}
-        </div>
-      </section>
-
-      <section>
-        <h2 className="mb-3 text-lg font-semibold">Tournament standing</h2>
+        <h2 className="mb-3 text-lg font-semibold">Overall leaderboard</h2>
         <p className="mb-3 text-sm text-[var(--muted)]">
           Your nation&apos;s progress in the World Cup (by team).
         </p>
@@ -292,6 +264,34 @@ export function PoolPage() {
               </LeaderboardRow>
             )
           })}
+        </div>
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-lg font-semibold">Odds points leaderboard</h2>
+        <p className="mb-3 text-sm text-[var(--muted)]">
+          Win = match win odds. Draw = draw odds for both teams involved. Teams only — no player names.
+        </p>
+        <div className="space-y-2">
+          {oddsLb.data?.map((row, i) => (
+            <LeaderboardRow
+              key={row.pool_member_id}
+              highlight={member?.id === row.pool_member_id}
+            >
+              <span className="font-medium">
+                #{i + 1} {row.team_name}
+                {member?.id === row.pool_member_id && (
+                  <span className="ml-1 text-xs font-normal text-fifa-green">(you)</span>
+                )}
+              </span>
+              <span className="font-bold text-[var(--team-primary)]">
+                {formatPoints(row.total_points)} pts
+              </span>
+            </LeaderboardRow>
+          ))}
+          {!oddsLb.data?.length && (
+            <p className="text-sm text-[var(--muted)]">No points yet.</p>
+          )}
         </div>
       </section>
 

@@ -89,3 +89,12 @@ curl -X POST "https://<ref>.supabase.co/functions/v1/sync-match-odds" \
 
 - Supabase → Edge Functions → Logs for each sync invocation.
 - GitHub Actions → Deploy Database Migrations (schema changes).
+
+
+## Tournament awards (Golden Boot / Glove)
+
+```bash
+curl -X POST "$SUPABASE_URL/functions/v1/sync-tournament-awards"   -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY"
+```
+
+Also runs at the end of `sync-match-results`. Requires `API_FOOTBALL_LEAGUE_ID` and `API_FOOTBALL_SEASON` (defaults: World Cup `1`, `2026`).

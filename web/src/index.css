@@ -67,30 +67,29 @@ body {
   animation: team-flag-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.pool-wc-decor__art {
+.pool-wc-decor__img {
   pointer-events: none;
   position: fixed;
   top: 4.5rem;
   bottom: 0;
-  width: min(28vw, 220px);
+  width: min(32vw, 280px);
+  height: calc(100vh - 4.5rem);
+  object-fit: cover;
   opacity: 0.3;
   z-index: 0;
-  background-repeat: no-repeat;
-  background-size: contain;
+  filter: saturate(0.85);
 }
 
-.pool-wc-decor__art--left {
+.pool-wc-decor__img--left {
   left: 0;
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 200'%3E%3Ccircle cx='60' cy='100' r='48' fill='none' stroke='%23c9a227' stroke-width='4'/%3E%3Cpath d='M60 52 L60 148 M12 100 L108 100' stroke='%2300a651' stroke-width='3'/%3E%3Cpath d='M30 70 Q60 40 90 70' fill='none' stroke='%23ffffff' stroke-width='2'/%3E%3C/svg%3E");
-  background-position: left center;
+  object-position: center right;
+  mask-image: linear-gradient(to right, black 20%, transparent 95%);
 }
 
-.pool-wc-decor__art--right {
+.pool-wc-decor__img--right {
   right: 0;
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 200'%3E%3Cpath d='M60 20 L72 80 L60 180 L48 80 Z' fill='%23c9a227'/%3E%3Crect x='52' y='80' width='16' height='50' rx='4' fill='%2300a651'/%3E%3C/svg%3E");
-  background-position: right center;
+  object-position: center left;
+  mask-image: linear-gradient(to left, black 20%, transparent 95%);
 }
 
 .pool-theme-shell .leaderboard-row-accent {

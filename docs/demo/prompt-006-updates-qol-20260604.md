@@ -57,3 +57,26 @@
 | Admin | `TeamAwardsAdmin.tsx`, `AdminPage.tsx` |
 | Auth | `authUsername.ts`, `LoginPage.tsx`, migration username rules |
 | Types | `database.ts`, `poolBoards.ts` |
+
+---
+
+## Prompt 006 follow-up (fixes)
+
+### Margin stock imagery
+- Replaced inline SVG with Unsplash stock photos in `web/public/decor/` (`wc-stadium-left.jpg`, `wc-trophy-right.jpg`).
+- `PoolWorldCupDecor` uses `<img>` at 30% opacity (~70% transparent) with edge fade masks.
+
+### Leaderboard order
+1. **Overall leaderboard** (tournament standing)
+2. **Odds points leaderboard**
+3. Golden Boot / Glove, elimination boards (unchanged)
+
+### API-Football auto awards
+- `supabase/functions/_shared/awards-sync.ts` + `sync-tournament-awards`
+- Maps API team IDs via `/teams?league&season`
+- **Golden Boot:** `/players/topscorers` → best goals per nation → `teams.golden_boot_*`
+- **Golden Glove:** `/players?team={id}` → goalkeeper with most clean sheets (falls back to saves if API omits clean_sheet)
+- `sync-match-results` also runs awards sync after score updates
+- Migration `20260606000006_prompt006_awards_api.sql` adds `api_football_team_id`
+
+Deploy edge functions: `supabase functions deploy sync-tournament-awards` and redeploy `sync-match-results`.
