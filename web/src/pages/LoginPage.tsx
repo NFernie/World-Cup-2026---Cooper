@@ -11,7 +11,6 @@ export function LoginPage() {
   const { signInWithMagicLink, user, loading, getOtpCooldown } = useAuth()
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
-  const [isFirstTime, setIsFirstTime] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [cooldown, setCooldown] = useState(0)
@@ -34,7 +33,7 @@ export function LoginPage() {
 
     setSubmitting(true)
     setError(null)
-    const { error: err, isFirstTime: first, cooldownSeconds } = await signInWithMagicLink(
+    const { error: err, cooldownSeconds } = await signInWithMagicLink(
       email.trim(),
     )
     setSubmitting(false)
@@ -45,7 +44,6 @@ export function LoginPage() {
       return
     }
 
-    setIsFirstTime(first)
     setSent(true)
     setCooldown(getOtpCooldown(email.trim()))
   }
@@ -57,28 +55,15 @@ export function LoginPage() {
       <Card className="border-fifa-green/30">
         <CardTitle className="text-fifa-green">Sign in to your account</CardTitle>
         <CardDescription className="mt-1">
-          Use the same email for every pool you join. Only one email per minute.
+          Use the same email for every pool. We send one sign-in link (no separate confirmation email). One request per minute.
         </CardDescription>
         {sent ? (
           <div className="mt-4 space-y-2 text-sm text-[var(--muted)]">
-            {isFirstTime ? (
-              <>
-                <p className="font-medium text-[var(--foreground)]">Confirm your email (first time)</p>
-                <p>
-                  We sent a confirmation link. Click it once to activate your account. If you
-                  don&apos;t see it, check spam — and don&apos;t click &quot;Continue&quot; again
-                  for 60 seconds.
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="font-medium text-[var(--foreground)]">Check your email</p>
-                <p>
-                  Click the sign-in link to go straight to your pools. Wait at least 60 seconds
-                  before requesting another link.
-                </p>
-              </>
-            )}
+            <p className="font-medium text-[var(--foreground)]">Check your email</p>
+            <p>
+              We sent a sign-in link. Click it once to open WC26 and join or host pools. Check spam
+              if needed — wait at least 60 seconds before requesting another link.
+            </p>
             {cooldown > 0 && (
               <p className="text-xs text-amber-600">Resend available in {cooldown}s</p>
             )}

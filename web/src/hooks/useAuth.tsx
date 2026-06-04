@@ -9,12 +9,11 @@ import type { Session, User } from '@supabase/supabase-js'
 import { getAuthRedirectUrl } from '@/lib/authRedirect'
 import { formatAuthError, isRateLimitError } from '@/lib/authErrors'
 import { canSendOtp, getOtpCooldownSeconds, recordOtpSent } from '@/lib/authOtpCooldown'
-import { hasVerifiedEmailBefore, markEmailVerified } from '@/lib/authStorage'
+import { markEmailVerified } from '@/lib/authStorage'
 import { supabase } from '@/lib/supabase'
 
 export type SignInResult = {
   error: Error | null
-  isFirstTime: boolean
   cooldownSeconds?: number
 }
 
@@ -73,13 +72,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithMagicLink = async (email: string): Promise<SignInResult> => {
     const normalized = email.trim().toLowerCase()
-    const isFirstTime = !hasVerifiedEmailBefore(normalized)
 
     const cooldownSeconds = getOtpCooldownSeconds(normalized)
     if (!canSendOtp(normalized)) {
       return {
         error: new Error(`Please wait ${cooldownSeconds} seconds before requesting another email.`),
-        isFirstTime,
         cooldownSeconds,
       }
     }
@@ -100,12 +97,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return {
         error: new Error(formatAuthError(msg)),
-        isFirstTime,
       }
     }
 
     recordOtpSent(normalized)
-    return { error: null, isFirstTime }
+    return { error: null }
   }
 
   const signOut = async () => {
