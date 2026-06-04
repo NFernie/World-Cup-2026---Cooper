@@ -3,10 +3,12 @@
  * Requires teams.api_football_team_id (populated via /teams?league&season).
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { normalizeTeamName, resolveFifaCode } from "./fifa-code-map.ts";
 
 const API_BASE = "https://v3.football.api-sports.io";
 
 type ApiTeam = { id: number; name: string; code: string | null };
+type DbTeam = { id: string; fifa_code: string; name: string };
 
 function apiHeaders(apiKey: string) {
   return { "x-apisports-key": apiKey };
@@ -38,6 +40,11 @@ export async function syncApiFootballTeamIds(
   leagueId: string,
   season: string,
 ): Promise<number> {
+  const { data: dbTeams } = await supabase.from("teams").select("id, fifa_code, name");
+  const knownFifaCodes = new Set((dbTeams ?? []).map((t) => t.fifa_code));
+  const byFifa = new Map((dbTeams ?? []).map((t) => [t.fifa_code, t as DbTeam]));
+  const byName = new Map((dbTeams ?? []).map((t) => [normalizeTeamName(t.name), t as DbTeam]));
+
   const res = await fetch(`${API_BASE}/teams?league=${leagueId}&season=${season}`, {
     headers: apiHeaders(apiKey),
   });
@@ -49,13 +56,19 @@ export async function syncApiFootballTeamIds(
   for (const row of payload.response ?? []) {
     const team = row.team as ApiTeam | undefined;
     if (!team?.id) continue;
-    const code = (team.code ?? "").trim().toUpperCase();
-    if (!code) continue;
+
+    let fifaCode = resolveFifaCode(team.code, team.name, knownFifaCodes);
+    let dbTeam: DbTeam | undefined = fifaCode ? byFifa.get(fifaCode) : undefined;
+
+    if (!dbTeam) {
+      dbTeam = byName.get(normalizeTeamName(team.name));
+    }
+    if (!dbTeam) continue;
 
     const { error } = await supabase
       .from("teams")
       .update({ api_football_team_id: team.id })
-      .eq("fifa_code", code);
+      .eq("id", dbTeam.id);
 
     if (!error) mapped++;
   }
@@ -190,9 +203,16 @@ export async function syncTournamentAwards(
   apiKey: string,
   leagueId: string,
   season: string,
-): Promise<{ teamIds: number; scorers: number; goalkeepers: number }> {
+): Promise<{
+  teamIds: number;
+  scorers: number;
+  goalkeepers: number;
+  expectedTeams: number;
+}> {
+  const { count } = await supabase.from("teams").select("id", { count: "exact", head: true });
+  const expectedTeams = count ?? 48;
   const teamIds = await syncApiFootballTeamIds(supabase, apiKey, leagueId, season);
   const scorers = await syncTopScorersByTeam(supabase, apiKey, leagueId, season);
   const goalkeepers = await syncGoalkeepersByTeam(supabase, apiKey, season);
-  return { teamIds, scorers, goalkeepers };
+  return { teamIds, scorers, goalkeepers, expectedTeams };
 }
