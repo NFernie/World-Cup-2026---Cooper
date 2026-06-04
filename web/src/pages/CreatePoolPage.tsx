@@ -1,5 +1,4 @@
-import { useState } from 'react'
-//  'react-router-dom'
+import { useEffect, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
@@ -11,11 +10,17 @@ import { useJoinReveal } from '@/hooks/useJoinReveal'
 import { useAuth } from '@/hooks/useAuth'
 
 export function CreatePoolPage() {
-  const { user } = useAuth()
+  const { user, username: authUsername } = useAuth()
   
   const { reveal, startReveal, completeReveal } = useJoinReveal()
   const [name, setName] = useState('')
   const [displayName, setDisplayName] = useState('')
+
+  useEffect(() => {
+    if (authUsername) {
+      setDisplayName((prev) => (prev ? prev : authUsername))
+    }
+  }, [authUsername])
 
   const createPool = useMutation({
     mutationFn: async () => {

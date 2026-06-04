@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 
@@ -9,8 +9,10 @@ export function useJoinReveal() {
   const [reveal, setReveal] = useState<{ assigned: Team; allTeams: Team[]; poolId: string } | null>(
     null,
   )
+  const revealRef = useRef(reveal)
+  revealRef.current = reveal
 
-  const startReveal = async (poolId: string, assignedTeamId: string) => {
+  const startReveal = useCallback(async (poolId: string, assignedTeamId: string) => {
     const [{ data: allTeams, error: tErr }, { data: assigned, error: aErr }] = await Promise.all([
       supabase.from('teams').select('fifa_code, name').order('name'),
       supabase.from('teams').select('fifa_code, name').eq('id', assignedTeamId).single(),
@@ -20,12 +22,13 @@ export function useJoinReveal() {
       return
     }
     setReveal({ assigned, allTeams: allTeams ?? [], poolId })
-  }
+  }, [navigate])
 
-  const completeReveal = () => {
-    if (reveal) navigate(`/pools/${reveal.poolId}`)
+  const completeReveal = useCallback(() => {
+    const current = revealRef.current
+    if (current) navigate(`/pools/${current.poolId}`)
     setReveal(null)
-  }
+  }, [navigate])
 
   return { reveal, startReveal, completeReveal }
 }

@@ -160,7 +160,7 @@ export function PoolPage() {
       <section>
         <h2 className="mb-3 text-lg font-semibold">Odds points leaderboard</h2>
         <p className="mb-3 text-sm text-[var(--muted)]">
-          Win = match win odds. Draw = draw odds for both teams involved.
+          Win = match win odds. Draw = draw odds for both teams involved. Player names are hidden — teams only.
         </p>
         <div className="space-y-2">
           {oddsLb.data?.map((row, i) => (
@@ -169,8 +169,10 @@ export function PoolPage() {
               className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2"
             >
               <span className="font-medium">
-                #{i + 1} {row.display_name}{' '}
-                <span className="text-[var(--muted)]">({row.team_name})</span>
+                #{i + 1} {row.team_name}
+                {member?.id === row.pool_member_id && (
+                  <span className="ml-1 text-xs font-normal text-fifa-green">(you)</span>
+                )}
               </span>
               <span className="font-bold text-[var(--team-primary)]">
                 {formatPoints(row.total_points)} pts
@@ -200,7 +202,9 @@ export function PoolPage() {
                 </span>
               </div>
               <p className="text-xs text-[var(--muted)] mt-1">
-                Managers: {row.manager_names.join(', ')}
+                {row.co_manager_count === 1
+                  ? '1 manager'
+                  : `${row.co_manager_count} managers`}
               </p>
             </div>
           ))}

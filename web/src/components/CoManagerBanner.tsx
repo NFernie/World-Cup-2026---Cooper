@@ -14,7 +14,7 @@ export function CoManagerBanner({ poolId, teamId, teamName, currentMemberId }: P
     queryFn: async () => {
       const { data, error } = await supabase
         .from('pool_team_co_managers')
-        .select('display_name, pool_member_id')
+        .select('pool_member_id')
         .eq('pool_id', poolId)
         .eq('team_id', teamId)
         .order('join_order')
@@ -23,11 +23,10 @@ export function CoManagerBanner({ poolId, teamId, teamName, currentMemberId }: P
     },
   })
 
-  const others =
-    coManagers?.filter((m) => m.pool_member_id !== currentMemberId).map((m) => `@${m.display_name}`) ??
-    []
+  const otherCount =
+    coManagers?.filter((m) => m.pool_member_id !== currentMemberId).length ?? 0
 
-  if (others.length === 0) {
+  if (otherCount === 0) {
     return (
       <p className="text-sm text-[var(--muted)]">
         You are the sole manager of <strong className="text-[var(--foreground)]">{teamName}</strong>.
@@ -37,8 +36,9 @@ export function CoManagerBanner({ poolId, teamId, teamName, currentMemberId }: P
 
   return (
     <p className="rounded-lg border border-fifa-gold/40 bg-fifa-gold/10 px-3 py-2 text-sm">
-      You&apos;re co-managing <strong>{teamName}</strong> with {others.join(' and ')} (
-      {others.length + 1} owners).
+      You&apos;re co-managing <strong>{teamName}</strong> with{' '}
+      {otherCount === 1 ? '1 other manager' : `${otherCount} other managers`} (
+      {otherCount + 1} total).
     </p>
   )
 }

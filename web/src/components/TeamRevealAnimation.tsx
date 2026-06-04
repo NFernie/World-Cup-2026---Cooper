@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { getFlagUrl } from '@/lib/flags'
 import { getTeamTheme } from '@/lib/teamColors'
 
@@ -10,10 +10,21 @@ type Props = {
   onComplete: () => void
 }
 
+/** Spin ~2.6s through flags, reveal assigned nation ~1.4s, then onComplete (~4s total). */
+const SPIN_TICKS = 36
+const REVEAL_MS = 1400
+
 export function TeamRevealAnimation({ allTeams, assigned, onComplete }: Props) {
   const [index, setIndex] = useState(0)
   const [phase, setPhase] = useState<'spin' | 'reveal'>('spin')
-  const codes = useMemo(() => allTeams.map((t) => t.fifa_code), [allTeams])
+  const onCompleteRef = useRef(onComplete)
+  onCompleteRef.current = onComplete
+
+  const teams = useMemo(
+    () => (allTeams.length > 0 ? allTeams : [assigned]),
+    [allTeams, assigned],
+  )
+  const codes = useMemo(() => teams.map((t) => t.fifa_code), [teams])
   const assignedIndex = Math.max(0, codes.indexOf(assigned.fifa_code))
   const theme = getTeamTheme(assigned.fifa_code)
 
@@ -27,26 +38,49 @@ export function TeamRevealAnimation({ allTeams, assigned, onComplete }: Props) {
   }, [theme.primary, theme.secondary])
 
   useEffect(() => {
-    if (phase === 'reveal') return
+    if (codes.length === 0) {
+      setPhase('reveal')
+      const id = window.setTimeout(() => onCompleteRef.current(), REVEAL_MS)
+      return () => window.clearTimeout(id)
+    }
 
+    let cancelled = false
     let tick = 0
-    const maxTicks = 40
-    const id = window.setInterval(() => {
+    let timeoutId = 0
+
+    const delayForTick = (t: number) => {
+      if (t < 24) return 72
+      if (t < 32) return 110
+      return 180
+    }
+
+    const runTick = () => {
+      if (cancelled) return
       tick += 1
-      setIndex((i) => (i + 1) % Math.max(codes.length, 1))
 
-      if (tick >= maxTicks) {
-        window.clearInterval(id)
-        setIndex(assignedIndex)
-        setPhase('reveal')
-        window.setTimeout(onComplete, 2400)
+      if (tick < SPIN_TICKS) {
+        setIndex((i) => (i + 1) % codes.length)
+        timeoutId = window.setTimeout(runTick, delayForTick(tick))
+        return
       }
-    }, tick > 30 ? 160 : 75)
 
-    return () => window.clearInterval(id)
-  }, [phase, codes.length, assignedIndex, onComplete])
+      setIndex(assignedIndex)
+      setPhase('reveal')
+      timeoutId = window.setTimeout(() => {
+        if (!cancelled) onCompleteRef.current()
+      }, REVEAL_MS)
+    }
 
-  const currentCode = phase === 'reveal' ? assigned.fifa_code : (codes[index] ?? assigned.fifa_code)
+    timeoutId = window.setTimeout(runTick, delayForTick(0))
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeoutId)
+    }
+  }, [codes.length, assignedIndex])
+
+  const currentCode =
+    phase === 'reveal' ? assigned.fifa_code : (codes[index] ?? assigned.fifa_code)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4">
