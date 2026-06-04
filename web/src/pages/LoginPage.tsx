@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, Navigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -7,22 +7,34 @@ import { Label } from '@/components/ui/label'
 import { useAuth } from '@/hooks/useAuth'
 
 export function LoginPage() {
-  const { signInWithMagicLink } = useAuth()
+  const { signInWithMagicLink, user, loading } = useAuth()
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
+  const [isFirstTime, setIsFirstTime] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (!loading && user) {
+      // Already signed in — straight to landing
+    }
+  }, [user, loading])
+
+  if (!loading && user) {
+    return <Navigate to="/" replace />
+  }
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
+    setSubmitting(true)
     setError(null)
-    const { error: err } = await signInWithMagicLink(email.trim())
-    setLoading(false)
+    const { error: err, isFirstTime: first } = await signInWithMagicLink(email.trim())
+    setSubmitting(false)
     if (err) {
       setError(err.message)
       return
     }
+    setIsFirstTime(first)
     setSent(true)
   }
 
@@ -31,13 +43,28 @@ export function LoginPage() {
       <Card className="border-fifa-green/30">
         <CardTitle className="text-fifa-green">Sign in to your account</CardTitle>
         <CardDescription className="mt-1">
-          Use the email you joined with. We&apos;ll send a magic link — no password.
+          Use the same email for every pool you join.
         </CardDescription>
         {sent ? (
-          <p className="mt-4 text-sm text-[var(--muted)]">
-            Check your inbox for the link. After signing in you&apos;ll see all pools tied to this
-            email.
-          </p>
+          <div className="mt-4 space-y-2 text-sm text-[var(--muted)]">
+            {isFirstTime ? (
+              <>
+                <p className="font-medium text-[var(--foreground)]">Confirm your email (first time)</p>
+                <p>
+                  We sent a confirmation link. Click it once to activate your account, then you can
+                  join pools.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="font-medium text-[var(--foreground)]">Check your email</p>
+                <p>
+                  Click the sign-in link and you&apos;ll go straight to your pools — no extra
+                  confirmation needed.
+                </p>
+              </>
+            )}
+          </div>
         ) : (
           <form onSubmit={onSubmit} className="mt-4 space-y-4">
             <div className="space-y-2">
@@ -52,8 +79,8 @@ export function LoginPage() {
               />
             </div>
             {error && <p className="text-sm text-red-600">{error}</p>}
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Sending…' : 'Send magic link'}
+            <Button type="submit" className="w-full" disabled={submitting}>
+              {submitting ? 'Sending…' : 'Continue with email'}
             </Button>
           </form>
         )}

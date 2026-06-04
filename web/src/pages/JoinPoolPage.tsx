@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
+import { TeamRevealAnimation } from '@/components/TeamRevealAnimation'
+import { useJoinReveal } from '@/hooks/useJoinReveal'
 import { getInviteUrl } from '@/lib/urls'
 
 export function JoinPoolPage() {
@@ -16,7 +18,7 @@ export function JoinPoolPage() {
   const initialCode = inviteCodeParam ?? inviteFromQuery
 
   const { user, loading: authLoading } = useAuth()
-  const navigate = useNavigate()
+  
   const [mode, setMode] = useState<'invite' | 'name'>('invite')
   const [inviteCode, setInviteCode] = useState(initialCode)
   const [poolName, setPoolName] = useState('')
@@ -50,6 +52,8 @@ export function JoinPoolPage() {
     },
   })
 
+  const { reveal, startReveal, completeReveal } = useJoinReveal()
+
   const joinMutation = useMutation({
     mutationFn: async (poolId: string) => {
       const { data, error } = await supabase.rpc('join_pool', {
@@ -59,7 +63,7 @@ export function JoinPoolPage() {
       if (error) throw error
       return data
     },
-    onSuccess: (_data, poolId) => navigate(`/pools/${poolId}`),
+    onSuccess: (data) => startReveal(data.pool_id, data.assigned_team_id),
   })
 
   const activePool =
@@ -85,6 +89,14 @@ export function JoinPoolPage() {
   }
 
   return (
+    <>
+      {reveal && (
+        <TeamRevealAnimation
+          allTeams={reveal.allTeams}
+          assigned={reveal.assigned}
+          onComplete={completeReveal}
+        />
+      )}
     <div className="mx-auto max-w-md space-y-4">
       <Card>
         <CardTitle>Join with invite or pool name</CardTitle>
@@ -183,5 +195,6 @@ export function JoinPoolPage() {
         )}
       </Card>
     </div>
+    </>
   )
 }

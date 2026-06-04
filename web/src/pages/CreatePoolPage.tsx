@@ -1,16 +1,19 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+//  'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { supabase } from '@/lib/supabase'
+import { TeamRevealAnimation } from '@/components/TeamRevealAnimation'
+import { useJoinReveal } from '@/hooks/useJoinReveal'
 import { useAuth } from '@/hooks/useAuth'
 
 export function CreatePoolPage() {
   const { user } = useAuth()
-  const navigate = useNavigate()
+  
+  const { reveal, startReveal, completeReveal } = useJoinReveal()
   const [name, setName] = useState('')
   const [displayName, setDisplayName] = useState('')
 
@@ -24,18 +27,26 @@ export function CreatePoolPage() {
         .single()
       if (error) throw error
 
-      const { error: joinError } = await supabase.rpc('join_pool', {
+      const { data: member, error: joinError } = await supabase.rpc('join_pool', {
         p_pool_id: pool.id,
         p_display_name: displayName.trim() || 'Host',
       })
       if (joinError) throw joinError
 
-      return pool
+      return { pool, member }
     },
-    onSuccess: (pool) => navigate(`/pools/${pool.id}`),
+    onSuccess: ({ pool, member }) => startReveal(pool.id, member.assigned_team_id),
   })
 
   return (
+    <>
+      {reveal && (
+        <TeamRevealAnimation
+          allTeams={reveal.allTeams}
+          assigned={reveal.assigned}
+          onComplete={completeReveal}
+        />
+      )}
     <Card className="max-w-md mx-auto">
       <CardTitle>Create a pool</CardTitle>
       <CardDescription className="mt-1">
@@ -76,5 +87,6 @@ export function CreatePoolPage() {
         </Button>
       </form>
     </Card>
+    </>
   )
 }

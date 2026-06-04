@@ -18,4 +18,6 @@ additional_redirect_urls = [
 
 [auth.email]
 enable_signup = true
-enable_confirmations = false
+# First sign-up: confirmation email. Returning users: magic link → landing page.
+enable_confirmations = true
+

@@ -57,3 +57,31 @@ Delivered WC26 pool app improvements after live site was working: fixed GitHub P
 2. Redeploy web workflow.
 3. Sign in → home shows pools → open pool → Share link → Fixtures.
 4. Follow `docs/TestLiveAPI.md` for API sync validation.
+
+---
+
+## Prompt 005 addendum (auth, themes, reveal animation)
+
+### Auth — first time vs returning
+
+| Visit | Behaviour |
+|-------|-----------|
+| **First sign-up** | Supabase sends **confirmation email** (`enable_confirmations = true` in `supabase/config.toml`). User must confirm once. |
+| **Returning** | Magic link email → click → **straight to landing** (`/`) or stored join redirect. |
+| **Already signed in** | `/login` redirects to home immediately. |
+
+**Also enable in Supabase Dashboard:** Authentication → Providers → Email → **Confirm email** ON.
+
+`web/src/lib/authStorage.ts` tracks verified emails locally for clearer login copy.
+
+### Team themes (pool pages)
+
+- `--pool-bg` gradient on `.pool-theme-shell` (full pool area background).
+- Primary/secondary national colours on buttons, borders, fixtures highlight.
+- Home/landing stays **neutral** (no team theme).
+
+### Join reveal animation
+
+After joining (or creating) a pool, `TeamRevealAnimation` cycles flag images through all teams, then reveals the assigned nation with flag + name (~4s), then navigates to the pool.
+
+Files: `web/src/components/TeamRevealAnimation.tsx`, `web/src/hooks/useJoinReveal.ts`, `web/src/lib/flags.ts`.

@@ -109,3 +109,9 @@ supabase functions deploy sync-match-odds
 gh run list --repo NFernie/World-Cup-2026---Cooper --limit 5
 gh run view <run-id> --log-failed
 ```
+
+## Auth: first-time confirmation
+
+- `supabase/config.toml`: `[auth.email] enable_confirmations = true`
+- Supabase Dashboard → Authentication → Email → Confirm email: **enabled**
+- Returning users use magic link and land on `/` after callback.

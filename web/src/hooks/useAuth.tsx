@@ -7,6 +7,7 @@ import {
 } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { getAuthRedirectUrl } from '@/lib/authRedirect'
+import { hasVerifiedEmailBefore, markEmailVerified } from '@/lib/authStorage'
 import { supabase } from '@/lib/supabase'
 
 type AuthContextValue = {
@@ -14,7 +15,7 @@ type AuthContextValue = {
   session: Session | null
   loading: boolean
   isSuperAdmin: boolean
-  signInWithMagicLink: (email: string) => Promise<{ error: Error | null }>
+  signInWithMagicLink: (email: string) => Promise<{ error: Error | null; isFirstTime: boolean }>
   signOut: () => Promise<void>
 }
 
@@ -30,15 +31,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session)
       setUser(data.session?.user ?? null)
+      if (data.session?.user?.email) markEmailVerified(data.session.user.email)
       setLoading(false)
     })
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession)
       setUser(nextSession?.user ?? null)
       setLoading(false)
+      if (nextSession?.user?.email && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
+        markEmailVerified(nextSession.user.email)
+      }
     })
 
     return () => subscription.unsubscribe()
@@ -58,12 +63,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user])
 
   const signInWithMagicLink = async (email: string) => {
+    const normalized = email.trim().toLowerCase()
+    const isFirstTime = !hasVerifiedEmailBefore(normalized)
     const emailRedirectTo = getAuthRedirectUrl()
     const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo },
+      email: normalized,
+      options: {
+        emailRedirectTo,
+        shouldCreateUser: true,
+      },
     })
-    return { error: error as Error | null }
+    return { error: error as Error | null, isFirstTime }
   }
 
   const signOut = async () => {
