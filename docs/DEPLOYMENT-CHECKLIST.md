@@ -110,8 +110,9 @@ gh run list --repo NFernie/World-Cup-2026---Cooper --limit 5
 gh run view <run-id> --log-failed
 ```
 
-## Auth: first-time confirmation
+## Auth: magic link only (no signup confirmation)
 
-- `supabase/config.toml`: `[auth.email] enable_confirmations = true`
-- Supabase Dashboard → Authentication → Email → Confirm email: **enabled**
-- Returning users use magic link and land on `/` after callback.
+- `supabase/config.toml`: `[auth.email] enable_confirmations = false`
+- Deploy workflow runs `supabase config push` after migrations
+- Or Dashboard → Authentication → Providers → Email → **Confirm email: off**
+- Users still receive **one magic link** per sign-in; see [AUTH-NO-CONFIRM-EMAIL.md](./AUTH-NO-CONFIRM-EMAIL.md)
