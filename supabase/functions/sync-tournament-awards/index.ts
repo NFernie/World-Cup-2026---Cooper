@@ -4,7 +4,7 @@
  * Optional: API_FOOTBALL_LEAGUE_ID (default 1 = World Cup), API_FOOTBALL_SEASON (default 2026)
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { syncTournamentAwards } from "../_shared/awards-sync.ts";
+import { syncTournamentAwards } from "./_shared/awards-sync.ts";
 
 Deno.serve(async () => {
   const apiKey = Deno.env.get("API_FOOTBALL_KEY");

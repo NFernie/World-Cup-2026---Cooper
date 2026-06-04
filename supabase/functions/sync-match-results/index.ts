@@ -4,7 +4,7 @@
  * Env: API_FOOTBALL_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { syncTournamentAwards } from "../_shared/awards-sync.ts";
+import { syncTournamentAwards } from "./_shared/awards-sync.ts";
 
 const API_BASE = "https://v3.football.api-sports.io";
 
