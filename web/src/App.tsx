@@ -10,6 +10,7 @@ import { ThemeProvider } from '@/hooks/useTheme'
 import { AdminPage } from '@/pages/AdminPage'
 import { CreatePoolPage } from '@/pages/CreatePoolPage'
 import { FixturesPage } from '@/pages/FixturesPage'
+import { LeaderboardsPage } from '@/pages/LeaderboardsPage'
 import { HomePage } from '@/pages/HomePage'
 import { JoinPoolPage } from '@/pages/JoinPoolPage'
 import { LoginPage } from '@/pages/LoginPage'
@@ -65,6 +66,7 @@ export default function App() {
                   >
                     <Route index element={<PoolPage />} />
                     <Route path="fixtures" element={<FixturesPage />} />
+                    <Route path="leaderboards" element={<LeaderboardsPage />} />
                   </Route>
                   <Route
                     path="admin"
