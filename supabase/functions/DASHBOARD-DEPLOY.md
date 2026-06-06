@@ -1,6 +1,17 @@
 # Deploy edge functions from Supabase Dashboard (browser)
 
-Functions **2 and 3** need a `_shared` folder **inside** the function, not the parent `functions/_shared` folder.
+Functions with shared code need a `_shared` folder **inside** the function folder.
+
+## `sync-fixtures` (four files) — run once after upgrade
+
+| Path in dashboard | Copy from GitHub |
+|-------------------|------------------|
+| `index.ts` | `supabase/functions/sync-fixtures/index.ts` |
+| `_shared/fixture-sync.ts` | `supabase/functions/sync-fixtures/_shared/fixture-sync.ts` |
+| `_shared/awards-sync.ts` | `supabase/functions/sync-fixtures/_shared/awards-sync.ts` |
+| `_shared/fifa-code-map.ts` | `supabase/functions/sync-fixtures/_shared/fifa-code-map.ts` |
+
+Loads all 104 API-Football fixtures into `matches` with `external_id`. Removes old demo rows without `external_id`.
 
 ## `sync-match-odds` (one file only)
 

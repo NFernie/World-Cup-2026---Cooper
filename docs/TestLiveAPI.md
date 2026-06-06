@@ -2,7 +2,7 @@
 
 Use this checklist after:
 
-- Supabase migrations through **`20260606000006`** are applied
+- Supabase migrations through **`20260607000007`** are applied
 - The web app is deployed (GitHub Pages)
 - Edge functions are deployed with **exact names** (see [Step 0](#step-0--edge-functions-exist-and-are-named-correctly))
 
@@ -19,14 +19,15 @@ Supabase invokes functions by **slug in the URL**, not the display title in the 
 
 | Required slug (exact) | Purpose |
 |----------------------|---------|
-| `sync-match-results` | Finished scores + runs awards sync at end |
-| `sync-match-odds` | Pre-kickoff betting odds |
-| `sync-tournament-awards` | Golden Boot / Golden Glove + `api_football_team_id` mapping |
+| `sync-fixtures` | Import 104 WC fixtures + `external_id` (run once, then daily cron) |
+| `sync-match-results` | Live + finished scores every 5 min (cron) + awards |
+| `sync-match-odds` | Betting odds (hourly cron, up to 14 days before kickoff) |
+| `sync-tournament-awards` | Golden Boot / Golden Glove + team mapping |
 
 ### 0a — Dashboard check
 
 1. Supabase Dashboard → **Edge Functions**
-2. Confirm **three** functions whose slugs match the table above
+2. Confirm **four** functions whose slugs match the table above
 3. Common mistakes:
    - Display name “Sync Match Results” is fine — slug must still be `sync-match-results`
    - Underscores (`sync_match_results`) — **wrong** for this repo
@@ -59,6 +60,7 @@ Re-check after you deploy in the dashboard.
 ```bash
 supabase link --project-ref fyiegingyipqtxaiopng
 supabase secrets set API_FOOTBALL_KEY=your_key
+supabase functions deploy sync-fixtures
 supabase functions deploy sync-match-results
 supabase functions deploy sync-match-odds
 supabase functions deploy sync-tournament-awards
@@ -106,6 +108,32 @@ join teams th on th.id = m.home_team_id
 join teams ta on ta.id = m.away_team_id
 where th.fifa_code = 'NED' and ta.fifa_code = 'JPN';
 ```
+
+---
+
+## Phase 1b — Fixture import (`sync-fixtures`) — required once
+
+Populates `matches` from API-Football (104 games) with `external_id` for odds/results sync.
+
+Dashboard → **Test** on `sync-fixtures`, or service-role curl.
+
+### Expected response
+
+```json
+{ "ok": true, "teamIds": 48, "imported": 104, "skipped": 0, "demoRemoved": 7 }
+```
+
+### SQL verify
+
+```sql
+select count(*) as fixtures,
+       count(*) filter (where external_id is not null) as with_api_id
+from matches;
+```
+
+Expect **~104** fixtures, all with `external_id`. Demo seed rows (no `external_id`) are removed on successful import.
+
+**Cron:** `wc26-sync-fixtures` daily at 04:00 UTC (migration `20260607000007`).
 
 ---
 

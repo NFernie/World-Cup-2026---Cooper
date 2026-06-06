@@ -1,12 +1,10 @@
 /**
- * Server-to-server sync: finished match scores + tournament awards (Path C hybrid).
- * Schedule via Supabase cron every 5 minutes during tournament windows.
- * Env: API_FOOTBALL_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+ * Server-to-server sync: live + finished scores, tournament awards.
+ * Schedule: every 5 minutes during the tournament (pg_cron).
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { syncTournamentAwards } from "./_shared/awards-sync.ts";
-
-const API_BASE = "https://v3.football.api-sports.io";
+import { syncScoresByStatus } from "./_shared/fixture-sync.ts";
 
 Deno.serve(async () => {
   const apiKey = Deno.env.get("API_FOOTBALL_KEY");
@@ -25,54 +23,39 @@ Deno.serve(async () => {
 
   const supabase = createClient(supabaseUrl, serviceKey);
 
-  const fixturesRes = await fetch(
-    `${API_BASE}/fixtures?league=${leagueId}&season=${season}&status=FT`,
-    { headers: { "x-apisports-key": apiKey } },
+  const liveUpdated = await syncScoresByStatus(
+    supabase,
+    apiKey,
+    leagueId,
+    season,
+    "1H-HT-2H-ET-LIVE",
+    false,
   );
 
-  let updated = 0;
+  const finishedUpdated = await syncScoresByStatus(
+    supabase,
+    apiKey,
+    leagueId,
+    season,
+    "FT-AET-PEN",
+    true,
+  );
 
-  if (fixturesRes.ok) {
-    const payload = await fixturesRes.json();
-    const fixtures = payload.response ?? [];
-
-    for (const fx of fixtures) {
-      const externalId = String(fx.fixture.id);
-      const homeGoals = fx.goals.home;
-      const awayGoals = fx.goals.away;
-      if (homeGoals == null || awayGoals == null) continue;
-
-      const { data: match } = await supabase
-        .from("matches")
-        .select("id")
-        .eq("external_id", externalId)
-        .maybeSingle();
-
-      if (!match) continue;
-
-      await supabase
-        .from("matches")
-        .update({
-          home_score: homeGoals,
-          away_score: awayGoals,
-          status: "finished",
-          scores_synced_at: new Date().toISOString(),
-        })
-        .eq("id", match.id);
-
-      await supabase.rpc("recalculate_pool_member_points", { p_match_id: match.id });
-      updated++;
-    }
-  }
-
-  let awards = { teamIds: 0, scorers: 0, goalkeepers: 0 };
+  let awards = { teamIds: 0, scorers: 0, goalkeepers: 0, expectedTeams: 48 };
   try {
     awards = await syncTournamentAwards(supabase, apiKey, leagueId, season);
   } catch (e) {
     console.error("awards sync failed", e);
   }
 
-  return new Response(JSON.stringify({ ok: true, updated, awards }), {
-    headers: { "Content-Type": "application/json" },
-  });
+  return new Response(
+    JSON.stringify({
+      ok: true,
+      liveUpdated,
+      finishedUpdated,
+      updated: liveUpdated + finishedUpdated,
+      awards,
+    }),
+    { headers: { "Content-Type": "application/json" } },
+  );
 });

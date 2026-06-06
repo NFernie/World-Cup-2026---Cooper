@@ -26,6 +26,19 @@ token_refresh = 150
 [auth.email]
 enable_signup = true
 enable_confirmations = false
+
+# Cron invokes these without a JWT (see migration 20260607000007).
+[functions.sync-fixtures]
+verify_jwt = false
+
+[functions.sync-match-results]
+verify_jwt = false
+
+[functions.sync-match-odds]
+verify_jwt = false
+
+[functions.sync-tournament-awards]
+verify_jwt = false
 double_confirm_changes = false
 secure_password_change = false
 max_frequency = "1s"

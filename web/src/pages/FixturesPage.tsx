@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { supabase } from '@/lib/supabase'
 import { formatPoints } from '@/lib/utils'
+import { formatStage } from '@/lib/poolBoards'
 import type { PoolOutletContext } from '@/pages/PoolShell'
 
 function formatKickoffLocal(iso: string) {
@@ -56,7 +57,8 @@ export function FixturesPage() {
         <h1 className="text-xl font-bold">Fixtures & results</h1>
       </div>
       <p className="text-sm text-[var(--muted)]">
-        Kick-off times in your local timezone. Your assigned nation is highlighted.
+        Kick-off times in your local timezone (synced from API-Football). Your assigned nation is
+        highlighted. Odds appear when the API publishes them (typically days before kickoff).
       </p>
 
       <div className="space-y-3">
@@ -80,7 +82,18 @@ export function FixturesPage() {
             >
               <div className="flex flex-wrap justify-between gap-2 text-xs text-[var(--muted)]">
                 <span>{formatKickoffLocal(m.kickoff_at)}</span>
-                <span className="uppercase">{m.status.replace(/_/g, ' ')}</span>
+                <span className="flex gap-2">
+                  <span className="capitalize">{formatStage(m.stage)}</span>
+                  <span
+                    className={
+                      m.status === 'live'
+                        ? 'font-bold uppercase text-red-500'
+                        : 'uppercase'
+                    }
+                  >
+                    {m.status.replace(/_/g, ' ')}
+                  </span>
+                </span>
               </div>
               <p className="mt-2 font-semibold">
                 <span className={m.home_team_id === assignedTeamId ? 'text-[var(--team-primary)]' : ''}>
@@ -111,7 +124,10 @@ export function FixturesPage() {
           )
         })}
         {!matchesQuery.data?.length && (
-          <p className="text-sm text-[var(--muted)]">No fixtures loaded yet.</p>
+          <p className="text-sm text-[var(--muted)]">
+            No fixtures yet. Run the <code className="text-xs">sync-fixtures</code> edge function in
+            Supabase to import the World Cup 2026 schedule.
+          </p>
         )}
       </div>
     </div>
