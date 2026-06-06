@@ -162,7 +162,7 @@ function GoalScorersList({
 }
 
 export function FixturesPage() {
-  const { poolId } = useParams<{ poolId: string }>()
+  useParams<{ poolId: string }>()
   const { assignedTeamId, assignedTeamName } = useOutletContext<PoolOutletContext>()
 
   const [dateFilter, setDateFilter] = useState('')
@@ -178,34 +178,47 @@ export function FixturesPage() {
         { data: matches, error: mErr },
         { data: teams, error: tErr },
         { data: odds, error: oErr },
-        { data: events, error: eErr },
       ] = await Promise.all([
         supabase.from('matches').select('*').order('kickoff_at', { ascending: true }),
         supabase.from('teams').select('id, name, fifa_code, group_letter, api_football_team_id'),
         supabase.from('match_odds').select('*'),
-        supabase.from('match_events').select('*').order('sort_order', { ascending: true }),
       ])
       if (mErr) throw mErr
       if (tErr) throw tErr
       if (oErr) throw oErr
-      if (eErr) throw eErr
+
+      // Goal scorers table may not exist until migration 20260609000009 is applied.
+      const { data: events, error: eErr } = await supabase
+        .from('match_events')
+        .select('*')
+        .order('sort_order', { ascending: true })
+      const eventsOk = !eErr
 
       const teamMap = new Map((teams ?? []).map((t) => [t.id, t as TeamRow]))
       const oddsMap = new Map((odds ?? []).map((o) => [o.match_id, o]))
       const eventsByMatch = new Map<string, MatchEventRow[]>()
-      for (const ev of events ?? []) {
-        const list = eventsByMatch.get(ev.match_id) ?? []
-        list.push(ev as MatchEventRow)
-        eventsByMatch.set(ev.match_id, list)
+      if (eventsOk) {
+        for (const ev of events ?? []) {
+          const list = eventsByMatch.get(ev.match_id) ?? []
+          list.push(ev as MatchEventRow)
+          eventsByMatch.set(ev.match_id, list)
+        }
       }
 
-      return (matches ?? []).map((m) => ({
-        ...m,
-        home: teamMap.get(m.home_team_id)!,
-        away: teamMap.get(m.away_team_id)!,
-        odds: oddsMap.get(m.id) ?? null,
-        events: eventsByMatch.get(m.id) ?? [],
-      })) as FixtureRow[]
+      return (matches ?? [])
+        .map((m) => {
+          const home = teamMap.get(m.home_team_id)
+          const away = teamMap.get(m.away_team_id)
+          if (!home || !away) return null
+          return {
+            ...m,
+            home,
+            away,
+            odds: oddsMap.get(m.id) ?? null,
+            events: eventsByMatch.get(m.id) ?? [],
+          }
+        })
+        .filter((m): m is FixtureRow => m != null)
     },
     refetchInterval: (query) => {
       const rows = query.state.data
@@ -269,7 +282,7 @@ export function FixturesPage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-3">
         <Button asChild variant="outline" size="sm">
-          <Link to={`/pools/${poolId}`}>
+          <Link to="..">
             <ArrowLeft className="h-4 w-4" /> Pool
           </Link>
         </Button>
@@ -384,7 +397,28 @@ export function FixturesPage() {
           <p className="text-sm text-[var(--muted)]">Loading fixtures…</p>
         )}
 
+        {fixturesQuery.isError && (
+          <Card className="border-red-300 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/40">
+            <p className="text-sm font-medium text-red-700 dark:text-red-300">
+              Could not load fixtures.
+            </p>
+            <p className="mt-1 text-xs text-red-600/80 dark:text-red-400/80">
+              {(fixturesQuery.error as Error)?.message ?? 'Unknown error'}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-3"
+              onClick={() => fixturesQuery.refetch()}
+            >
+              Try again
+            </Button>
+          </Card>
+        )}
+
         {filtered.map((m) => {
+          if (!m.home || !m.away) return null
           const involvesAssigned =
             assignedTeamId &&
             (m.home_team_id === assignedTeamId || m.away_team_id === assignedTeamId)

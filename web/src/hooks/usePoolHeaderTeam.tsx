@@ -23,9 +23,10 @@ export function usePoolHeaderTeam() {
 /** PoolShell sets the user's nation flag in the global WC26 header while viewing a pool. */
 export function useSetPoolHeaderTeam(fifaCode?: string, teamName?: string) {
   const ctx = useContext(PoolHeaderTeamContext)
+  const setTeam = ctx?.setTeam
   useEffect(() => {
-    if (!ctx) return
-    ctx.setTeam({ fifaCode, teamName })
-    return () => ctx.setTeam({})
-  }, [ctx, fifaCode, teamName])
+    if (!setTeam) return
+    setTeam({ fifaCode, teamName })
+    return () => setTeam({})
+  }, [setTeam, fifaCode, teamName])
 }

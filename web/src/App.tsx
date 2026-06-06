@@ -16,7 +16,14 @@ import { LoginPage } from '@/pages/LoginPage'
 import { PoolPage } from '@/pages/PoolPage'
 import { PoolShell } from '@/pages/PoolShell'
 
-const queryClient = new QueryClient()
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+})
 const basename = getRouterBasename()
 
 export default function App() {
@@ -36,39 +43,39 @@ export default function App() {
             <BrowserRouter basename={basename}>
               <Routes>
                 <Route element={<Layout />}>
-                <Route index element={<HomePage />} />
-                <Route path="login" element={<LoginPage />} />
-                <Route path="join" element={<JoinPoolPage />} />
-                <Route path="join/:inviteCode" element={<JoinPoolPage />} />
-                <Route
-                  path="pools/new"
-                  element={
-                    <ProtectedRoute>
-                      <CreatePoolPage />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="pools/:poolId"
-                  element={
-                    <ProtectedRoute>
-                      <PoolShell />
-                    </ProtectedRoute>
-                  }
-                >
-                  <Route index element={<PoolPage />} />
-                  <Route path="fixtures" element={<FixturesPage />} />
+                  <Route index element={<HomePage />} />
+                  <Route path="login" element={<LoginPage />} />
+                  <Route path="join" element={<JoinPoolPage />} />
+                  <Route path="join/:inviteCode" element={<JoinPoolPage />} />
+                  <Route
+                    path="pools/new"
+                    element={
+                      <ProtectedRoute>
+                        <CreatePoolPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="pools/:poolId"
+                    element={
+                      <ProtectedRoute>
+                        <PoolShell />
+                      </ProtectedRoute>
+                    }
+                  >
+                    <Route index element={<PoolPage />} />
+                    <Route path="fixtures" element={<FixturesPage />} />
+                  </Route>
+                  <Route
+                    path="admin"
+                    element={
+                      <ProtectedRoute>
+                        <AdminPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route path="*" element={<Navigate to="/" replace />} />
                 </Route>
-                <Route
-                  path="admin"
-                  element={
-                    <ProtectedRoute>
-                      <AdminPage />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Route>
               </Routes>
             </BrowserRouter>
           </PoolHeaderTeamProvider>

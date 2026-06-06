@@ -189,13 +189,6 @@ export function PoolPage() {
           <Button variant="outline" size="sm" onClick={shareInvite}>
             <Share2 className="h-4 w-4" /> Share link
           </Button>
-          {member && (
-            <Button asChild variant="outline" size="sm">
-              <Link to={`/pools/${pool.id}/fixtures`}>
-                <CalendarDays className="h-4 w-4" /> Fixtures
-              </Link>
-            </Button>
-          )}
           {isSuperAdmin && (
             <Button asChild variant="outline" size="sm">
               <Link to={`/admin?pool=${pool.id}`}>
@@ -232,6 +225,24 @@ export function PoolPage() {
               currentMemberId={member.id}
             />
           </div>
+        </Card>
+      )}
+
+      {member && (
+        <Card className="border-[var(--primary)]/40 bg-[color-mix(in_srgb,var(--primary)_6%,var(--card))] p-5 text-center">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--primary)]/15">
+            <CalendarDays className="h-7 w-7 text-[var(--primary)]" aria-hidden />
+          </div>
+          <CardTitle className="text-xl">Fixtures &amp; results</CardTitle>
+          <CardDescription className="mx-auto mt-2 max-w-sm">
+            Full World Cup schedule with flags, filters, live scores, odds, and goal scorers.
+          </CardDescription>
+          <Button asChild size="lg" className="mt-5 w-full max-w-xs mx-auto shadow-sm">
+            <Link to="fixtures">
+              <CalendarDays className="h-5 w-5" />
+              View all fixtures
+            </Link>
+          </Button>
         </Card>
       )}
 
