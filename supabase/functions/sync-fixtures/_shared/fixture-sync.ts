@@ -56,6 +56,16 @@ type FixtureRow = {
   teams: { home: { id: number }; away: { id: number } };
   goals: { home: number | null; away: number | null };
   league: { round?: string };
+  events?: ApiEvent[];
+};
+
+type ApiEvent = {
+  time?: { elapsed?: number; extra?: number | null };
+  team?: { id?: number; name?: string };
+  player?: { name?: string };
+  assist?: { name?: string | null } | null;
+  type?: string;
+  detail?: string;
 };
 
 async function resolveTeamId(
@@ -276,32 +286,102 @@ export function isInLivePollWindow(
   kickoffAt: string,
   status: string,
   nowMs = Date.now(),
+  eventsSyncedAt?: string | null,
 ): boolean {
-  if (status === "finished" || status === "cancelled" || status === "postponed") return false;
+  if (status === "cancelled" || status === "postponed") return false;
   if (status === "live") return true;
   const kickoff = new Date(kickoffAt).getTime();
   const start = kickoff - 15 * 60 * 1000;
   const end = kickoff + 180 * 60 * 1000;
-  return nowMs >= start && nowMs <= end;
+  if (nowMs >= start && nowMs <= end) return true;
+  // Brief post-FT poll so final goal scorers/assists are captured (same fixtures?ids= call).
+  if (status === "finished" && !eventsSyncedAt && nowMs <= kickoff + 240 * 60 * 1000) {
+    return true;
+  }
+  return false;
+}
+
+async function resolveMatchIdByExternalId(
+  supabase: SupabaseClient,
+  externalId: string,
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("matches")
+    .select("id")
+    .eq("external_id", externalId)
+    .maybeSingle();
+  return data?.id ?? null;
+}
+
+/** Goal events from embedded fixtures?ids= response — no extra API call. */
+export async function syncMatchGoalEvents(
+  supabase: SupabaseClient,
+  matchId: string,
+  events: ApiEvent[] | undefined,
+): Promise<number> {
+  if (!events?.length) return 0;
+
+  const goals = events.filter(
+    (e) =>
+      e.type === "Goal" &&
+      e.detail !== "Missed Penalty" &&
+      e.player?.name,
+  );
+  if (goals.length === 0) return 0;
+
+  await supabase.from("match_events").delete().eq("match_id", matchId);
+
+  let inserted = 0;
+  for (let i = 0; i < goals.length; i++) {
+    const g = goals[i];
+    const { error } = await supabase.from("match_events").insert({
+      match_id: matchId,
+      minute: g.time?.elapsed ?? 0,
+      extra_minute: g.time?.extra ?? null,
+      team_api_id: g.team?.id ?? null,
+      player_name: g.player!.name!,
+      assist_name: g.assist?.name ?? null,
+      event_type: "Goal",
+      detail: g.detail ?? null,
+      sort_order: i,
+    });
+    if (!error) inserted++;
+  }
+
+  if (inserted > 0) {
+    await supabase
+      .from("matches")
+      .update({ events_synced_at: new Date().toISOString() })
+      .eq("id", matchId);
+  }
+
+  return inserted;
 }
 
 /** Poll only fixtures in the active window — 1 API call per batch of ids (not whole league). */
 export async function syncActiveMatchScores(
   supabase: SupabaseClient,
   apiKey: string,
-): Promise<{ updated: number; apiCalls: number; activeCount: number; skipped: string | null }> {
+): Promise<{
+  updated: number;
+  eventsUpdated: number;
+  apiCalls: number;
+  activeCount: number;
+  skipped: string | null;
+}> {
   const { data: matches } = await supabase
     .from("matches")
-    .select("external_id, kickoff_at, status")
+    .select("external_id, kickoff_at, status, events_synced_at")
     .not("external_id", "is", null);
 
   const active = (matches ?? []).filter((m) =>
-    isInLivePollWindow(m.kickoff_at, m.status)
+    isInLivePollWindow(m.kickoff_at, m.status, Date.now(), m.events_synced_at)
   );
 
   if (active.length === 0) {
     return {
       updated: 0,
+      eventsUpdated: 0,
       apiCalls: 0,
       activeCount: 0,
       skipped: "no matches in live poll window (15 min pre-kickoff → 3h after)",
@@ -310,9 +390,9 @@ export async function syncActiveMatchScores(
 
   const ids = active.map((m) => m.external_id as string);
   let updated = 0;
+  let eventsUpdated = 0;
   let apiCalls = 0;
 
-  // API accepts multiple ids: fixtures?ids=1-2-3
   const chunkSize = 20;
   for (let i = 0; i < ids.length; i += chunkSize) {
     const chunk = ids.slice(i, i + chunkSize).join("-");
@@ -328,8 +408,13 @@ export async function syncActiveMatchScores(
     for (const fx of (payload.response as FixtureRow[]) ?? []) {
       const result = await upsertFixture(supabase, fx, true);
       if (result === "finished" || result === "upserted") updated++;
+
+      const matchId = await resolveMatchIdByExternalId(supabase, String(fx.fixture.id));
+      if (matchId) {
+        eventsUpdated += await syncMatchGoalEvents(supabase, matchId, fx.events);
+      }
     }
   }
 
-  return { updated, apiCalls, activeCount: active.length, skipped: null };
+  return { updated, eventsUpdated, apiCalls, activeCount: active.length, skipped: null };
 }

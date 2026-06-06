@@ -1,6 +1,7 @@
 /**
- * Live scores only during active matches (15 min pre-kickoff → 3h after).
+ * Live scores + goal events during active matches (15 min pre-kickoff → 3h after).
  * Does NOT call API when no match is in that window. No awards sync (see sync-tournament-awards).
+ * Events are parsed from the same fixtures?ids= response (no extra API call).
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { syncActiveMatchScores } from "./_shared/fixture-sync.ts";
