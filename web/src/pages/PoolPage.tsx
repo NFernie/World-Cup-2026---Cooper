@@ -4,6 +4,7 @@ import { CalendarDays, Share2, Shield } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { CoManagerBanner } from '@/components/CoManagerBanner'
+import { TeamFlag } from '@/components/TeamFlag'
 import { getFlagUrl } from '@/lib/flags'
 import { formatStage, isYourTeamRow } from '@/lib/poolBoards'
 import { supabase } from '@/lib/supabase'
@@ -215,8 +216,22 @@ export function PoolPage() {
 
       {member && team && (
         <Card className="border-[var(--team-primary)]/60 bg-[color-mix(in_srgb,var(--team-primary)_12%,var(--card))]">
-          <CardTitle>Your team: {team.name}</CardTitle>
-          <CardDescription>{team.fifa_code} · assigned for this pool only</CardDescription>
+          <div className="flex items-center gap-4">
+            <TeamFlag
+              fifaCode={team.fifa_code}
+              size={80}
+              title={team.name}
+              className="!h-12 !w-20 shrink-0 rounded-md shadow-md ring-2 ring-[var(--team-primary)]/30"
+            />
+            <div className="min-w-0">
+              <CardTitle className="text-xl leading-tight">
+                Your team: {team.name}
+              </CardTitle>
+              <CardDescription className="mt-1">
+                {team.fifa_code} · assigned for this pool only
+              </CardDescription>
+            </div>
+          </div>
           <div className="mt-3">
             <CoManagerBanner
               poolId={pool.id}
