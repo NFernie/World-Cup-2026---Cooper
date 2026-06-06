@@ -1,12 +1,59 @@
+import { useMemo, useState } from 'react'
 import { Link, useOutletContext, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Filter, Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { Label } from '@/components/ui/label'
+import { TeamFlag } from '@/components/TeamFlag'
 import { supabase } from '@/lib/supabase'
 import { formatPoints } from '@/lib/utils'
-import { formatStage } from '@/lib/poolBoards'
+import {
+  STAGE_FILTER_OPTIONS,
+  formatDateFilterLabel,
+  formatStage,
+  kickoffDateKey,
+} from '@/lib/poolBoards'
 import type { PoolOutletContext } from '@/pages/PoolShell'
+
+type TeamRow = {
+  id: string
+  name: string
+  fifa_code: string
+  group_letter: string | null
+  api_football_team_id: number | null
+}
+
+type MatchEventRow = {
+  id: string
+  match_id: string
+  minute: number
+  extra_minute: number | null
+  player_name: string
+  assist_name: string | null
+  detail: string | null
+  team_api_id: number | null
+  sort_order: number
+}
+
+type FixtureRow = {
+  id: string
+  home_team_id: string
+  away_team_id: string
+  kickoff_at: string
+  home_score: number | null
+  away_score: number | null
+  status: string
+  stage: string
+  home: TeamRow
+  away: TeamRow
+  odds: {
+    home_win_decimal: number
+    draw_decimal: number
+    away_win_decimal: number
+  } | null
+  events: MatchEventRow[]
+}
 
 function formatKickoffLocal(iso: string) {
   return new Date(iso).toLocaleString(undefined, {
@@ -19,115 +66,420 @@ function formatKickoffLocal(iso: string) {
   })
 }
 
+function formatGoalMinute(minute: number, extra: number | null) {
+  if (extra != null && extra > 0) return `${minute}+${extra}'`
+  return `${minute}'`
+}
+
+function filterSelectClass() {
+  return (
+    'h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm ' +
+    'text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]'
+  )
+}
+
+function TeamLine({
+  team,
+  score,
+  align,
+  highlight,
+}: {
+  team: TeamRow
+  score?: number | null
+  align: 'left' | 'right'
+  highlight?: boolean
+}) {
+  return (
+    <div
+      className={`flex flex-1 items-center gap-2 min-w-0 ${
+        align === 'right' ? 'flex-row-reverse text-right' : ''
+      }`}
+    >
+      <TeamFlag fifaCode={team.fifa_code} size={40} title={team.name} />
+      <div className="min-w-0">
+        <p
+          className={`truncate font-semibold leading-tight ${
+            highlight ? 'text-[var(--team-primary)]' : 'text-[var(--foreground)]'
+          }`}
+        >
+          {team.name}
+        </p>
+        {team.group_letter && (
+          <p className="text-xs text-[var(--muted)]">Group {team.group_letter}</p>
+        )}
+      </div>
+      {score != null && (
+        <span className="shrink-0 text-2xl font-bold tabular-nums text-[var(--foreground)]">
+          {score}
+        </span>
+      )}
+    </div>
+  )
+}
+
+function GoalScorersList({
+  events,
+  homeApiId,
+  home,
+  away,
+}: {
+  events: MatchEventRow[]
+  homeApiId: number | null
+  home: TeamRow
+  away: TeamRow
+}) {
+  if (events.length === 0) return null
+
+  return (
+    <div className="mt-3 space-y-1.5 border-t border-[var(--border)] pt-3">
+      <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">Goal scorers</p>
+      <ul className="space-y-1 text-sm">
+        {events.map((ev) => {
+          const isHome =
+            ev.team_api_id != null
+              ? ev.team_api_id === homeApiId
+              : false
+          const side = isHome ? home : away
+          return (
+            <li key={ev.id} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <span className="font-mono text-xs text-[var(--muted)]">
+                {formatGoalMinute(ev.minute, ev.extra_minute)}
+              </span>
+              <TeamFlag fifaCode={side.fifa_code} size={20} className="!h-3 !w-[18px]" />
+              <span className="font-medium">{ev.player_name}</span>
+              {ev.assist_name && (
+                <span className="text-[var(--muted)]">({ev.assist_name})</span>
+              )}
+              {ev.detail && ev.detail !== 'Normal Goal' && (
+                <span className="text-xs text-[var(--muted)]">· {ev.detail}</span>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
 export function FixturesPage() {
   const { poolId } = useParams<{ poolId: string }>()
-  const { assignedTeamId } = useOutletContext<PoolOutletContext>()
+  const { assignedTeamId, assignedTeamName } = useOutletContext<PoolOutletContext>()
 
-  const matchesQuery = useQuery({
-    queryKey: ['fixtures'],
+  const [dateFilter, setDateFilter] = useState('')
+  const [roundFilter, setRoundFilter] = useState('')
+  const [groupFilter, setGroupFilter] = useState('')
+  const [teamFilter, setTeamFilter] = useState('')
+  const [myTeamOnly, setMyTeamOnly] = useState(false)
+
+  const fixturesQuery = useQuery({
+    queryKey: ['fixtures-full'],
     queryFn: async () => {
-      const [{ data: matches, error: mErr }, { data: teams, error: tErr }, { data: odds, error: oErr }] =
-        await Promise.all([
-          supabase.from('matches').select('*').order('kickoff_at', { ascending: true }),
-          supabase.from('teams').select('id, name, fifa_code'),
-          supabase.from('match_odds').select('*'),
-        ])
+      const [
+        { data: matches, error: mErr },
+        { data: teams, error: tErr },
+        { data: odds, error: oErr },
+        { data: events, error: eErr },
+      ] = await Promise.all([
+        supabase.from('matches').select('*').order('kickoff_at', { ascending: true }),
+        supabase.from('teams').select('id, name, fifa_code, group_letter, api_football_team_id'),
+        supabase.from('match_odds').select('*'),
+        supabase.from('match_events').select('*').order('sort_order', { ascending: true }),
+      ])
       if (mErr) throw mErr
       if (tErr) throw tErr
       if (oErr) throw oErr
-      const teamMap = new Map((teams ?? []).map((t) => [t.id, t]))
+      if (eErr) throw eErr
+
+      const teamMap = new Map((teams ?? []).map((t) => [t.id, t as TeamRow]))
       const oddsMap = new Map((odds ?? []).map((o) => [o.match_id, o]))
+      const eventsByMatch = new Map<string, MatchEventRow[]>()
+      for (const ev of events ?? []) {
+        const list = eventsByMatch.get(ev.match_id) ?? []
+        list.push(ev as MatchEventRow)
+        eventsByMatch.set(ev.match_id, list)
+      }
+
       return (matches ?? []).map((m) => ({
         ...m,
         home: teamMap.get(m.home_team_id)!,
         away: teamMap.get(m.away_team_id)!,
         odds: oddsMap.get(m.id) ?? null,
-      }))
+        events: eventsByMatch.get(m.id) ?? [],
+      })) as FixtureRow[]
+    },
+    refetchInterval: (query) => {
+      const rows = query.state.data
+      if (rows?.some((m) => m.status === 'live')) return 60_000
+      return false
     },
   })
 
+  const allFixtures = fixturesQuery.data ?? []
+
+  const dateOptions = useMemo(() => {
+    const keys = [...new Set(allFixtures.map((m) => kickoffDateKey(m.kickoff_at)))].sort()
+    return keys
+  }, [allFixtures])
+
+  const teamOptions = useMemo(() => {
+    const seen = new Map<string, TeamRow>()
+    for (const m of allFixtures) {
+      seen.set(m.home.id, m.home)
+      seen.set(m.away.id, m.away)
+    }
+    return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name))
+  }, [allFixtures])
+
+  const groupOptions = useMemo(() => {
+    const letters = new Set<string>()
+    for (const t of teamOptions) {
+      if (t.group_letter) letters.add(t.group_letter)
+    }
+    return [...letters].sort()
+  }, [teamOptions])
+
+  const filtered = useMemo(() => {
+    return allFixtures.filter((m) => {
+      if (myTeamOnly && assignedTeamId) {
+        if (m.home_team_id !== assignedTeamId && m.away_team_id !== assignedTeamId) return false
+      }
+      if (dateFilter && kickoffDateKey(m.kickoff_at) !== dateFilter) return false
+      if (roundFilter && m.stage !== roundFilter) return false
+      if (groupFilter) {
+        if (m.stage !== 'group') return false
+        if (m.home.group_letter !== groupFilter && m.away.group_letter !== groupFilter) return false
+      }
+      if (teamFilter && m.home_team_id !== teamFilter && m.away_team_id !== teamFilter) return false
+      return true
+    })
+  }, [allFixtures, myTeamOnly, assignedTeamId, dateFilter, roundFilter, groupFilter, teamFilter])
+
+  const hasActiveFilters =
+    myTeamOnly || Boolean(dateFilter || roundFilter || groupFilter || teamFilter)
+
+  function clearFilters() {
+    setDateFilter('')
+    setRoundFilter('')
+    setGroupFilter('')
+    setTeamFilter('')
+    setMyTeamOnly(false)
+  }
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3">
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center gap-3">
         <Button asChild variant="outline" size="sm">
           <Link to={`/pools/${poolId}`}>
             <ArrowLeft className="h-4 w-4" /> Pool
           </Link>
         </Button>
-        <h1 className="text-xl font-bold">Fixtures & results</h1>
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight text-[var(--foreground)]">
+            Fixtures & results
+          </h1>
+          <p className="text-sm text-[var(--muted)]">
+            {filtered.length} of {allFixtures.length} matches
+          </p>
+        </div>
       </div>
-      <p className="text-sm text-[var(--muted)]">
-        Kick-off times in your local timezone (synced from API-Football). Your assigned nation is
-        highlighted. Odds appear when the API publishes them (typically days before kickoff).
-      </p>
+
+      <Card className="space-y-4 p-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-sm font-medium text-[var(--foreground)]">
+            <Filter className="h-4 w-4 text-[var(--muted)]" aria-hidden />
+            Filters
+          </div>
+          {hasActiveFilters && (
+            <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>
+              Clear all
+            </Button>
+          )}
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="filter-date">Date</Label>
+            <select
+              id="filter-date"
+              className={filterSelectClass()}
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+            >
+              <option value="">All dates</option>
+              {dateOptions.map((d) => (
+                <option key={d} value={d}>
+                  {formatDateFilterLabel(d)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="filter-round">Round</Label>
+            <select
+              id="filter-round"
+              className={filterSelectClass()}
+              value={roundFilter}
+              onChange={(e) => setRoundFilter(e.target.value)}
+            >
+              {STAGE_FILTER_OPTIONS.map((o) => (
+                <option key={o.value || 'all'} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="filter-group">Group</Label>
+            <select
+              id="filter-group"
+              className={filterSelectClass()}
+              value={groupFilter}
+              onChange={(e) => setGroupFilter(e.target.value)}
+            >
+              <option value="">All groups</option>
+              {groupOptions.map((g) => (
+                <option key={g} value={g}>
+                  Group {g}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="filter-team">Team</Label>
+            <select
+              id="filter-team"
+              className={filterSelectClass()}
+              value={teamFilter}
+              onChange={(e) => setTeamFilter(e.target.value)}
+            >
+              <option value="">All teams</option>
+              {teamOptions.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {assignedTeamId && (
+          <Button
+            type="button"
+            variant={myTeamOnly ? 'default' : 'outline'}
+            size="sm"
+            className="w-full sm:w-auto"
+            onClick={() => setMyTeamOnly((v) => !v)}
+          >
+            <Star className={`mr-1.5 h-4 w-4 ${myTeamOnly ? 'fill-current' : ''}`} />
+            {myTeamOnly ? `Showing ${assignedTeamName ?? 'your team'} only` : 'My team fixtures'}
+          </Button>
+        )}
+      </Card>
 
       <div className="space-y-3">
-        {matchesQuery.data?.map((m) => {
+        {fixturesQuery.isLoading && (
+          <p className="text-sm text-[var(--muted)]">Loading fixtures…</p>
+        )}
+
+        {filtered.map((m) => {
           const involvesAssigned =
             assignedTeamId &&
             (m.home_team_id === assignedTeamId || m.away_team_id === assignedTeamId)
-          const score =
-            m.home_score != null && m.away_score != null
-              ? `${m.home_score} – ${m.away_score}`
-              : 'vs'
+          const showScore = m.home_score != null && m.away_score != null
+          const showEvents =
+            (m.status === 'live' || m.status === 'finished') && m.events.length > 0
 
           return (
             <Card
               key={m.id}
               className={
                 involvesAssigned
-                  ? 'border-2 border-[var(--team-primary)] bg-[var(--team-primary)]/10'
-                  : ''
+                  ? 'border-2 border-[var(--team-primary)] bg-[var(--team-primary)]/8 p-4'
+                  : 'p-4'
               }
             >
-              <div className="flex flex-wrap justify-between gap-2 text-xs text-[var(--muted)]">
-                <span>{formatKickoffLocal(m.kickoff_at)}</span>
-                <span className="flex gap-2">
-                  <span className="capitalize">{formatStage(m.stage)}</span>
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--muted)]">
+                <time dateTime={m.kickoff_at}>{formatKickoffLocal(m.kickoff_at)}</time>
+                <span className="flex items-center gap-2">
+                  <span>{formatStage(m.stage)}</span>
                   <span
                     className={
                       m.status === 'live'
-                        ? 'font-bold uppercase text-red-500'
+                        ? 'inline-flex items-center gap-1 font-semibold uppercase text-red-500'
                         : 'uppercase'
                     }
                   >
+                    {m.status === 'live' && (
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
+                    )}
                     {m.status.replace(/_/g, ' ')}
                   </span>
                 </span>
               </div>
-              <p className="mt-2 font-semibold">
-                <span className={m.home_team_id === assignedTeamId ? 'text-[var(--team-primary)]' : ''}>
-                  {m.home?.name}
-                </span>{' '}
-                {score}{' '}
-                <span className={m.away_team_id === assignedTeamId ? 'text-[var(--team-primary)]' : ''}>
-                  {m.away?.name}
-                </span>
-              </p>
-              {m.odds && (
-                <div className="mt-2 grid grid-cols-3 gap-2 text-center text-xs">
-                  <div className="rounded bg-[var(--background)] p-2">
-                    <div className="text-[var(--muted)]">Home win</div>
-                    <div className="font-bold">{formatPoints(m.odds.home_win_decimal)}</div>
+
+              <div className="mt-4 flex items-center gap-3">
+                <TeamLine
+                  team={m.home}
+                  score={showScore ? m.home_score : undefined}
+                  align="left"
+                  highlight={m.home_team_id === assignedTeamId}
+                />
+                {!showScore && (
+                  <span className="shrink-0 px-1 text-sm font-medium text-[var(--muted)]">vs</span>
+                )}
+                <TeamLine
+                  team={m.away}
+                  score={showScore ? m.away_score : undefined}
+                  align="right"
+                  highlight={m.away_team_id === assignedTeamId}
+                />
+              </div>
+
+              {showEvents && (
+                <GoalScorersList
+                  events={m.events}
+                  homeApiId={m.home.api_football_team_id}
+                  home={m.home}
+                  away={m.away}
+                />
+              )}
+
+              {m.odds && m.status === 'scheduled' && (
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+                  <div className="rounded-lg bg-[var(--background)] p-2">
+                    <div className="text-[var(--muted)]">Home</div>
+                    <div className="font-semibold tabular-nums">{formatPoints(m.odds.home_win_decimal)}</div>
                   </div>
-                  <div className="rounded bg-[var(--background)] p-2">
+                  <div className="rounded-lg bg-[var(--background)] p-2">
                     <div className="text-[var(--muted)]">Draw</div>
-                    <div className="font-bold">{formatPoints(m.odds.draw_decimal)}</div>
+                    <div className="font-semibold tabular-nums">{formatPoints(m.odds.draw_decimal)}</div>
                   </div>
-                  <div className="rounded bg-[var(--background)] p-2">
-                    <div className="text-[var(--muted)]">Away win</div>
-                    <div className="font-bold">{formatPoints(m.odds.away_win_decimal)}</div>
+                  <div className="rounded-lg bg-[var(--background)] p-2">
+                    <div className="text-[var(--muted)]">Away</div>
+                    <div className="font-semibold tabular-nums">{formatPoints(m.odds.away_win_decimal)}</div>
                   </div>
                 </div>
               )}
             </Card>
           )
         })}
-        {!matchesQuery.data?.length && (
-          <p className="text-sm text-[var(--muted)]">
-            No fixtures yet. Run the <code className="text-xs">sync-fixtures</code> edge function in
-            Supabase to import the World Cup 2026 schedule.
-          </p>
+
+        {!fixturesQuery.isLoading && filtered.length === 0 && (
+          <Card className="p-6 text-center">
+            <p className="text-sm text-[var(--muted)]">
+              {allFixtures.length === 0
+                ? 'No fixtures yet — run sync-fixtures after the API limit resets.'
+                : 'No fixtures match your filters.'}
+            </p>
+            {hasActiveFilters && allFixtures.length > 0 && (
+              <Button type="button" variant="outline" size="sm" className="mt-3" onClick={clearFilters}>
+                Clear filters
+              </Button>
+            )}
+          </Card>
         )}
       </div>
     </div>

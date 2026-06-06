@@ -2,11 +2,14 @@ import { Outlet, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { PoolWorldCupDecor } from '@/components/PoolWorldCupDecor'
 import { TeamThemeProvider } from '@/hooks/useTeamTheme'
+import { useSetPoolHeaderTeam } from '@/hooks/usePoolHeaderTeam'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 
 export type PoolOutletContext = {
   assignedTeamId?: string
+  assignedTeamFifaCode?: string
+  assignedTeamName?: string
 }
 
 export function PoolShell() {
@@ -19,7 +22,7 @@ export function PoolShell() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('pool_members')
-        .select('assigned_team_id, teams(fifa_code)')
+        .select('assigned_team_id, teams(fifa_code, name)')
         .eq('pool_id', poolId!)
         .eq('user_id', user!.id)
         .maybeSingle()
@@ -29,15 +32,24 @@ export function PoolShell() {
   })
 
   const rawTeam = memberQuery.data?.teams as unknown
-  const team = (Array.isArray(rawTeam) ? rawTeam[0] : rawTeam) as { fifa_code: string } | null
+  const team = (Array.isArray(rawTeam) ? rawTeam[0] : rawTeam) as
+    | { fifa_code: string; name: string }
+    | null
   const fifaCode = team?.fifa_code
+  const teamName = team?.name
+
+  useSetPoolHeaderTeam(fifaCode, teamName)
 
   return (
     <TeamThemeProvider fifaCode={fifaCode}>
       <PoolWorldCupDecor>
         <Outlet
           context={
-            { assignedTeamId: memberQuery.data?.assigned_team_id } satisfies PoolOutletContext
+            {
+              assignedTeamId: memberQuery.data?.assigned_team_id,
+              assignedTeamFifaCode: fifaCode,
+              assignedTeamName: teamName,
+            } satisfies PoolOutletContext
           }
         />
       </PoolWorldCupDecor>

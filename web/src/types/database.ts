@@ -78,7 +78,23 @@ export interface Database {
           stage: string
           odds_synced_at: string | null
           scores_synced_at: string | null
+          events_synced_at: string | null
           created_at: string
+        }
+      }
+      match_events: {
+        Row: {
+          id: string
+          match_id: string
+          minute: number
+          extra_minute: number | null
+          team_api_id: number | null
+          player_name: string
+          assist_name: string | null
+          event_type: string
+          detail: string | null
+          sort_order: number
+          synced_at: string
         }
       }
       match_odds: {

@@ -5,6 +5,7 @@ import { Layout } from '@/components/Layout'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { getRouterBasename, isSupabaseConfigured } from '@/lib/env'
 import { AuthProvider } from '@/hooks/useAuth'
+import { PoolHeaderTeamProvider } from '@/hooks/usePoolHeaderTeam'
 import { ThemeProvider } from '@/hooks/useTheme'
 import { AdminPage } from '@/pages/AdminPage'
 import { CreatePoolPage } from '@/pages/CreatePoolPage'
@@ -31,9 +32,10 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <AuthProvider>
-          <BrowserRouter basename={basename}>
-            <Routes>
-              <Route element={<Layout />}>
+          <PoolHeaderTeamProvider>
+            <BrowserRouter basename={basename}>
+              <Routes>
+                <Route element={<Layout />}>
                 <Route index element={<HomePage />} />
                 <Route path="login" element={<LoginPage />} />
                 <Route path="join" element={<JoinPoolPage />} />
@@ -67,8 +69,9 @@ export default function App() {
                 />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
-            </Routes>
-          </BrowserRouter>
+              </Routes>
+            </BrowserRouter>
+          </PoolHeaderTeamProvider>
         </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
