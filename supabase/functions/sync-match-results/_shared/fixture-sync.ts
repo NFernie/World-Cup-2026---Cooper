@@ -197,45 +197,25 @@ export async function fetchAllFixtures(
   statusFilter?: string,
 ): Promise<{ fixtures: FixtureRow[]; probes: ApiProbe[] }> {
   const statusParam = statusFilter ? `&status=${statusFilter}` : "";
-  const baseUrls = [
+  // WC 2026 fixtures: do NOT pass `page` — API returns "The Page field do not exist."
+  const urls = [
     `${API_BASE}/fixtures?league=${leagueId}&season=${season}${statusParam}`,
     `${API_BASE}/fixtures?league=${leagueId}&season=${season}&from=2026-06-01&to=2026-07-31${statusParam}`,
-    `${API_BASE}/fixtures?league=${leagueId}&season=${season}&next=120${statusParam}`,
   ];
 
   const probes: ApiProbe[] = [];
-  let chosenBase = baseUrls[0];
 
-  for (const url of baseUrls) {
-    const { ok, payload, probe } = await fetchFixturePage(apiKey, `${url}&page=1`);
+  for (const url of urls) {
+    const { ok, payload, probe } = await fetchFixturePage(apiKey, url);
     probes.push(probe);
     const count = Number(payload.results ?? 0);
     if (ok && !hasApiErrors(payload.errors) && count > 0) {
-      chosenBase = url;
-      break;
+      const fixtures = ((payload.response as FixtureRow[]) ?? []).slice();
+      return { fixtures, probes };
     }
   }
 
-  const all: FixtureRow[] = [];
-  let page = 1;
-  let totalPages = 1;
-
-  while (page <= totalPages) {
-    const { ok, payload, probe } = await fetchFixturePage(
-      apiKey,
-      `${chosenBase}&page=${page}`,
-    );
-    if (page === 1 || probe.results > 0) probes.push(probe);
-    if (!ok || hasApiErrors(payload.errors)) break;
-
-    totalPages = Number((payload.paging as { total?: number })?.total ?? 1);
-    for (const row of (payload.response as FixtureRow[]) ?? []) {
-      all.push(row);
-    }
-    page++;
-  }
-
-  return { fixtures: all, probes };
+  return { fixtures: [], probes };
 }
 
 export async function syncAllFixturesFromApi(
