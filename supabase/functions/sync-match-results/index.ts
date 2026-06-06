@@ -1,10 +1,9 @@
 /**
- * Server-to-server sync: live + finished scores, tournament awards.
- * Schedule: every 5 minutes during the tournament (pg_cron).
+ * Live scores only during active matches (15 min pre-kickoff → 3h after).
+ * Does NOT call API when no match is in that window. No awards sync (see sync-tournament-awards).
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { syncTournamentAwards } from "./_shared/awards-sync.ts";
-import { syncScoresByStatus } from "./_shared/fixture-sync.ts";
+import { syncActiveMatchScores } from "./_shared/fixture-sync.ts";
 
 Deno.serve(async () => {
   const apiKey = Deno.env.get("API_FOOTBALL_KEY");
@@ -18,44 +17,11 @@ Deno.serve(async () => {
     });
   }
 
-  const leagueId = Deno.env.get("API_FOOTBALL_LEAGUE_ID") ?? "1";
-  const season = Deno.env.get("API_FOOTBALL_SEASON") ?? "2026";
-
   const supabase = createClient(supabaseUrl, serviceKey);
-
-  const liveUpdated = await syncScoresByStatus(
-    supabase,
-    apiKey,
-    leagueId,
-    season,
-    "1H-HT-2H-ET-LIVE",
-    false,
-  );
-
-  const finishedUpdated = await syncScoresByStatus(
-    supabase,
-    apiKey,
-    leagueId,
-    season,
-    "FT-AET-PEN",
-    true,
-  );
-
-  let awards = { teamIds: 0, scorers: 0, goalkeepers: 0, expectedTeams: 48 };
-  try {
-    awards = await syncTournamentAwards(supabase, apiKey, leagueId, season);
-  } catch (e) {
-    console.error("awards sync failed", e);
-  }
+  const result = await syncActiveMatchScores(supabase, apiKey);
 
   return new Response(
-    JSON.stringify({
-      ok: true,
-      liveUpdated,
-      finishedUpdated,
-      updated: liveUpdated + finishedUpdated,
-      awards,
-    }),
+    JSON.stringify({ ok: true, ...result }),
     { headers: { "Content-Type": "application/json" } },
   );
 });

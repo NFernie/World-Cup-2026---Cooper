@@ -270,3 +270,66 @@ export async function syncScoresByStatus(
 
   return updated;
 }
+
+/** Matches that need live polling: from 15 min before kickoff until ~3h after (covers ET). */
+export function isInLivePollWindow(
+  kickoffAt: string,
+  status: string,
+  nowMs = Date.now(),
+): boolean {
+  if (status === "finished" || status === "cancelled" || status === "postponed") return false;
+  if (status === "live") return true;
+  const kickoff = new Date(kickoffAt).getTime();
+  const start = kickoff - 15 * 60 * 1000;
+  const end = kickoff + 180 * 60 * 1000;
+  return nowMs >= start && nowMs <= end;
+}
+
+/** Poll only fixtures in the active window — 1 API call per batch of ids (not whole league). */
+export async function syncActiveMatchScores(
+  supabase: SupabaseClient,
+  apiKey: string,
+): Promise<{ updated: number; apiCalls: number; activeCount: number; skipped: string | null }> {
+  const { data: matches } = await supabase
+    .from("matches")
+    .select("external_id, kickoff_at, status")
+    .not("external_id", "is", null);
+
+  const active = (matches ?? []).filter((m) =>
+    isInLivePollWindow(m.kickoff_at, m.status)
+  );
+
+  if (active.length === 0) {
+    return {
+      updated: 0,
+      apiCalls: 0,
+      activeCount: 0,
+      skipped: "no matches in live poll window (15 min pre-kickoff → 3h after)",
+    };
+  }
+
+  const ids = active.map((m) => m.external_id as string);
+  let updated = 0;
+  let apiCalls = 0;
+
+  // API accepts multiple ids: fixtures?ids=1-2-3
+  const chunkSize = 20;
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize).join("-");
+    const res = await fetch(`${API_BASE}/fixtures?ids=${chunk}`, {
+      headers: apiHeaders(apiKey),
+    });
+    apiCalls++;
+    if (!res.ok) continue;
+
+    const payload = await res.json();
+    if (hasApiErrors(payload.errors)) continue;
+
+    for (const fx of (payload.response as FixtureRow[]) ?? []) {
+      const result = await upsertFixture(supabase, fx, true);
+      if (result === "finished" || result === "upserted") updated++;
+    }
+  }
+
+  return { updated, apiCalls, activeCount: active.length, skipped: null };
+}

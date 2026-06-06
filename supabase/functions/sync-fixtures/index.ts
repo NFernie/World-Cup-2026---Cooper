@@ -1,5 +1,6 @@
 /**
  * Import / refresh World Cup 2026 fixture list from API-Football into public.matches.
+ * Skips team remapping when all teams already linked (saves 1 API call on daily cron).
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { syncAllFixturesFromApi } from "./_shared/fixture-sync.ts";
@@ -22,18 +23,28 @@ Deno.serve(async () => {
 
   const supabase = createClient(supabaseUrl, serviceKey);
 
-  const teamIds = await syncApiFootballTeamIds(supabase, apiKey, leagueId, season);
+  const { count: linked } = await supabase
+    .from("teams")
+    .select("id", { count: "exact", head: true })
+    .not("api_football_team_id", "is", null);
+
+  let teamIds = 0;
+  if ((linked ?? 0) < 48) {
+    teamIds = await syncApiFootballTeamIds(supabase, apiKey, leagueId, season);
+  }
+
   const result = await syncAllFixturesFromApi(supabase, apiKey, leagueId, season);
 
   return new Response(
     JSON.stringify({
       ok: true,
       teamIds,
+      teamIdsSkipped: (linked ?? 0) >= 48,
       leagueId,
       season,
       ...result,
       hint: result.apiFixtureCount === 0
-        ? "API returned 0 fixtures — check probes[].errors and confirm API_FOOTBALL_SEASON=2026 in Edge secrets."
+        ? "API returned 0 fixtures — check probes[].errors (rate limit?) or API_FOOTBALL_SEASON=2026."
         : undefined,
     }),
     { headers: { "Content-Type": "application/json" } },

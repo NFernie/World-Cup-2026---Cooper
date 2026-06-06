@@ -1,6 +1,6 @@
 /**
- * Fetch betting odds from API-Football for upcoming fixtures.
- * Schedule: hourly via pg_cron. Fetches up to 14 days before kickoff (API window).
+ * Fetch betting odds once per match ~2 hours before kickoff.
+ * Schedule: every 15 min via pg_cron; only matches in [now+1h45m, now+2h15m] with no odds yet.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
@@ -34,30 +34,26 @@ Deno.serve(async () => {
 
   const supabase = createClient(supabaseUrl, serviceKey);
   const now = Date.now();
-  const windowStart = new Date(now - 60 * 60 * 1000).toISOString();
-  const windowEnd = new Date(now + 14 * 24 * 60 * 60 * 1000).toISOString();
+  const windowStart = new Date(now + 105 * 60 * 1000).toISOString();
+  const windowEnd = new Date(now + 135 * 60 * 1000).toISOString();
 
   const { data: matches } = await supabase
     .from("matches")
     .select("id, external_id, kickoff_at, odds_synced_at, status")
-    .in("status", ["scheduled", "live"])
+    .eq("status", "scheduled")
+    .is("odds_synced_at", null)
     .not("external_id", "is", null)
     .gte("kickoff_at", windowStart)
     .lte("kickoff_at", windowEnd);
 
   let synced = 0;
   let noOdds = 0;
+  let apiCalls = 0;
 
   for (const match of matches ?? []) {
     if (!match.external_id) continue;
 
-    const kickoffMs = new Date(match.kickoff_at).getTime();
-    const hoursToKick = (kickoffMs - now) / (60 * 60 * 1000);
-    if (match.odds_synced_at && hoursToKick > 6) {
-      const ageMs = now - new Date(match.odds_synced_at).getTime();
-      if (ageMs < 3 * 60 * 60 * 1000) continue;
-    }
-
+    apiCalls++;
     const oddsRes = await fetch(
       `${API_BASE}/odds?fixture=${match.external_id}`,
       { headers: { "x-apisports-key": apiKey } },
@@ -90,7 +86,16 @@ Deno.serve(async () => {
   }
 
   return new Response(
-    JSON.stringify({ ok: true, synced, noOdds, candidates: matches?.length ?? 0 }),
+    JSON.stringify({
+      ok: true,
+      synced,
+      noOdds,
+      apiCalls,
+      candidates: matches?.length ?? 0,
+      skipped: (matches?.length ?? 0) === 0
+        ? "no matches in 2h pre-kickoff window needing odds"
+        : null,
+    }),
     { headers: { "Content-Type": "application/json" } },
   );
 });

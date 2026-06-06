@@ -195,9 +195,9 @@ where fifa_code in ('ENG', 'BRA', 'NED');
 
 ## Phase 3 — Results sync (`sync-match-results`)
 
-**Schedule (recommended):** every 5 minutes on match days.
+**Schedule:** `wc26-sync-match-results` every **5 minutes** (`*/5 * * * *`) via pg_cron.
 
-Also calls awards sync at the end of each run.
+**API usage:** The cron fires every 5 minutes, but the function **calls API-Football only when a match is in the live poll window** (15 min before kickoff → 3 hours after). Pre-tournament invocations return `"apiCalls": 0` and `"skipped": "no matches in live poll window..."`. During a match it batches `fixtures?ids=` (up to 20 ids per call). Awards sync is **not** bundled here — see `sync-tournament-awards`.
 
 ### Invoke
 
@@ -211,7 +211,8 @@ curl -X POST "https://fyiegingyipqtxaiopng.supabase.co/functions/v1/sync-match-r
 | Check | Pass |
 |-------|------|
 | HTTP 200, `"ok": true` | ☐ |
-| `updated` > 0 when API has `FT` fixtures linked in DB | ☐ |
+| Pre-tournament: `"apiCalls": 0`, `"activeCount": 0` | ☐ |
+| During match: `"apiCalls" >= 1`, scores update in `matches` | ☐ |
 | `matches.status = finished`, scores set, `scores_synced_at` set | ☐ |
 | Leaderboard points update without admin | ☐ |
 
@@ -233,9 +234,9 @@ If `with_api_id = 0`, expect `updated: 0` until you backfill ids from
 
 ## Phase 4 — Odds sync (`sync-match-odds`)
 
-**Schedule (recommended):** hourly.
+**Schedule:** `wc26-sync-match-odds` every **15 minutes** (`*/15 * * * *`).
 
-Only processes `scheduled` matches with `kickoff_at` in ~2 hours and a non-null `external_id`.
+**API usage:** Fetches **Match Winner** odds **once per match**, only when kickoff is **~2 hours away** (window: now + 1h45m → now + 2h15m) and `odds_synced_at` is null. Pre-tournament / outside that window: `"apiCalls": 0`.
 
 ### Invoke
 
@@ -272,12 +273,23 @@ Re-invoke → confirm `match_odds` row and `matches.odds_synced_at`.
 
 ## Phase 6 — Rate limits & cost
 
+The React app reads **Supabase only** — it never calls API-Football. All external API traffic is server-side (pg_cron → Edge Functions).
+
+| Job | Cron | API calls (typical) |
+|-----|------|---------------------|
+| `sync-match-results` | `*/5 * * * *` | **0** pre-tournament; **~1 per 5 min per live match** (batched by fixture id) |
+| `sync-match-odds` | `*/15 * * * *` | **0** until ~2h before kickoff; **1 per match** (once, sets `odds_synced_at`) |
+| `sync-tournament-awards` | `0 5 * * *` (daily) | **~50** (`/teams`, `/players/topscorers`, 48× `/players?team=`) |
+| `sync-fixtures` | `0 4 * * *` (daily) | **1–2** (skips `/teams` remap when 48 teams already linked) |
+
+**Rough daily budget:** ~52 calls/day before matches start; ~+40 calls per match-day with live games (1 odds + ~39 live polls over ~3h window).
+
 | Check | Pass |
 |-------|------|
 | No browser calls to API-Football | ☐ |
-| Results only for API `FT` fixtures | ☐ |
-| Odds only in pre-kickoff window | ☐ |
-| Awards Glove path: ~48 `/players?team=` calls per run (120ms delay) | ☐ |
+| Pre-tournament `sync-match-results` → `apiCalls: 0` | ☐ |
+| Odds only in ~2h pre-kickoff window, once per match | ☐ |
+| Awards Glove path: ~48 `/players?team=` calls **once daily** | ☐ |
 
 ---
 
@@ -297,8 +309,8 @@ Re-invoke → confirm `match_odds` row and `matches.odds_synced_at`.
 |-------|----------------|
 | **Awards / team link** | Slug `sync-tournament-awards` → 401/200, SQL `linked` ≈ 48 |
 | **Boot/Glove names** | Above + API topscorers/GK data (or admin override) |
-| **Live scores** | Slug `sync-match-results` → 401/200, `external_id` set, API `FT` |
-| **Live odds** | Slug `sync-match-odds` → 401/200, `external_id` + kickoff window |
+| **Live scores** | Slug `sync-match-results` → 200, `apiCalls > 0` during match window |
+| **Live odds** | Slug `sync-match-odds` → 200, `apiCalls: 1` ~2h before kickoff |
 
 **Not broken, just early:** 200 + `linked` ≈ 48 but `scorers: 0` and placeholder Boot names before the tournament.
 
