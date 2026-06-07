@@ -9,6 +9,7 @@ import { RevealNamesPoll } from '@/components/RevealNamesPoll'
 import { TeamFlag } from '@/components/TeamFlag'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
+import { isRevealNamesEnabled } from '@/lib/poolNames'
 import { getGroupJoinUrl } from '@/lib/urls'
 
 const TOTAL_NATIONS = 48
@@ -79,6 +80,7 @@ export function PoolPage() {
   const isHost = user?.id === pool.host_user_id
   const playerCount = memberCountQuery.data ?? 0
   const playersNeeded = Math.max(0, TOTAL_NATIONS - playerCount)
+  const namesRevealed = isRevealNamesEnabled(pool.reveal_names)
 
   const shareGroup = async () => {
     const text = `Join my WC26 group "${pool.name}": ${groupJoinUrl}`
@@ -149,7 +151,7 @@ export function PoolPage() {
               teamId={member.assigned_team_id}
               teamName={team.name}
               currentMemberId={member.id}
-              revealNames={Boolean(pool.reveal_names)}
+              revealNames={namesRevealed}
               hostUserId={pool.host_user_id}
               viewerUserId={user?.id}
             />
@@ -230,7 +232,7 @@ export function PoolPage() {
         <div className="space-y-4">
           <RevealNamesControl
             poolId={pool.id}
-            revealNames={Boolean(pool.reveal_names)}
+            revealNames={namesRevealed}
             isHost={isHost}
           />
           {member && (
@@ -238,7 +240,7 @@ export function PoolPage() {
               poolId={pool.id}
               memberId={member.id}
               isHost={isHost}
-              revealNames={Boolean(pool.reveal_names)}
+              revealNames={namesRevealed}
             />
           )}
         </div>

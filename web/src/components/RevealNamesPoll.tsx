@@ -82,8 +82,8 @@ export function RevealNamesPoll({ poolId, memberId, isHost, revealNames }: Props
               : majorityHidden
                 ? 'Majority voted to keep names hidden.'
                 : null}
-          {isHost && !revealNames && majorityReveal && ' You can reveal names with the button above.'}
-          {isHost && revealNames && majorityHidden && ' You can hide names with the button above.'}
+          {isHost && !namesRevealed && majorityReveal && ' You can reveal names with the button above.'}
+          {isHost && namesRevealed && majorityHidden && ' You can hide names with the button above.'}
         </p>
       )}
 

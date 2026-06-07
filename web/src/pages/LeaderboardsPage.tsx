@@ -7,7 +7,12 @@ import { Card } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { TeamFlag } from '@/components/TeamFlag'
 import { getFlagUrl } from '@/lib/flags'
-import { maskManagerNames, maskMemberName } from '@/lib/poolNames'
+import {
+  formatManagerLine,
+  isRevealNamesEnabled,
+  maskManagerNames,
+  maskMemberName,
+} from '@/lib/poolNames'
 import { formatStage, isYourTeamRow } from '@/lib/poolBoards'
 import { getTeamStaff } from '@/lib/teamStaff'
 import { supabase } from '@/lib/supabase'
@@ -93,7 +98,7 @@ export function LeaderboardsPage() {
 
   const pool = poolQuery.data
   const nameVisibility = {
-    revealNames: Boolean(pool?.reveal_names),
+    revealNames: isRevealNamesEnabled(pool?.reveal_names),
     hostUserId: pool?.host_user_id ?? '',
     viewerUserId: user?.id,
   }
@@ -248,7 +253,6 @@ export function LeaderboardsPage() {
                 row.pool_member_ids,
                 nameVisibility,
               )
-              const showManagerNames = nameVisibility.revealNames || nameVisibility.viewerUserId === nameVisibility.hostUserId
               return (
                 <LeaderboardRow key={row.team_id} highlight={you}>
                   <div className="flex min-w-0 flex-1 items-start gap-3">
@@ -261,9 +265,13 @@ export function LeaderboardsPage() {
                         )}
                       </span>
                       <p className="mt-0.5 text-xs text-[var(--muted)]">
-                        {showManagerNames && managerLabels.some((n) => n !== 'Hidden player')
-                          ? `Managers: ${managerLabels.join(', ')}`
-                          : `Players assigned ${playerCount}`}
+                        {formatManagerLine(
+                          managerLabels,
+                          row.pool_member_ids,
+                          playerCount,
+                          nameVisibility,
+                          member?.id,
+                        )}
                       </p>
                       <p className="text-xs text-[var(--muted)]">
                         Manager: {staff.headCoach} · Captain: {staff.captain}

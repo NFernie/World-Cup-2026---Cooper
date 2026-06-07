@@ -243,6 +243,10 @@ export interface Database {
         Args: { p_pool_id: string; p_display_name: string }
         Returns: Database['public']['Tables']['pool_members']['Row']
       }
+      set_pool_reveal_names: {
+        Args: { p_pool_id: string; p_reveal_names: boolean }
+        Returns: Database['public']['Tables']['pools']['Row']
+      }
       recalculate_pool_member_points: {
         Args: { p_match_id?: string }
         Returns: void
