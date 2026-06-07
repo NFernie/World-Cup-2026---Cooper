@@ -1,6 +1,7 @@
 /**
  * Fetch betting odds once per match ~2 hours before kickoff.
  * Schedule: every 15 min via pg_cron; only matches in [now+1h45m, now+2h15m] with no odds yet.
+ * The stored match_odds row is the locked snapshot used by recalculate_pool_member_points.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
@@ -59,30 +60,41 @@ Deno.serve(async () => {
       { headers: { "x-apisports-key": apiKey } },
     );
 
-    if (!oddsRes.ok) continue;
-
-    const oddsPayload = await oddsRes.json();
-    const bookmakers = oddsPayload.response?.[0]?.bookmakers ?? [];
-    const picked = pickMatchWinnerOdds(bookmakers);
-    if (!picked) {
-      noOdds++;
-      continue;
+    let picked: ReturnType<typeof pickMatchWinnerOdds> = null;
+    if (oddsRes.ok) {
+      const oddsPayload = await oddsRes.json();
+      const bookmakers = oddsPayload.response?.[0]?.bookmakers ?? [];
+      picked = pickMatchWinnerOdds(bookmakers);
     }
 
-    await supabase.from("match_odds").upsert({
-      match_id: match.id,
-      home_win_decimal: parseFloat(picked.home.odd),
-      draw_decimal: parseFloat(picked.draw.odd),
-      away_win_decimal: parseFloat(picked.away.odd),
-      fetched_at: new Date().toISOString(),
-    });
+    if (picked) {
+      const { data: existing } = await supabase
+        .from("match_odds")
+        .select("match_id")
+        .eq("match_id", match.id)
+        .maybeSingle();
 
+      if (!existing) {
+        const { error: insertErr } = await supabase.from("match_odds").insert({
+          match_id: match.id,
+          home_win_decimal: parseFloat(picked.home.odd),
+          draw_decimal: parseFloat(picked.draw.odd),
+          away_win_decimal: parseFloat(picked.away.odd),
+          fetched_at: new Date().toISOString(),
+        });
+        if (!insertErr) synced++;
+      } else {
+        synced++;
+      }
+    } else {
+      noOdds++;
+    }
+
+    // Always mark synced after the single API attempt — never re-fetch for this match.
     await supabase
       .from("matches")
       .update({ odds_synced_at: new Date().toISOString() })
       .eq("id", match.id);
-
-    synced++;
   }
 
   return new Response(
@@ -95,6 +107,7 @@ Deno.serve(async () => {
       skipped: (matches?.length ?? 0) === 0
         ? "no matches in 2h pre-kickoff window needing odds"
         : null,
+      hint: "match_odds rows are locked snapshots; points use these values when the match finishes.",
     }),
     { headers: { "Content-Type": "application/json" } },
   );

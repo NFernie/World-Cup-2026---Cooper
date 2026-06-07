@@ -123,10 +123,11 @@ No “Claude Design Anthropic Labs” doc exists in the repo. Updates follow cle
 |---------|-------|
 | “Your groups” (was “Your pools”) | `HomePage.tsx` |
 
-### API rate limits (Prompt 007 review)
+### API rate limits & points (verified)
 
-- `sync-match-results`: API only in live window (15 min pre-kickoff → 3h after)
-- `sync-match-odds`: once per match ~2h before kickoff
+- `sync-match-results`: API only **during match** (kickoff → 3h after; brief post-FT for scorers)
+- `sync-match-odds`: **one API call per match** ~2h before kickoff; `odds_synced_at` locks fetch
+- `match_odds` snapshot → `recalculate_pool_member_points` → Odds leaderboard points
 - Goal events: same `fixtures?ids=` call (no extra API)
 
 ---

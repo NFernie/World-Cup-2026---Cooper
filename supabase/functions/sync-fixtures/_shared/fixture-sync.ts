@@ -281,7 +281,10 @@ export async function syncScoresByStatus(
   return updated;
 }
 
-/** Matches that need live polling: from 15 min before kickoff until ~3h after (covers ET). */
+/**
+ * Matches that need live polling: from kickoff until ~3h after (covers ET).
+ * No pre-kickoff API calls. Brief post-FT poll only to capture final goal scorers.
+ */
 export function isInLivePollWindow(
   kickoffAt: string,
   status: string,
@@ -289,15 +292,20 @@ export function isInLivePollWindow(
   eventsSyncedAt?: string | null,
 ): boolean {
   if (status === "cancelled" || status === "postponed") return false;
-  if (status === "live") return true;
+
   const kickoff = new Date(kickoffAt).getTime();
-  const start = kickoff - 15 * 60 * 1000;
-  const end = kickoff + 180 * 60 * 1000;
-  if (nowMs >= start && nowMs <= end) return true;
-  // Brief post-FT poll so final goal scorers/assists are captured (same fixtures?ids= call).
-  if (status === "finished" && !eventsSyncedAt && nowMs <= kickoff + 240 * 60 * 1000) {
+  const matchEnd = kickoff + 180 * 60 * 1000;
+
+  if (status === "live") return true;
+
+  // From kickoff until ~3h after (scheduled past kickoff until API marks live/finished).
+  if (nowMs >= kickoff && nowMs <= matchEnd && status !== "finished") return true;
+
+  // One final sync after FT if goal events not yet stored (same fixtures?ids= call).
+  if (status === "finished" && !eventsSyncedAt && nowMs <= matchEnd + 30 * 60 * 1000) {
     return true;
   }
+
   return false;
 }
 
@@ -384,7 +392,7 @@ export async function syncActiveMatchScores(
       eventsUpdated: 0,
       apiCalls: 0,
       activeCount: 0,
-      skipped: "no matches in live poll window (15 min pre-kickoff → 3h after)",
+      skipped: "no matches in live poll window (kickoff → 3h after, or brief post-FT for scorers)",
     };
   }
 

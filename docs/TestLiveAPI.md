@@ -197,7 +197,7 @@ where fifa_code in ('ENG', 'BRA', 'NED');
 
 **Schedule:** `wc26-sync-match-results` every **5 minutes** (`*/5 * * * *`) via pg_cron.
 
-**API usage:** The cron fires every 5 minutes, but the function **calls API-Football only when a match is in the live poll window** (15 min before kickoff → 3 hours after). Pre-tournament invocations return `"apiCalls": 0` and `"skipped": "no matches in live poll window..."`. During a match it batches `fixtures?ids=` (up to 20 ids per call). Awards sync is **not** bundled here — see `sync-tournament-awards`.
+**API usage:** Cron every 5 minutes; API called **only during matches** (from kickoff → ~3h after, plus a brief post-FT sync for goal scorers). Pre-tournament: `"apiCalls": 0`. Batches `fixtures?ids=` (scores + embedded goal/assist events in one call). No awards sync here — see `sync-tournament-awards`.
 
 ### Invoke
 
