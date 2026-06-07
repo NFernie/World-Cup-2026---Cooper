@@ -97,7 +97,7 @@ export function PoolPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={shareGroup}>
-            <Share2 className="h-4 w-4" /> Share group
+            <Share2 className="h-4 w-4" /> Share Group
           </Button>
           {isSuperAdmin && (
             <Button asChild variant="outline" size="sm">

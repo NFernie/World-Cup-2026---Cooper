@@ -65,7 +65,7 @@ export function CreatePoolPage() {
         }}
       >
         <div className="space-y-2">
-          <Label htmlFor="name">Pool name</Label>
+          <Label htmlFor="name">Group name</Label>
           <Input
             id="name"
             required
