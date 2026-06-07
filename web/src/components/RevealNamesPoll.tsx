@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
+import { isRevealNamesEnabled } from '@/lib/poolNames'
 import { supabase } from '@/lib/supabase'
 
 type Props = {
@@ -11,6 +12,7 @@ type Props = {
 }
 
 export function RevealNamesPoll({ poolId, memberId, isHost, revealNames }: Props) {
+  const namesRevealed = isRevealNamesEnabled(revealNames)
   const queryClient = useQueryClient()
 
   const votesQuery = useQuery({
