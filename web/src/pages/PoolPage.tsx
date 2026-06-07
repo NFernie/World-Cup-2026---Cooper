@@ -3,7 +3,13 @@ import { useQuery } from '@tanstack/react-query'
 import { CalendarDays, Share2, Shield, Trophy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
+import { BanterBox } from '@/components/BanterBox'
 import { CoManagerBanner } from '@/components/CoManagerBanner'
+import {
+  NextTeamMatchCountdown,
+  WorldCupCountdown,
+  type CountdownMatch,
+} from '@/components/CountdownCards'
 import { RevealNamesControl } from '@/components/RevealNamesControl'
 import { RevealNamesPoll } from '@/components/RevealNamesPoll'
 import { TeamFlag } from '@/components/TeamFlag'
@@ -13,6 +19,13 @@ import { isRevealNamesEnabled } from '@/lib/poolNames'
 import { getGroupJoinUrl } from '@/lib/urls'
 
 const TOTAL_NATIONS = 48
+
+type TeamSummary = {
+  id: string
+  name: string
+  fifa_code: string
+  group_letter: string | null
+}
 
 export function PoolPage() {
   const { poolId } = useParams<{ poolId: string }>()
@@ -70,6 +83,52 @@ export function PoolPage() {
     },
   })
 
+  const firstKickoffQuery = useQuery({
+    queryKey: ['first-world-cup-kickoff'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('matches')
+        .select('kickoff_at')
+        .order('kickoff_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+      if (error) throw error
+      return data?.kickoff_at as string | undefined
+    },
+  })
+
+  const nextTeamMatchQuery = useQuery({
+    queryKey: ['next-team-match', memberQuery.data?.assigned_team_id],
+    enabled: Boolean(memberQuery.data?.assigned_team_id),
+    refetchInterval: 60_000,
+    queryFn: async () => {
+      const teamId = memberQuery.data!.assigned_team_id
+      const { data: match, error: matchError } = await supabase
+        .from('matches')
+        .select('*')
+        .or(`home_team_id.eq.${teamId},away_team_id.eq.${teamId}`)
+        .gt('kickoff_at', new Date().toISOString())
+        .order('kickoff_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+      if (matchError) throw matchError
+      if (!match) return null
+
+      const { data: teams, error: teamsError } = await supabase
+        .from('teams')
+        .select('id, name, fifa_code, group_letter')
+        .in('id', [match.home_team_id, match.away_team_id])
+      if (teamsError) throw teamsError
+
+      const teamMap = new Map((teams ?? []).map((t) => [t.id, t as TeamSummary]))
+      const home = teamMap.get(match.home_team_id)
+      const away = teamMap.get(match.away_team_id)
+      if (!home || !away) return null
+
+      return { ...match, home, away } as CountdownMatch
+    },
+  })
+
   if (poolQuery.isLoading) return <p className="text-[var(--muted)]">Loading…</p>
   if (!poolQuery.data) return <p className="text-red-600">Pool not found.</p>
 
@@ -112,6 +171,8 @@ export function PoolPage() {
           )}
         </div>
       </div>
+
+      <WorldCupCountdown firstKickoffAt={firstKickoffQuery.data} />
 
       {!member && user && (
         <Card>
@@ -157,6 +218,13 @@ export function PoolPage() {
             />
           </div>
         </Card>
+      )}
+
+      {member && (
+        <NextTeamMatchCountdown
+          match={nextTeamMatchQuery.data}
+          assignedTeamId={member.assigned_team_id}
+        />
       )}
 
       {(member || isHost) && (
@@ -226,6 +294,15 @@ export function PoolPage() {
           </Card>
 
         </div>
+      )}
+
+      {member && (
+        <BanterBox
+          poolId={pool.id}
+          memberId={member.id}
+          displayName={member.display_name}
+          userId={user?.id}
+        />
       )}
 
       {(member || isHost) && (

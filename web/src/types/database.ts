@@ -68,6 +68,24 @@ export interface Database {
           updated_at?: string
         }
       }
+      pool_banter_messages: {
+        Row: {
+          id: string
+          pool_id: string
+          pool_member_id: string
+          user_id: string
+          display_name: string
+          message: string
+          created_at: string
+        }
+        Insert: {
+          pool_id: string
+          pool_member_id: string
+          user_id: string
+          display_name: string
+          message: string
+        }
+      }
       pool_members: {
         Row: {
           id: string
