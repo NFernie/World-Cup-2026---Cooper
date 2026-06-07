@@ -7,7 +7,7 @@ import { CoManagerBanner } from '@/components/CoManagerBanner'
 import { TeamFlag } from '@/components/TeamFlag'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { getInviteUrl } from '@/lib/urls'
+import { getGroupJoinUrl } from '@/lib/urls'
 
 const TOTAL_NATIONS = 48
 
@@ -71,20 +71,20 @@ export function PoolPage() {
   if (!poolQuery.data) return <p className="text-red-600">Pool not found.</p>
 
   const pool = poolQuery.data
-  const inviteUrl = getInviteUrl(pool.invite_code)
+  const groupJoinUrl = getGroupJoinUrl(pool.invite_code, pool.name)
   const member = memberQuery.data
   const team = assignedTeamQuery.data
   const isHost = user?.id === pool.host_user_id
   const playerCount = memberCountQuery.data ?? 0
   const playersNeeded = Math.max(0, TOTAL_NATIONS - playerCount)
 
-  const shareInvite = async () => {
-    const text = `Join my WC26 pool "${pool.name}": ${inviteUrl}`
+  const shareGroup = async () => {
+    const text = `Join my WC26 group "${pool.name}": ${groupJoinUrl}`
     if (navigator.share) {
-      await navigator.share({ title: pool.name, text, url: inviteUrl })
+      await navigator.share({ title: `Join ${pool.name}`, text, url: groupJoinUrl })
     } else {
-      await navigator.clipboard.writeText(inviteUrl)
-      alert('Invite link copied to clipboard.')
+      await navigator.clipboard.writeText(groupJoinUrl)
+      alert('Group invite link copied. Recipients sign in, then group code and name are filled in automatically.')
     }
   }
 
@@ -96,8 +96,8 @@ export function PoolPage() {
           <p className="text-sm text-[var(--muted)]">World Cup 2026</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" onClick={shareInvite}>
-            <Share2 className="h-4 w-4" /> Share link
+          <Button variant="outline" size="sm" onClick={shareGroup}>
+            <Share2 className="h-4 w-4" /> Share group
           </Button>
           {isSuperAdmin && (
             <Button asChild variant="outline" size="sm">

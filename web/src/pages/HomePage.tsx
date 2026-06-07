@@ -81,10 +81,10 @@ export function HomePage() {
               <Users className="h-8 w-8 text-fifa-gold" />
               <CardTitle className="mt-2">Join a pool</CardTitle>
               <CardDescription className="mt-1">
-                Use an invite link or search by pool name your host shared.
+                Use a group code or group name your host shared.
               </CardDescription>
               <Button asChild className="mt-4 w-full">
-                <Link to="/join">Join with invite or pool name</Link>
+                <Link to="/join">Join with group code or name</Link>
               </Button>
             </Card>
           </div>

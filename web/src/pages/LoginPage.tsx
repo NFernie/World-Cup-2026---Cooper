@@ -19,6 +19,11 @@ export function LoginPage() {
   const [submitting, setSubmitting] = useState(false)
 
   if (!loading && user) {
+    const redirect = sessionStorage.getItem('post_auth_redirect')
+    if (redirect) {
+      sessionStorage.removeItem('post_auth_redirect')
+      return <Navigate to={redirect} replace />
+    }
     return <Navigate to="/" replace />
   }
 
