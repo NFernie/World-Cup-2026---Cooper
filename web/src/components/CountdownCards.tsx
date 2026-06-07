@@ -24,6 +24,8 @@ export type CountdownMatch = {
   stage: string
   home: TeamSummary
   away: TeamSummary
+  homeManagerLine?: string
+  awayManagerLine?: string
 }
 
 function useNow(intervalMs = 1000) {
@@ -88,10 +90,12 @@ function FixtureTeamLine({
   team,
   align,
   highlight,
+  managerLine,
 }: {
   team: TeamSummary
   align: 'left' | 'right'
   highlight?: boolean
+  managerLine?: string
 }) {
   return (
     <div
@@ -110,6 +114,9 @@ function FixtureTeamLine({
         </p>
         {team.group_letter && (
           <p className="text-xs text-[var(--muted)]">Group {team.group_letter}</p>
+        )}
+        {managerLine && (
+          <p className="mt-0.5 text-xs text-[var(--muted)]">{managerLine}</p>
         )}
       </div>
     </div>
@@ -172,6 +179,7 @@ export function NextTeamMatchCountdown({
             team={match.home}
             align="left"
             highlight={match.home_team_id === assignedTeamId}
+            managerLine={match.homeManagerLine}
           />
           <div className="shrink-0 rounded-full border border-[var(--border)] px-3 py-1 text-sm font-bold text-[var(--muted)]">
             vs
@@ -180,6 +188,7 @@ export function NextTeamMatchCountdown({
             team={match.away}
             align="right"
             highlight={match.away_team_id === assignedTeamId}
+            managerLine={match.awayManagerLine}
           />
         </div>
       </div>

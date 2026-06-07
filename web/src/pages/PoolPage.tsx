@@ -15,7 +15,7 @@ import { RevealNamesPoll } from '@/components/RevealNamesPoll'
 import { TeamFlag } from '@/components/TeamFlag'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { isRevealNamesEnabled } from '@/lib/poolNames'
+import { formatManagerLine, isRevealNamesEnabled, maskMemberName } from '@/lib/poolNames'
 import { getGroupJoinUrl } from '@/lib/urls'
 
 const TOTAL_NATIONS = 48
@@ -25,6 +25,13 @@ type TeamSummary = {
   name: string
   fifa_code: string
   group_letter: string | null
+}
+
+type PoolMemberSummary = {
+  id: string
+  user_id: string
+  display_name: string
+  assigned_team_id: string
 }
 
 export function PoolPage() {
@@ -80,6 +87,20 @@ export function PoolPage() {
         .eq('pool_id', poolId!)
       if (error) throw error
       return count ?? 0
+    },
+  })
+
+  const poolMembersQuery = useQuery({
+    queryKey: ['pool-members-summary', poolId],
+    enabled: Boolean(poolId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('pool_members')
+        .select('id, user_id, display_name, assigned_team_id')
+        .eq('pool_id', poolId!)
+        .order('join_order', { ascending: true })
+      if (error) throw error
+      return (data ?? []) as PoolMemberSummary[]
     },
   })
 
@@ -140,6 +161,31 @@ export function PoolPage() {
   const playerCount = memberCountQuery.data ?? 0
   const playersNeeded = Math.max(0, TOTAL_NATIONS - playerCount)
   const namesRevealed = isRevealNamesEnabled(pool.reveal_names)
+  const nameVisibility = {
+    revealNames: namesRevealed,
+    hostUserId: pool.host_user_id,
+    viewerUserId: user?.id,
+  }
+
+  const managerLineForTeam = (teamId: string) => {
+    const managers = (poolMembersQuery.data ?? []).filter((m) => m.assigned_team_id === teamId)
+    if (managers.length === 0) return undefined
+    return formatManagerLine(
+      managers.map((m) => maskMemberName(m.display_name, nameVisibility, m.user_id)),
+      managers.map((m) => m.id),
+      managers.length,
+      nameVisibility,
+      member?.id,
+    )
+  }
+
+  const nextTeamMatch = nextTeamMatchQuery.data
+    ? {
+        ...nextTeamMatchQuery.data,
+        homeManagerLine: managerLineForTeam(nextTeamMatchQuery.data.home_team_id),
+        awayManagerLine: managerLineForTeam(nextTeamMatchQuery.data.away_team_id),
+      }
+    : nextTeamMatchQuery.data
 
   const shareGroup = async () => {
     const text = `Join my WC26 group "${pool.name}": ${groupJoinUrl}`
@@ -222,7 +268,7 @@ export function PoolPage() {
 
       {member && (
         <NextTeamMatchCountdown
-          match={nextTeamMatchQuery.data}
+          match={nextTeamMatch}
           assignedTeamId={member.assigned_team_id}
         />
       )}

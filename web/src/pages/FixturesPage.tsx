@@ -7,6 +7,12 @@ import { Card } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { TeamFlag } from '@/components/TeamFlag'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/hooks/useAuth'
+import {
+  formatManagerLine,
+  isRevealNamesEnabled,
+  maskMemberName,
+} from '@/lib/poolNames'
 import { formatPoints } from '@/lib/utils'
 import {
   STAGE_FILTER_OPTIONS,
@@ -55,6 +61,13 @@ type FixtureRow = {
   events: MatchEventRow[]
 }
 
+type PoolMemberSummary = {
+  id: string
+  user_id: string
+  display_name: string
+  assigned_team_id: string
+}
+
 function formatKickoffLocal(iso: string) {
   return new Date(iso).toLocaleString(undefined, {
     weekday: 'short',
@@ -83,11 +96,13 @@ function TeamLine({
   score,
   align,
   highlight,
+  managerLine,
 }: {
   team: TeamRow
   score?: number | null
   align: 'left' | 'right'
   highlight?: boolean
+  managerLine?: string
 }) {
   return (
     <div
@@ -106,6 +121,9 @@ function TeamLine({
         </p>
         {team.group_letter && (
           <p className="text-xs text-[var(--muted)]">Group {team.group_letter}</p>
+        )}
+        {managerLine && (
+          <p className="mt-0.5 text-xs text-[var(--muted)]">{managerLine}</p>
         )}
       </div>
       {score != null && (
@@ -162,7 +180,8 @@ function GoalScorersList({
 }
 
 export function FixturesPage() {
-  useParams<{ poolId: string }>()
+  const { poolId } = useParams<{ poolId: string }>()
+  const { user } = useAuth()
   const { assignedTeamId, assignedTeamName } = useOutletContext<PoolOutletContext>()
 
   const [dateFilter, setDateFilter] = useState('')
@@ -227,7 +246,64 @@ export function FixturesPage() {
     },
   })
 
+  const poolQuery = useQuery({
+    queryKey: ['pool', poolId],
+    enabled: Boolean(poolId),
+    queryFn: async () => {
+      const { data, error } = await supabase.from('pools').select('*').eq('id', poolId!).single()
+      if (error) throw error
+      return data
+    },
+  })
+
+  const memberQuery = useQuery({
+    queryKey: ['pool-member', poolId, user?.id],
+    enabled: Boolean(poolId && user),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('pool_members')
+        .select('*')
+        .eq('pool_id', poolId!)
+        .eq('user_id', user!.id)
+        .maybeSingle()
+      if (error) throw error
+      return data
+    },
+  })
+
+  const poolMembersQuery = useQuery({
+    queryKey: ['pool-members-summary', poolId],
+    enabled: Boolean(poolId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('pool_members')
+        .select('id, user_id, display_name, assigned_team_id')
+        .eq('pool_id', poolId!)
+        .order('join_order', { ascending: true })
+      if (error) throw error
+      return (data ?? []) as PoolMemberSummary[]
+    },
+  })
+
   const allFixtures = fixturesQuery.data ?? []
+  const pool = poolQuery.data
+  const nameVisibility = {
+    revealNames: isRevealNamesEnabled(pool?.reveal_names),
+    hostUserId: pool?.host_user_id ?? '',
+    viewerUserId: user?.id,
+  }
+
+  const managerLineForTeam = (teamId: string) => {
+    const managers = (poolMembersQuery.data ?? []).filter((m) => m.assigned_team_id === teamId)
+    if (managers.length === 0) return undefined
+    return formatManagerLine(
+      managers.map((m) => maskMemberName(m.display_name, nameVisibility, m.user_id)),
+      managers.map((m) => m.id),
+      managers.length,
+      nameVisibility,
+      memberQuery.data?.id,
+    )
+  }
 
   const dateOptions = useMemo(() => {
     const keys = [...new Set(allFixtures.map((m) => kickoffDateKey(m.kickoff_at)))].sort()
@@ -460,6 +536,7 @@ export function FixturesPage() {
                   score={showScore ? m.home_score : undefined}
                   align="left"
                   highlight={m.home_team_id === assignedTeamId}
+                  managerLine={managerLineForTeam(m.home_team_id)}
                 />
                 {!showScore && (
                   <span className="shrink-0 px-1 text-sm font-medium text-[var(--muted)]">vs</span>
@@ -469,6 +546,7 @@ export function FixturesPage() {
                   score={showScore ? m.away_score : undefined}
                   align="right"
                   highlight={m.away_team_id === assignedTeamId}
+                  managerLine={managerLineForTeam(m.away_team_id)}
                 />
               </div>
 
