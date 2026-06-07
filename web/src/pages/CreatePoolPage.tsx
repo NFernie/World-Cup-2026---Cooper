@@ -11,8 +11,9 @@ import { useAuth } from '@/hooks/useAuth'
 
 export function CreatePoolPage() {
   const { user, username: authUsername } = useAuth()
-  
+
   const { reveal, startReveal, completeReveal } = useJoinReveal()
+  const [revealNames, setRevealNames] = useState(false)
   const [name, setName] = useState('')
   const [displayName, setDisplayName] = useState('')
 
@@ -27,7 +28,11 @@ export function CreatePoolPage() {
       if (!user) throw new Error('Not signed in')
       const { data: pool, error } = await supabase
         .from('pools')
-        .insert({ name: name.trim(), host_user_id: user.id })
+        .insert({
+          name: name.trim(),
+          host_user_id: user.id,
+          reveal_names: revealNames,
+        })
         .select()
         .single()
       if (error) throw error
@@ -53,46 +58,74 @@ export function CreatePoolPage() {
           onComplete={completeReveal}
         />
       )}
-    <Card className="max-w-md mx-auto">
-      <CardTitle>Create a pool</CardTitle>
-      <CardDescription className="mt-1">
-        You&apos;ll join automatically with your own team assignment in this pool.
-      </CardDescription>
-      <form
-        className="mt-4 space-y-4"
-        onSubmit={(e) => {
-          e.preventDefault()
-          createPool.mutate()
-        }}
-      >
-        <div className="space-y-2">
-          <Label htmlFor="name">Pool name</Label>
-          <Input
-            id="name"
-            required
-            placeholder="Cooper work crew"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="displayName">Your name in this pool</Label>
-          <Input
-            id="displayName"
-            required
-            placeholder="Cooper"
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-          />
-        </div>
-        {createPool.error && (
-          <p className="text-sm text-red-600">{(createPool.error as Error).message}</p>
-        )}
-        <Button type="submit" className="w-full" disabled={createPool.isPending}>
-          {createPool.isPending ? 'Creating…' : 'Create & join pool'}
-        </Button>
-      </form>
-    </Card>
+      <Card className="mx-auto max-w-md">
+        <CardTitle>Create a group</CardTitle>
+        <CardDescription className="mt-1">
+          You&apos;ll join automatically with your own team assignment in this group.
+        </CardDescription>
+        <form
+          className="mt-4 space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault()
+            createPool.mutate()
+          }}
+        >
+          <div className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--background)] p-3">
+            <Label>Reveal user names</Label>
+            <p className="text-xs text-[var(--muted)]">
+              Choose whether members can see each other&apos;s display names on leaderboards and
+              co-manager lists. You can change this later.
+            </p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                size="sm"
+                className="flex-1"
+                variant={revealNames ? 'default' : 'outline'}
+                onClick={() => setRevealNames(true)}
+              >
+                Reveal names
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="flex-1"
+                variant={!revealNames ? 'default' : 'outline'}
+                onClick={() => setRevealNames(false)}
+              >
+                Keep hidden
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="name">Group name</Label>
+            <Input
+              id="name"
+              required
+              placeholder="Cooper work crew"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="displayName">Your name in this group</Label>
+            <Input
+              id="displayName"
+              required
+              placeholder="Cooper"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+            />
+          </div>
+          {createPool.error && (
+            <p className="text-sm text-red-600">{(createPool.error as Error).message}</p>
+          )}
+          <Button type="submit" className="w-full" disabled={createPool.isPending}>
+            {createPool.isPending ? 'Creating…' : 'Create & join group'}
+          </Button>
+        </form>
+      </Card>
     </>
   )
 }

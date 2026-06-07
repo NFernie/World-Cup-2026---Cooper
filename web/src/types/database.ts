@@ -37,11 +37,35 @@ export interface Database {
           name: string
           host_user_id: string
           invite_code: string
+          reveal_names: boolean
           created_at: string
         }
         Insert: {
           name: string
           host_user_id: string
+          reveal_names?: boolean
+        }
+        Update: {
+          reveal_names?: boolean
+        }
+      }
+      pool_reveal_name_votes: {
+        Row: {
+          id: string
+          pool_id: string
+          pool_member_id: string
+          wants_reveal: boolean
+          updated_at: string
+        }
+        Insert: {
+          pool_id: string
+          pool_member_id: string
+          wants_reveal: boolean
+          updated_at?: string
+        }
+        Update: {
+          wants_reveal?: boolean
+          updated_at?: string
         }
       }
       pool_members: {

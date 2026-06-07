@@ -71,10 +71,10 @@ export function HomePage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <Card>
               <PlusCircle className="h-8 w-8 text-fifa-green" />
-              <CardTitle className="mt-2">Host a pool</CardTitle>
+              <CardTitle className="mt-2">Host a Group</CardTitle>
               <CardDescription className="mt-1">Create a competition and share the invite link.</CardDescription>
               <Button asChild className="mt-4 w-full">
-                <Link to="/pools/new">Create pool</Link>
+                <Link to="/pools/new">Create group</Link>
               </Button>
             </Card>
             <Card>

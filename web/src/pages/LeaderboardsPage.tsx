@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { TeamFlag } from '@/components/TeamFlag'
 import { getFlagUrl } from '@/lib/flags'
+import { maskManagerNames, maskMemberName } from '@/lib/poolNames'
 import { formatStage, isYourTeamRow } from '@/lib/poolBoards'
 import { getTeamStaff } from '@/lib/teamStaff'
 import { supabase } from '@/lib/supabase'
@@ -65,6 +66,16 @@ export function LeaderboardsPage() {
 
   const show = (id: SingleBoardId) => board === 'all' || board === id
 
+  const poolQuery = useQuery({
+    queryKey: ['pool', poolId],
+    enabled: Boolean(poolId),
+    queryFn: async () => {
+      const { data, error } = await supabase.from('pools').select('*').eq('id', poolId!).single()
+      if (error) throw error
+      return data
+    },
+  })
+
   const memberQuery = useQuery({
     queryKey: ['pool-member', poolId, user?.id],
     enabled: Boolean(poolId && user),
@@ -79,6 +90,13 @@ export function LeaderboardsPage() {
       return data
     },
   })
+
+  const pool = poolQuery.data
+  const nameVisibility = {
+    revealNames: Boolean(pool?.reveal_names),
+    hostUserId: pool?.host_user_id ?? '',
+    viewerUserId: user?.id,
+  }
 
   const oddsLb = useQuery({
     queryKey: ['leaderboard-odds', poolId],
@@ -225,6 +243,12 @@ export function LeaderboardsPage() {
               const you = isYourTeamRow(member?.id, row.pool_member_ids)
               const staff = getTeamStaff(row.fifa_code)
               const playerCount = row.co_manager_count
+              const managerLabels = maskManagerNames(
+                row.manager_names,
+                row.pool_member_ids,
+                nameVisibility,
+              )
+              const showManagerNames = nameVisibility.revealNames || nameVisibility.viewerUserId === nameVisibility.hostUserId
               return (
                 <LeaderboardRow key={row.team_id} highlight={you}>
                   <div className="flex min-w-0 flex-1 items-start gap-3">
@@ -237,7 +261,9 @@ export function LeaderboardsPage() {
                         )}
                       </span>
                       <p className="mt-0.5 text-xs text-[var(--muted)]">
-                        Players assigned {playerCount}
+                        {showManagerNames && managerLabels.some((n) => n !== 'Hidden player')
+                          ? `Managers: ${managerLabels.join(', ')}`
+                          : `Players assigned ${playerCount}`}
                       </p>
                       <p className="text-xs text-[var(--muted)]">
                         Manager: {staff.headCoach} · Captain: {staff.captain}
@@ -262,13 +288,21 @@ export function LeaderboardsPage() {
             lose
           </p>
           <div className="space-y-2">
-            {oddsLb.data?.map((row, i) => (
+            {oddsLb.data?.map((row, i) => {
+              const playerLabel = maskMemberName(row.display_name, nameVisibility, row.user_id)
+              const showName = playerLabel !== 'Hidden player'
+              return (
               <LeaderboardRow
                 key={row.pool_member_id}
                 highlight={member?.id === row.pool_member_id}
               >
                 <span className="font-medium">
                   #{i + 1} {row.team_name}
+                  {showName && (
+                    <span className="ml-1 text-sm font-normal text-[var(--muted)]">
+                      · {playerLabel}
+                    </span>
+                  )}
                   {member?.id === row.pool_member_id && (
                     <span className="ml-1 text-xs font-normal text-fifa-green">(you)</span>
                   )}
@@ -277,7 +311,7 @@ export function LeaderboardsPage() {
                   {formatPoints(row.total_points)} pts
                 </span>
               </LeaderboardRow>
-            ))}
+            )})}
             {!oddsLb.data?.length && (
               <p className="text-sm text-[var(--muted)]">No points yet.</p>
             )}

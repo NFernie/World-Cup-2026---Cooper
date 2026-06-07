@@ -4,6 +4,8 @@ import { CalendarDays, Share2, Shield, Trophy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { CoManagerBanner } from '@/components/CoManagerBanner'
+import { RevealNamesControl } from '@/components/RevealNamesControl'
+import { RevealNamesPoll } from '@/components/RevealNamesPoll'
 import { TeamFlag } from '@/components/TeamFlag'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
@@ -147,6 +149,9 @@ export function PoolPage() {
               teamId={member.assigned_team_id}
               teamName={team.name}
               currentMemberId={member.id}
+              revealNames={Boolean(pool.reveal_names)}
+              hostUserId={pool.host_user_id}
+              viewerUserId={user?.id}
             />
           </div>
         </Card>
@@ -217,6 +222,25 @@ export function PoolPage() {
               </Link>
             </Button>
           </Card>
+
+        </div>
+      )}
+
+      {(member || isHost) && (
+        <div className="space-y-4">
+          <RevealNamesControl
+            poolId={pool.id}
+            revealNames={Boolean(pool.reveal_names)}
+            isHost={isHost}
+          />
+          {member && (
+            <RevealNamesPoll
+              poolId={pool.id}
+              memberId={member.id}
+              isHost={isHost}
+              revealNames={Boolean(pool.reveal_names)}
+            />
+          )}
         </div>
       )}
     </div>
