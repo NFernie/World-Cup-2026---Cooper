@@ -15,6 +15,7 @@ import { formatPoints } from '@/lib/utils'
 import type { PoolOutletContext } from '@/pages/PoolShell'
 
 const LEADERBOARD_OPTIONS = [
+  { id: 'all', label: 'All leaderboards' },
   { id: 'overall', label: 'Overall leaderboard' },
   { id: 'odds', label: 'Odds leaderboard' },
   { id: 'golden-boot', label: 'Golden Boot' },
@@ -24,6 +25,7 @@ const LEADERBOARD_OPTIONS = [
 ] as const
 
 type LeaderboardId = (typeof LEADERBOARD_OPTIONS)[number]['id']
+type SingleBoardId = Exclude<LeaderboardId, 'all'>
 
 function LeaderboardRow({
   children,
@@ -56,10 +58,12 @@ export function LeaderboardsPage() {
   const { user } = useAuth()
   const { assignedTeamId } = useOutletContext<PoolOutletContext>()
 
-  const initialBoard = (searchParams.get('board') as LeaderboardId | null) ?? 'overall'
-  const [board, setBoard] = useState<LeaderboardId>(
-    LEADERBOARD_OPTIONS.some((o) => o.id === initialBoard) ? initialBoard : 'overall',
-  )
+  const paramBoard = searchParams.get('board') as LeaderboardId | null
+  const initialBoard =
+    paramBoard && LEADERBOARD_OPTIONS.some((o) => o.id === paramBoard) ? paramBoard : 'all'
+  const [board, setBoard] = useState<LeaderboardId>(initialBoard)
+
+  const show = (id: SingleBoardId) => board === 'all' || board === id
 
   const memberQuery = useQuery({
     queryKey: ['pool-member', poolId, user?.id],
@@ -171,7 +175,11 @@ export function LeaderboardsPage() {
 
   function onBoardChange(id: LeaderboardId) {
     setBoard(id)
-    setSearchParams({ board: id }, { replace: true })
+    if (id === 'all') {
+      setSearchParams({}, { replace: true })
+    } else {
+      setSearchParams({ board: id }, { replace: true })
+    }
   }
 
   return (
@@ -206,8 +214,8 @@ export function LeaderboardsPage() {
         </div>
       </Card>
 
-      {board === 'overall' && (
-        <section>
+      {show('overall') && (
+        <section className={board === 'all' ? 'space-y-3 border-b border-[var(--border)] pb-8' : ''}>
           <h2 className="mb-2 text-lg font-semibold">Overall leaderboard</h2>
           <p className="mb-3 text-sm text-[var(--muted)]">
             Your nation&apos;s progress in the World Cup (by team).
@@ -246,8 +254,8 @@ export function LeaderboardsPage() {
         </section>
       )}
 
-      {board === 'odds' && (
-        <section>
+      {show('odds') && (
+        <section className={board === 'all' ? 'space-y-3 border-b border-[var(--border)] pb-8' : ''}>
           <h2 className="mb-2 text-lg font-semibold">Odds leaderboard</h2>
           <p className="mb-3 text-sm text-[var(--muted)]">
             Score based on live betting odds 2hrs before Kick-Off. Score = Odds on to Win, draw or
@@ -277,8 +285,8 @@ export function LeaderboardsPage() {
         </section>
       )}
 
-      {board === 'golden-boot' && (
-        <section>
+      {show('golden-boot') && (
+        <section className={board === 'all' ? 'space-y-3 border-b border-[var(--border)] pb-8' : ''}>
           <h2 className="mb-2 text-lg font-semibold">Golden Boot</h2>
           <p className="mb-3 text-sm text-[var(--muted)]">
             Top scorers by national team. If the tournament Golden Boot winner plays for your
@@ -318,8 +326,8 @@ export function LeaderboardsPage() {
         </section>
       )}
 
-      {board === 'golden-glove' && (
-        <section>
+      {show('golden-glove') && (
+        <section className={board === 'all' ? 'space-y-3 border-b border-[var(--border)] pb-8' : ''}>
           <h2 className="mb-2 text-lg font-semibold">Golden Glove</h2>
           <p className="mb-3 text-sm text-[var(--muted)]">
             Top goalkeepers by national team.
@@ -358,8 +366,8 @@ export function LeaderboardsPage() {
         </section>
       )}
 
-      {board === 'eliminations' && (
-        <section>
+      {show('eliminations') && (
+        <section className={board === 'all' ? 'space-y-3 border-b border-[var(--border)] pb-8' : ''}>
           <h2 className="mb-2 text-lg font-semibold">Group stage eliminations</h2>
           <p className="mb-3 text-sm text-[var(--muted)]">
             Nations eliminated in the group stage, ordered by global FIFA rank.
@@ -390,8 +398,8 @@ export function LeaderboardsPage() {
         </section>
       )}
 
-      {board === 'knockout' && (
-        <section>
+      {show('knockout') && (
+        <section className={board === 'all' ? 'space-y-3' : ''}>
           <h2 className="mb-2 text-lg font-semibold">Knockout qualifiers</h2>
           <p className="mb-3 text-sm text-[var(--muted)]">
             Teams that advanced from the groups into the knockout round.

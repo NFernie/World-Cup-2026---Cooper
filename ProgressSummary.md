@@ -80,22 +80,54 @@ from matches;
 
 ---
 
-## 5. Prompt 007 — Fixtures UI (this session)
+## 5. Prompt 007 — Fixtures, leaderboards & pool UX
 
 ### UI/UX approach
 
 No “Claude Design Anthropic Labs” doc exists in the repo. Updates follow clean product UI patterns aligned with `PLAN.md`: mobile-first, readable hierarchy, subtle borders, accessible labels, FIFA-adjacent palette.
 
-### Implemented
+### Fixtures page
 
 | Feature | Files |
 |---------|-------|
-| Nation flags beside team names | `web/src/components/TeamFlag.tsx`, `FixturesPage.tsx` |
-| User team flag in WC26 header | `web/src/hooks/usePoolHeaderTeam.tsx`, `Layout.tsx`, `PoolShell.tsx`, `App.tsx` |
-| Filter by date / round / group / team | `FixturesPage.tsx`, `web/src/lib/poolBoards.ts` |
-| “My team fixtures” instant filter | `FixturesPage.tsx` |
-| Goal scorers & assists in fixture card | `FixturesPage.tsx` + `match_events` table |
-| Live UI refresh | React Query `refetchInterval: 60s` when any match is `live` (reads Supabase only) |
+| Nation flags beside team names | `TeamFlag.tsx`, `FixturesPage.tsx` |
+| User team flag in WC26 header | `usePoolHeaderTeam.tsx`, `Layout.tsx`, `PoolShell.tsx` |
+| Filters: date / round / group / team | `FixturesPage.tsx`, `poolBoards.ts` |
+| “My team fixtures” toggle | `FixturesPage.tsx` |
+| Goal scorers & assists | `FixturesPage.tsx` + `match_events` migration |
+| Back link (not “Pool”) | `FixturesPage.tsx` |
+| Live UI refresh | React Query 60s when any match `live` |
+
+### Sweep leaderboards page (`/pools/:id/leaderboards`)
+
+| Feature | Files |
+|---------|-------|
+| Dedicated page with dropdown filter | `LeaderboardsPage.tsx` |
+| **Default: all leaderboards shown**; filter narrows to one | `LeaderboardsPage.tsx` (`board=all`) |
+| Overall: Players assigned N, coach & captain | `teamStaff.ts`, `LeaderboardsPage.tsx` |
+| Odds leaderboard title + 2h pre-kickoff scoring copy | `LeaderboardsPage.tsx` |
+| Golden Boot / Glove / eliminations / knockout | `LeaderboardsPage.tsx` |
+
+### Pool landing page
+
+| Feature | Files |
+|---------|-------|
+| Prominent team flag on “Your team” card | `PoolPage.tsx` |
+| **Sweep progress** `24/48` players + progress bar below Your team | `PoolPage.tsx` |
+| Fixtures card, then Sweep leaderboards card (stacked) | `PoolPage.tsx` |
+| Leaderboards link **only** on pool page (removed from home) | `HomePage.tsx`, `PoolPage.tsx` |
+
+### Home page
+
+| Feature | Files |
+|---------|-------|
+| “Your groups” (was “Your pools”) | `HomePage.tsx` |
+
+### API rate limits (Prompt 007 review)
+
+- `sync-match-results`: API only in live window (15 min pre-kickoff → 3h after)
+- `sync-match-odds`: once per match ~2h before kickoff
+- Goal events: same `fixtures?ids=` call (no extra API)
 
 ---
 
@@ -156,6 +188,9 @@ See `docs/TestLiveAPI.md` for curl commands and pass criteria.
 
 ```
 web/src/pages/FixturesPage.tsx     — fixtures UI + filters + scorers
+web/src/pages/LeaderboardsPage.tsx — sweep leaderboards + filter
+web/src/pages/PoolPage.tsx         — your team, sweep progress, nav cards
+web/src/lib/teamStaff.ts           — head coach + captain per nation
 web/src/components/Layout.tsx      — WC26 header + team flag pill
 web/src/hooks/usePoolHeaderTeam.tsx
 web/src/lib/flags.ts               — flagcdn.com URLs

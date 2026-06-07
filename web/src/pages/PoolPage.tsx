@@ -9,6 +9,8 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { getInviteUrl } from '@/lib/urls'
 
+const TOTAL_NATIONS = 48
+
 export function PoolPage() {
   const { poolId } = useParams<{ poolId: string }>()
   const { user, isSuperAdmin } = useAuth()
@@ -52,6 +54,19 @@ export function PoolPage() {
     },
   })
 
+  const memberCountQuery = useQuery({
+    queryKey: ['pool-member-count', poolId],
+    enabled: Boolean(poolId),
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('pool_members')
+        .select('*', { count: 'exact', head: true })
+        .eq('pool_id', poolId!)
+      if (error) throw error
+      return count ?? 0
+    },
+  })
+
   if (poolQuery.isLoading) return <p className="text-[var(--muted)]">Loading…</p>
   if (!poolQuery.data) return <p className="text-red-600">Pool not found.</p>
 
@@ -60,6 +75,8 @@ export function PoolPage() {
   const member = memberQuery.data
   const team = assignedTeamQuery.data
   const isHost = user?.id === pool.host_user_id
+  const playerCount = memberCountQuery.data ?? 0
+  const playersNeeded = Math.max(0, TOTAL_NATIONS - playerCount)
 
   const shareInvite = async () => {
     const text = `Join my WC26 pool "${pool.name}": ${inviteUrl}`
@@ -135,8 +152,40 @@ export function PoolPage() {
         </Card>
       )}
 
+      {(member || isHost) && (
+        <Card className="p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-[var(--foreground)]">Sweep progress</p>
+              <p className="mt-1 text-3xl font-bold tabular-nums tracking-tight text-[var(--primary)]">
+                {playerCount}/{TOTAL_NATIONS}
+              </p>
+              <p className="text-sm text-[var(--muted)]">players joined</p>
+            </div>
+            <div className="text-right text-sm text-[var(--muted)]">
+              {playersNeeded === 0 ? (
+                <span className="font-medium text-fifa-green">Full sweep — all nations covered</span>
+              ) : (
+                <>
+                  <span className="font-medium text-[var(--foreground)]">
+                    {playersNeeded} more player{playersNeeded === 1 ? '' : 's'} needed
+                  </span>
+                  <p className="mt-0.5">for a full 48-nation sweep</p>
+                </>
+              )}
+            </div>
+          </div>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--border)]">
+            <div
+              className="h-full rounded-full bg-[var(--primary)] transition-all"
+              style={{ width: `${Math.min(100, (playerCount / TOTAL_NATIONS) * 100)}%` }}
+            />
+          </div>
+        </Card>
+      )}
+
       {member && (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-4">
           <Card className="border-[var(--primary)]/40 bg-[color-mix(in_srgb,var(--primary)_6%,var(--card))] p-5 text-center">
             <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--primary)]/15">
               <CalendarDays className="h-7 w-7 text-[var(--primary)]" aria-hidden />
@@ -153,7 +202,7 @@ export function PoolPage() {
             </Button>
           </Card>
 
-          <Card className="border-fifa-gold/40 bg-[color-mix(in_srgb,var(--color-fifa-gold)_8%,var(--card))] p-5 text-center">
+          <Card className="border-fifa-gold/40 bg-[color-mix(in_srgb,var(--color-fifa-gold)_8%,var(--card))] p-5 text-center sm:mx-auto sm:max-w-lg">
             <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-fifa-gold/15">
               <Trophy className="h-7 w-7 text-fifa-gold" aria-hidden />
             </div>

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { LogIn, PlusCircle, Trophy, Users } from 'lucide-react'
+import { LogIn, PlusCircle, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { useAuth } from '@/hooks/useAuth'
@@ -34,7 +34,7 @@ export function HomePage() {
         <>
           <Card>
             <CardTitle className="flex items-center justify-between gap-2">
-              <span>Your pools</span>
+              <span>Your groups</span>
               <Button asChild size="sm" variant="outline">
                 <Link to="/login">Account</Link>
               </Button>
@@ -67,30 +67,6 @@ export function HomePage() {
               )}
             </div>
           </Card>
-
-          {poolsQuery.data && poolsQuery.data.length > 0 && (
-            <Card className="border-fifa-gold/40 bg-[color-mix(in_srgb,var(--color-fifa-gold)_8%,var(--card))] p-5 text-center">
-              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-fifa-gold/15">
-                <Trophy className="h-7 w-7 text-fifa-gold" aria-hidden />
-              </div>
-              <CardTitle className="text-xl">Sweep leaderboards</CardTitle>
-              <CardDescription className="mx-auto mt-2 max-w-md">
-                Overall standings, odds points, Golden Boot, Golden Glove, and knockout boards for
-                your pools.
-              </CardDescription>
-              <div className="mx-auto mt-5 flex max-w-md flex-col gap-2">
-                {poolsQuery.data.map((pool) => (
-                  <Button key={pool.id} asChild size="lg" className="w-full shadow-sm">
-                    <Link to={`/pools/${pool.id}/leaderboards`}>
-                      <Trophy className="h-5 w-5" />
-                      {pool.name}
-                      {pool.teamName ? ` · ${pool.teamName}` : ''}
-                    </Link>
-                  </Button>
-                ))}
-              </div>
-            </Card>
-          )}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Card>
