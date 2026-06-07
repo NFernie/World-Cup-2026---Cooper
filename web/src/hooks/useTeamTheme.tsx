@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, type ReactNode } from 'react'
-import { getTeamTheme, type TeamTheme } from '@/lib/teamColors'
+import { getTeamTheme, resolveAccessiblePoolColors, type TeamTheme } from '@/lib/teamColors'
+import { useTheme } from '@/hooks/useTheme'
 
 const TeamThemeContext = createContext<TeamTheme | null>(null)
 
@@ -11,10 +12,13 @@ export function TeamThemeProvider({
   children: ReactNode
 }) {
   const theme = getTeamTheme(fifaCode)
+  const { theme: colorMode } = useTheme()
+  const accessible = resolveAccessiblePoolColors(theme, colorMode)
 
   useEffect(() => {
     const root = document.documentElement
-    root.style.setProperty('--primary', theme.primary)
+    root.style.setProperty('--primary', accessible.accent)
+    root.style.setProperty('--primary-foreground', accessible.accentForeground)
     root.style.setProperty('--team-primary', theme.primary)
     root.style.setProperty('--team-secondary', theme.secondary)
     root.style.setProperty(
@@ -23,16 +27,17 @@ export function TeamThemeProvider({
     )
     root.style.setProperty(
       '--pool-accent-border',
-      `color-mix(in srgb, ${theme.primary} 55%, transparent)`,
+      `color-mix(in srgb, ${accessible.accent} 55%, transparent)`,
     )
     return () => {
+      root.style.removeProperty('--primary')
+      root.style.removeProperty('--primary-foreground')
       root.style.removeProperty('--team-primary')
       root.style.removeProperty('--team-secondary')
       root.style.removeProperty('--pool-bg')
       root.style.removeProperty('--pool-accent-border')
-      root.style.setProperty('--primary', '#00a651')
     }
-  }, [theme.primary, theme.secondary])
+  }, [theme.primary, theme.secondary, accessible.accent, accessible.accentForeground])
 
   return (
     <TeamThemeContext.Provider value={theme}>

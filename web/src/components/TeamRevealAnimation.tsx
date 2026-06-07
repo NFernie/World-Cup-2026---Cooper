@@ -7,6 +7,8 @@ type Team = { fifa_code: string; name: string }
 type Props = {
   allTeams: Team[]
   assigned: Team
+  /** Remaining nations in the pool sweep (e.g. 38 when 10 members have joined). */
+  spinTeamCount?: number
   onComplete: () => void
 }
 
@@ -21,7 +23,7 @@ function delayForTick(t: number): number {
   return 380
 }
 
-export function TeamRevealAnimation({ allTeams, assigned, onComplete }: Props) {
+export function TeamRevealAnimation({ allTeams, assigned, spinTeamCount, onComplete }: Props) {
   const [index, setIndex] = useState(0)
   const [phase, setPhase] = useState<'spin' | 'reveal'>('spin')
   const [imgError, setImgError] = useState(false)
@@ -130,7 +132,10 @@ export function TeamRevealAnimation({ allTeams, assigned, onComplete }: Props) {
               )}
             </div>
             <p className="mt-5 text-sm text-white/60">{currentName}</p>
-            <p className="mt-1 text-xs text-white/40">Spinning through {codes.length} teams</p>
+            <p className="mt-1 text-xs text-white/40">
+              Spinning through {spinTeamCount ?? codes.length} team
+              {(spinTeamCount ?? codes.length) === 1 ? '' : 's'}
+            </p>
           </>
         ) : (
           <>

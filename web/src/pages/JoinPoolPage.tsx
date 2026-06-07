@@ -139,6 +139,7 @@ export function JoinPoolPage() {
         <TeamRevealAnimation
           allTeams={reveal.allTeams}
           assigned={reveal.assigned}
+          spinTeamCount={reveal.spinTeamCount}
           onComplete={completeReveal}
         />
       )}
