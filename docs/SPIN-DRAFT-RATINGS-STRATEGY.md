@@ -1,8 +1,12 @@
-# Spin Draft — Player ratings strategy
+# Spin Draft — Player ratings strategy (implemented)
 
-**Question:** Is FUTBIN the right way to get ratings? What does 38-0-0 do? What do *you* need to do manually?
+**Decision:** Ratings come from **API-Football** (already integrated), stored in `squad_players`.
+The FUTBIN scraping idea was **dropped** — no official API, gray-area terms, and the wrong
+player pool (Ultimate Team cards, not FIFA squads). This matches how 38-0-0 works: a
+**preloaded dataset**, never live scraping during play.
 
-**Recommendation:** **Do not use FUTBIN as the primary pipeline.** Use **API-Football** (already integrated) for squads + ratings, with optional **manual CSV overrides** for a handful of mismatches. This matches how 38-0-0 actually works (preloaded dataset, not live scraping during play).
+> How ratings are assigned **before any World Cup match is played** is covered in
+> [§ Auto-assigning ratings with no matches](#auto-assigning-ratings-with-no-matches-played).
 
 ---
 
@@ -26,22 +30,48 @@ The exact upstream dataset is not published in their FAQ. It is likely a **curat
 
 ---
 
-## Why FUTBIN is a poor primary source
+## Auto-assigning ratings with no matches played
 
-| Issue | Impact |
-|-------|--------|
-| **No official API** | Scraping only; breaks when HTML changes |
-| **Terms of use** | Automated scraping may violate FUTBIN/EA terms |
-| **Wrong player pool** | FUTBIN = Ultimate Team **cards**, not FIFA squad lists |
-| **Name matching** | ~1,200 squad players × fuzzy match = many failures |
-| **Maintenance** | You own pagination, rate limits, nation IDs, special cards |
-| **Not in your stack** | Extra secret, extra cron, extra failure mode |
+This is the key pre-tournament problem: before 11 June 2026, players have **no World Cup
+match data**, so there is no live rating to read. The implemented `sync-squads` function
+uses a **two-tier strategy** so the game is playable from day one:
 
-FUTBIN is fine for a **one-off research export** you review in a spreadsheet. It is a bad **production dependency**.
+```
+For each squad player:
+  1. If API-Football has a season rating (games.rating, e.g. from
+     qualifiers/friendlies in season 2026):
+        overall = clamp(round(rating × 10), 50, 94)      source = "api"
+  2. Otherwise (no minutes / no rating yet):
+        base   = teamBaseRating(nation FIFA rank)        # 86 for #1 → 58 for low seeds
+        offset = deterministic ±4 from the player's name # gives squad spread
+        overall = clamp(base + offset, 52, 90)           source = "fallback"
+```
+
+Why this works with zero matches:
+
+- **Team strength is known today** via `teams.global_fifa_rank` (seeded from the official
+  FIFA ranking). France/Spain squads get high baselines; lower seeds get lower ones.
+- The **±4 name-based offset** is deterministic, so the same player always gets the same
+  rating, but players within a squad differ enough that draft choices matter.
+- As soon as real matches are played, the **API rating overrides the fallback** on the next
+  daily sync — no code change, no manual step.
+
+`teamBaseRating(rank) = clamp(round(86 - (rank - 1) × 0.32), 58, 86)`
+
+| FIFA rank | Baseline OVR | Example nation |
+|-----------|--------------|----------------|
+| 1 | 86 | France |
+| 10 | 83 | Germany |
+| 31 | 76 | Norway |
+| 60 | 67 | South Africa |
+| 85 | 59 | New Zealand |
+
+Optional **manual overrides** (`rating_source = 'manual'`) for marquee players are never
+overwritten by the sync — set them in the Supabase Table Editor if a star looks wrong.
 
 ---
 
-## Recommended approach: API-Football only (+ optional overrides)
+## How it works: API-Football only
 
 You already pay for and sync **API-Football** for WC 2026 (`league=1`, `season=2026`).
 
@@ -105,13 +135,13 @@ Game page banner: *Provisional squads — will update when FIFA confirms final 2
 
 ## Alternatives compared
 
-| Method | Effort | Quality | Legal/automation | Verdict |
-|--------|--------|---------|------------------|---------|
-| **API-Football** (recommended) | Low — extend existing sync | Good; 0–10 ratings | Already licensed | **Primary** |
-| **FUTBIN scrape** | High | Best FIFA “feel” | Gray area | **Avoid in prod** |
-| **One-time FUTBIN CSV import** | Medium manual | Best FIFA “feel” | One-off export OK | **Optional override file** |
-| **Fully manual spreadsheet** | Very high (~1,200 rows) | Perfect if you have time | Fine | **Overkill** |
-| **Formula from goals/assists only** | Medium dev | Weaker | Fine | Fallback inside API path |
+| Method | Effort | Quality | Verdict |
+|--------|--------|---------|---------|
+| **API-Football season rating** | Low — already integrated | Good; 0–10 ratings | **Primary (implemented)** |
+| **FIFA-rank baseline** | Built in | Reasonable pre-tournament | **Fallback (implemented)** |
+| **Manual overrides** | Low (a few stars) | Perfect for marquee names | **Optional** |
+| **FUTBIN scraping** | High | Gray-area terms, wrong pool | **Dropped** |
+| **Full manual spreadsheet (~1,200 rows)** | Very high | Perfect if you have time | **Overkill** |
 
 ---
 
@@ -144,7 +174,7 @@ Only if API ratings look wrong for star players:
 1. Open **Supabase Table Editor** → `squad_players` (or a small admin page we add).
 2. Filter one nation (e.g. France).
 3. Fix **10–20 star ratings** by hand (Mbappé, Messi, etc.) — set `rating_source = 'manual'`.
-4. Or: maintain `data/spin-draft-rating-overrides.csv` in the repo (fifa_code, player_name, overall_rating) and run import script in Cursor — **no FUTBIN required**.
+4. Or: maintain a small overrides CSV in the repo (fifa_code, player_name, overall_rating) and run an import script in Cursor.
 
 You do **not** need to rate every player manually if API sync is acceptable.
 
@@ -152,8 +182,8 @@ You do **not** need to rate every player manually if API sync is acceptable.
 
 | Task | Why |
 |------|-----|
-| Live FUTBIN fetch from browser | CORS, ToS, slow, brittle |
-| Admin UI to scrape FUTBIN | Same problems |
+| Live third-party rating fetch from browser | CORS, ToS, slow, brittle |
+| Any scraping pipeline | Maintenance + legal risk; not needed |
 | Per-pool rating entry | Side game; global player data is enough |
 
 A **read-only admin view** (sync status, unmatched players, edit OVR) in `/admin` is useful; bulk import stays in Cursor/CI.
@@ -180,20 +210,20 @@ A **read-only admin view** (sync status, unmatched players, edit OVR) in `/admin
 
 ### You never need to
 
-- Scrape FUTBIN on a schedule
+- Scrape any third-party ratings site on a schedule
 - Enter 1,200 ratings by hand (unless you want to)
 - Configure anything in the live webapp for normal operation
 
 ---
 
-## Updated decision (replaces FUTBIN-primary plan)
+## Final decision
 
 | Item | Choice |
 |------|--------|
 | Squad list | API-Football `/players/squads` |
-| Ratings | API-Football `statistics.games.rating` → OVR formula |
+| Ratings | API-Football `statistics.games.rating` → OVR, FIFA-rank fallback |
 | Overrides | Optional CSV or admin edits for stars |
-| FUTBIN | **Not used** in production pipeline |
+| Scraping | **Not used** |
 | Game data at runtime | Postgres only |
 
 ---
@@ -205,7 +235,7 @@ A **read-only admin view** (sync status, unmatched players, edit OVR) in `/admin
 3. Classic draft UI + tournament simulation.
 4. Banter post on result.
 
-No FUTBIN script unless you later want a **one-time** CSV export for override comparison.
+No scraping pipeline is used.
 
 ---
 

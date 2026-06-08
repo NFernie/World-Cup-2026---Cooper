@@ -42,3 +42,6 @@ verify_jwt = false
 
 [functions.sync-tournament-awards]
 verify_jwt = false
+
+[functions.sync-squads]
+verify_jwt = false

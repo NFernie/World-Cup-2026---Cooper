@@ -162,6 +162,68 @@ export interface Database {
           created_at: string
         }
       }
+      app_settings: {
+        Row: {
+          key: string
+          value: Json
+          updated_at: string
+        }
+      }
+      squad_players: {
+        Row: {
+          id: string
+          team_id: string
+          api_football_player_id: number | null
+          name: string
+          position: string
+          position_detail: string | null
+          shirt_number: number | null
+          photo_url: string | null
+          overall_rating: number
+          rating_source: string
+          synced_at: string
+        }
+      }
+      xi_game_sessions: {
+        Row: {
+          id: string
+          user_id: string
+          pool_id: string | null
+          formation: string
+          mode: string
+          status: string
+          result_json: Json | null
+          created_at: string
+        }
+        Insert: {
+          user_id: string
+          pool_id?: string | null
+          formation: string
+          mode?: string
+          status?: string
+          result_json?: Json | null
+        }
+        Update: {
+          status?: string
+          result_json?: Json | null
+        }
+      }
+      xi_game_picks: {
+        Row: {
+          session_id: string
+          round: number
+          spun_team_id: string | null
+          squad_player_id: string | null
+          slot_position: string
+        }
+        Insert: {
+          session_id: string
+          round: number
+          spun_team_id?: string | null
+          squad_player_id?: string | null
+          slot_position: string
+        }
+      }
     }
     Views: {
       leaderboard_odds_points: {

@@ -3,7 +3,7 @@
 **Reference:** [38-0-0.com](https://38-0-0.com)  
 **Target product:** World Cup 2026 Cooper tipping pool  
 **Last updated:** 2026-06-08  
-**Status:** Decisions locked — build after final 26-man squads are published  
+**Status:** Built (provisional squads). FUTBIN pipeline dropped — ratings come from API-Football.  
 
 ---
 
@@ -25,7 +25,7 @@
 |-------|----------|
 | **Modes** | **Classic only** (ratings visible; keep it simple). |
 | **Re-spin** | **None**. |
-| **Ratings** | **API-Football** season rating (0–10 → OVR). Optional manual overrides for stars. **Not FUTBIN in prod** — see [SPIN-DRAFT-RATINGS-STRATEGY.md](./SPIN-DRAFT-RATINGS-STRATEGY.md). |
+| **Ratings** | **API-Football** season rating (0–10 → OVR) with FIFA-rank fallback. Optional manual overrides for stars — see [SPIN-DRAFT-RATINGS-STRATEGY.md](./SPIN-DRAFT-RATINGS-STRATEGY.md). |
 | **Squad timing** | **Ship with provisional squads now**; update when FIFA announces final 26-man lists. Game page must state squads are provisional. |
 | **Login** | Pool member required to play and post banter. |
 | **Simulation** | Client-side for v1. |
@@ -209,7 +209,7 @@ xi_game_sessions (
   pool_id uuid references pools(id),
   user_id uuid references auth.users(id),
   formation text not null,
-  mode text not null,            -- classic | expert
+  mode text not null default 'classic',
   status text not null,          -- drafting | complete
   result_json jsonb,
   created_at timestamptz
