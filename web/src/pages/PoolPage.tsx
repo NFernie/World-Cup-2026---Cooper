@@ -1,6 +1,6 @@
 import { Link, useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { CalendarDays, Dices, Share2, Shield, Trophy } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { CalendarDays, Dices, Lock, Share2, Shield, Trophy, Unlock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { BanterBox } from '@/components/BanterBox'
@@ -39,6 +39,7 @@ type PoolMemberSummary = {
 export function PoolPage() {
   const { poolId } = useParams<{ poolId: string }>()
   const { user, isSuperAdmin } = useAuth()
+  const queryClient = useQueryClient()
 
   const poolQuery = useQuery({
     queryKey: ['pool', poolId],
@@ -168,6 +169,19 @@ export function PoolPage() {
     },
   })
 
+  const joinLockMutation = useMutation({
+    mutationFn: async (locked: boolean) => {
+      const { error } = await supabase.rpc('set_pool_join_locked', {
+        p_pool_id: poolId!,
+        p_join_locked: locked,
+      })
+      if (error) throw error
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['pool', poolId] })
+    },
+  })
+
   if (poolQuery.isLoading) return <p className="text-[var(--muted)]">Loading…</p>
   if (!poolQuery.data) return <p className="text-red-600">Pool not found.</p>
 
@@ -178,6 +192,7 @@ export function PoolPage() {
   const isHost = user?.id === pool.host_user_id
   const playerCount = memberCountQuery.data ?? 0
   const playersNeeded = Math.max(0, TOTAL_NATIONS - playerCount)
+  const joinLocked = pool.join_locked === true
   const namesRevealed = isRevealNamesEnabled(pool.reveal_names)
   const isHostAssignment = isHostAssignmentMode(pool.team_assignment_mode)
   const nameVisibility = {
@@ -341,6 +356,44 @@ export function PoolPage() {
               style={{ width: `${Math.min(100, (playerCount / TOTAL_NATIONS) * 100)}%` }}
             />
           </div>
+
+          {isHost && (
+            <div className="mt-4 border-t border-[var(--border)] pt-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-[var(--foreground)]">
+                    {joinLocked ? 'Sign-ups are closed' : 'Sign-ups are open'}
+                  </p>
+                  <p className="text-xs text-[var(--muted)]">
+                    {joinLocked
+                      ? 'New players cannot join this group.'
+                      : 'Close sign-ups to cap the group and block new players.'}
+                  </p>
+                </div>
+                <Button
+                  variant={joinLocked ? 'default' : 'outline'}
+                  size="sm"
+                  disabled={joinLockMutation.isPending}
+                  onClick={() => joinLockMutation.mutate(!joinLocked)}
+                >
+                  {joinLocked ? (
+                    <>
+                      <Unlock className="h-4 w-4" /> Re-open sign-ups
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="h-4 w-4" /> Close sign-ups (cap at 48)
+                    </>
+                  )}
+                </Button>
+              </div>
+              {joinLockMutation.error && (
+                <p className="mt-2 text-sm text-red-600">
+                  {(joinLockMutation.error as Error).message}
+                </p>
+              )}
+            </div>
+          )}
         </Card>
       )}
 

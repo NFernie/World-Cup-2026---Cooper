@@ -97,8 +97,8 @@ async function fetchSeasonRatings(
     }
 
     page += 1;
-    await new Promise((r) => setTimeout(r, 120));
-  } while (page <= totalPages && page <= 5);
+    await new Promise((r) => setTimeout(r, 80));
+  } while (page <= totalPages && page <= 3);
 
   return ratings;
 }
@@ -116,17 +116,51 @@ type SquadRow = {
   synced_at: string;
 };
 
+const SYNC_META_KEY = "spin_draft_sync";
+const MIN_HOURS_BETWEEN_SYNCS = 20;
+const DEFAULT_BUDGET_MS = 110_000;
+
 export async function syncSquads(
   supabase: SupabaseClient,
   apiKey: string,
   season: string,
+  opts: { force?: boolean; budgetMs?: number } = {},
 ): Promise<{
   teams: number;
   players: number;
   withApiRating: number;
   errors: number;
+  skipped?: boolean;
+  lastSyncedAt?: string;
   note?: string;
 }> {
+  const force = opts.force === true;
+  const budgetMs = opts.budgetMs ?? DEFAULT_BUDGET_MS;
+  const startedAt = Date.now();
+
+  // Once-per-day guard: avoid hammering the football API. Manual runs can force.
+  const metaResult = await supabase
+    .from("app_settings")
+    .select("value")
+    .eq("key", SYNC_META_KEY)
+    .maybeSingle();
+  const lastSyncedAt = (metaResult?.data?.value as { last_synced_at?: string } | null)
+    ?.last_synced_at;
+  if (!force && lastSyncedAt) {
+    const ageHours = (Date.now() - new Date(lastSyncedAt).getTime()) / 3_600_000;
+    if (ageHours < MIN_HOURS_BETWEEN_SYNCS) {
+      return {
+        teams: 0,
+        players: 0,
+        withApiRating: 0,
+        errors: 0,
+        skipped: true,
+        lastSyncedAt,
+        note: `Already synced ${ageHours.toFixed(1)}h ago (min ${MIN_HOURS_BETWEEN_SYNCS}h). Pass {"force": true} to override.`,
+      };
+    }
+  }
+
   const teamsResult = await supabase
     .from("teams")
     .select("id, api_football_team_id, fifa_code, global_fifa_rank")
@@ -151,9 +185,14 @@ export async function syncSquads(
   let playersUpserted = 0;
   let apiRated = 0;
   let errors = 0;
+  let budgetReached = false;
   const now = new Date().toISOString();
 
   for (const team of teams) {
+    if (Date.now() - startedAt > budgetMs) {
+      budgetReached = true;
+      break;
+    }
     const apiTeamId = team.api_football_team_id;
     if (!apiTeamId) continue;
 
@@ -233,8 +272,27 @@ export async function syncSquads(
       errors += 1;
     }
 
-    await new Promise((r) => setTimeout(r, 150));
+    await new Promise((r) => setTimeout(r, 120));
   }
 
-  return { teams: teamsDone, players: playersUpserted, withApiRating: apiRated, errors };
+  // Only record the daily timestamp when the full set completed, so a
+  // budget-truncated run lets the next invocation continue.
+  if (!budgetReached) {
+    await supabase
+      .from("app_settings")
+      .upsert(
+        { key: SYNC_META_KEY, value: { last_synced_at: now }, updated_at: now },
+        { onConflict: "key" },
+      );
+  }
+
+  return {
+    teams: teamsDone,
+    players: playersUpserted,
+    withApiRating: apiRated,
+    errors,
+    note: budgetReached
+      ? "Time budget reached — run again (or wait for cron) to finish remaining teams."
+      : undefined,
+  };
 }

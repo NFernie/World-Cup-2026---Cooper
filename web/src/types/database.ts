@@ -39,6 +39,7 @@ export interface Database {
           invite_code: string
           reveal_names: boolean
           team_assignment_mode: 'automatic' | 'host'
+          join_locked: boolean
           created_at: string
         }
         Insert: {
@@ -46,10 +47,12 @@ export interface Database {
           host_user_id: string
           reveal_names?: boolean
           team_assignment_mode?: 'automatic' | 'host'
+          join_locked?: boolean
         }
         Update: {
           reveal_names?: boolean
           team_assignment_mode?: 'automatic' | 'host'
+          join_locked?: boolean
         }
       }
       pool_reveal_name_votes: {
@@ -330,6 +333,10 @@ export interface Database {
       }
       set_pool_reveal_names: {
         Args: { p_pool_id: string; p_reveal_names: boolean }
+        Returns: Database['public']['Tables']['pools']['Row']
+      }
+      set_pool_join_locked: {
+        Args: { p_pool_id: string; p_join_locked: boolean }
         Returns: Database['public']['Tables']['pools']['Row']
       }
       assign_pool_member_team: {
