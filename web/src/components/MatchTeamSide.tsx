@@ -12,16 +12,22 @@ export type MatchTeamSideTeam = {
 /** Compact row: flag, name, optional score only. */
 export function MatchTeamCompact({
   team,
+  align,
   highlight,
   score,
 }: {
   team: MatchTeamSideTeam
+  align: 'left' | 'right'
   highlight?: boolean
   score?: number | null
 }) {
   return (
-    <div className="flex min-w-0 items-center gap-2">
-      <TeamFlag fifaCode={team.fifa_code} size={36} title={team.name} />
+    <div
+      className={`flex min-w-0 flex-1 items-center gap-2 ${
+        align === 'right' ? 'flex-row-reverse text-right' : ''
+      }`}
+    >
+      <TeamFlag fifaCode={team.fifa_code} size={40} title={team.name} />
       <p
         className={`min-w-0 flex-1 truncate font-semibold leading-tight ${
           highlight ? 'text-[var(--team-primary)]' : 'text-[var(--foreground)]'

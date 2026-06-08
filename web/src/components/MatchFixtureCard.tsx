@@ -41,12 +41,22 @@ export function MatchFixtureCard({
 
   return (
     <div className="space-y-3">
-      <div className="space-y-2">
-        <MatchTeamCompact team={home} highlight={homeHighlight} score={homeScore} />
+      <div className="flex items-center gap-3">
+        <MatchTeamCompact
+          team={home}
+          align="left"
+          highlight={homeHighlight}
+          score={homeScore}
+        />
         {homeScore == null && awayScore == null && (
-          <p className="text-center text-xs font-medium text-[var(--muted)]">vs</p>
+          <span className="shrink-0 px-1 text-sm font-medium text-[var(--muted)]">vs</span>
         )}
-        <MatchTeamCompact team={away} highlight={awayHighlight} score={awayScore} />
+        <MatchTeamCompact
+          team={away}
+          align="right"
+          highlight={awayHighlight}
+          score={awayScore}
+        />
       </div>
 
       {showOdds && odds && <MatchOddsGrid odds={odds} />}
