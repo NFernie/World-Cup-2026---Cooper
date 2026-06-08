@@ -11,22 +11,25 @@ import { useAuth } from '@/hooks/useAuth'
 import type { PoolOutletContext } from '@/pages/PoolShell'
 import {
   FORMATIONS,
-  buildSlots,
   getFormation,
+  pitchRows,
   type Formation,
+  type FormationSlot,
 } from '@/lib/xiGame/formations'
-import {
-  firstOpenSlotForFamily,
-  isComplete,
-  openFamilies,
-  spinTeam,
-} from '@/lib/xiGame/draft'
+import { isComplete, openSlots, spinTeam } from '@/lib/xiGame/draft'
 import { exitRoundLabel, simulateTournament } from '@/lib/xiGame/simulate'
-import type { DraftPick, GameTeam, SimulationResult, SquadPlayer } from '@/lib/xiGame/types'
+import {
+  effectiveRating,
+  type DraftPick,
+  type GameTeam,
+  type SimulationResult,
+  type SquadPlayer,
+} from '@/lib/xiGame/types'
 
 type Phase = 'setup' | 'drafting' | 'result'
 
 const TOTAL_ROUNDS = 11
+const GAME_TITLE = 'Can you win the World Cup?'
 
 export function XiGamePage() {
   const { poolId } = useParams<{ poolId: string }>()
@@ -37,6 +40,7 @@ export function XiGamePage() {
   const [formationId, setFormationId] = useState<string>(FORMATIONS[0].id)
   const [picks, setPicks] = useState<DraftPick[]>([])
   const [currentTeam, setCurrentTeam] = useState<GameTeam | null>(null)
+  const [selectedPlayer, setSelectedPlayer] = useState<SquadPlayer | null>(null)
   const [result, setResult] = useState<SimulationResult | null>(null)
   const [banterPosted, setBanterPosted] = useState(false)
   const [banterError, setBanterError] = useState<string | null>(null)
@@ -108,17 +112,19 @@ export function XiGamePage() {
   }, [squadsQuery.data])
 
   const formation = getFormation(formationId)
-  const slots = buildSlots(formation)
+  const rows = pitchRows(formation)
   const usedTeamIds = picks.map((p) => p.team.id)
   const usedPlayerIds = new Set(picks.map((p) => p.player.id))
   const round = picks.length + 1
-  const openFams = openFamilies(formation, picks)
+  const open = openSlots(formation, picks)
+  const openSlotIds = new Set(open.map((s) => s.id))
   const squadsReady = (squadsQuery.data?.length ?? 0) > 0
   const provisional = settingQuery.data?.squads_provisional !== false
 
   function startGame() {
     setPicks([])
     setCurrentTeam(null)
+    setSelectedPlayer(null)
     setResult(null)
     setBanterPosted(false)
     setBanterError(null)
@@ -128,15 +134,25 @@ export function XiGamePage() {
   function spin() {
     const teams = (teamsQuery.data ?? []).filter((t) => squadsByTeam.has(t.id))
     if (teams.length === 0) return
+    setSelectedPlayer(null)
     setCurrentTeam(spinTeam(teams, usedTeamIds))
   }
 
-  function pickPlayer(player: SquadPlayer, team: GameTeam) {
-    const slotId = firstOpenSlotForFamily(formation, picks, player.position)
-    if (!slotId) return
-    const nextPicks = [...picks, { slotId, family: player.position, player, team }]
+  function placeInSlot(slot: FormationSlot) {
+    if (!selectedPlayer || !currentTeam) return
+    if (!openSlotIds.has(slot.id)) return
+    const pick: DraftPick = {
+      slotId: slot.id,
+      slotFamily: slot.family,
+      slotLabel: slot.label,
+      player: selectedPlayer,
+      team: currentTeam,
+      outOfPosition: selectedPlayer.position !== slot.family,
+    }
+    const nextPicks = [...picks, pick]
     setPicks(nextPicks)
     setCurrentTeam(null)
+    setSelectedPlayer(null)
     if (isComplete(formation, nextPicks)) {
       finish(nextPicks)
     }
@@ -171,11 +187,11 @@ export function XiGamePage() {
           round: i + 1,
           spun_team_id: p.team.id,
           squad_player_id: p.player.id,
-          slot_position: p.slotId,
+          slot_position: p.slotLabel,
         })),
       )
     } catch {
-      // Persistence is best-effort; the game result is already shown.
+      // Persistence is best-effort; the result is already shown.
     }
   }
 
@@ -209,10 +225,8 @@ export function XiGamePage() {
     return (
       <GameFrame>
         <Card className="p-6 text-center">
-          <CardTitle>Spin Draft is coming soon</CardTitle>
-          <CardDescription className="mt-2">
-            The World Cup Spin Draft will be available shortly.
-          </CardDescription>
+          <CardTitle>{GAME_TITLE}</CardTitle>
+          <CardDescription className="mt-2">Coming soon.</CardDescription>
         </Card>
       </GameFrame>
     )
@@ -233,11 +247,11 @@ export function XiGamePage() {
       {phase === 'setup' && (
         <Card className="space-y-4 p-5">
           <div>
-            <CardTitle className="text-xl">World Cup Spin Draft</CardTitle>
+            <CardTitle className="text-xl">{GAME_TITLE}</CardTitle>
             <CardDescription className="mt-1">
-              Spin a random nation, draft one player into your XI, and repeat for 11 rounds.
-              Then find out how far your squad goes — all the way to the trophy, or knocked out
-              along the way.
+              Spin a random nation, draft a player into your XI, and place them in your formation.
+              Players in their natural position perform best — playing out of position costs 10%.
+              Fill all 11 spots, then see how far your squad goes.
             </CardDescription>
           </div>
 
@@ -280,14 +294,26 @@ export function XiGamePage() {
               </p>
               <p className="text-xs text-[var(--muted)]">{formation.name}</p>
             </div>
-            <PitchSlots slots={slots} picks={picks} />
+            <Pitch
+              rows={rows}
+              picks={picks}
+              selectedPlayer={selectedPlayer}
+              openSlotIds={openSlotIds}
+              onSlotClick={placeInSlot}
+            />
+            {selectedPlayer && (
+              <p className="mt-3 text-center text-xs text-[var(--muted)]">
+                Tap a highlighted slot to place <strong>{selectedPlayer.name}</strong>.
+                Green = natural position, amber = out of position (−10%).
+              </p>
+            )}
           </Card>
 
           <Card className="p-4">
             {!currentTeam ? (
               <div className="flex flex-col items-center gap-3 py-4 text-center">
                 <p className="text-sm text-[var(--muted)]">
-                  Spin to draw a nation, then pick a player for an open position.
+                  Spin to draw a nation, then choose a player and place them on the pitch.
                 </p>
                 <Button onClick={spin}>
                   <Dices className="h-4 w-4" /> Spin the wheel
@@ -300,21 +326,26 @@ export function XiGamePage() {
                   <p className="font-semibold">{currentTeam.name}</p>
                 </div>
                 <p className="text-xs text-[var(--muted)]">
-                  Pick one player for an open {[...openFams].join(', ')} slot.
+                  {selectedPlayer
+                    ? 'Now tap a highlighted position above, or pick a different player.'
+                    : 'Choose a player to draft.'}
                 </p>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {(squadsByTeam.get(currentTeam.id) ?? []).map((player) => {
-                    const eligible = openFams.has(player.position) && !usedPlayerIds.has(player.id)
+                    const used = usedPlayerIds.has(player.id)
+                    const selected = selectedPlayer?.id === player.id
                     return (
                       <button
                         key={player.id}
                         type="button"
-                        disabled={!eligible}
-                        onClick={() => pickPlayer(player, currentTeam)}
+                        disabled={used}
+                        onClick={() => setSelectedPlayer(player)}
                         className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
-                          eligible
-                            ? 'border-[var(--border)] hover:border-[var(--primary)] hover:bg-[var(--primary)]/8'
-                            : 'cursor-not-allowed border-[var(--border)] opacity-40'
+                          used
+                            ? 'cursor-not-allowed border-[var(--border)] opacity-40'
+                            : selected
+                              ? 'border-[var(--primary)] bg-[var(--primary)]/12 ring-1 ring-[var(--primary)]'
+                              : 'border-[var(--border)] hover:border-[var(--primary)] hover:bg-[var(--primary)]/8'
                         }`}
                       >
                         <span className="min-w-0">
@@ -361,7 +392,7 @@ export function XiGamePage() {
 
           <Card className="p-4">
             <p className="mb-3 text-sm font-semibold">Your XI</p>
-            <PitchSlots slots={slots} picks={picks} showRatings />
+            <Pitch rows={rows} picks={picks} showRatings openSlotIds={new Set()} />
           </Card>
 
           <Card className="space-y-3 p-4">
@@ -369,9 +400,7 @@ export function XiGamePage() {
               <p className="text-sm font-medium text-fifa-green">Posted to the Banter Box.</p>
             ) : (
               <>
-                <p className="text-sm text-[var(--muted)]">
-                  Share your result with the group.
-                </p>
+                <p className="text-sm text-[var(--muted)]">Share your result with the group.</p>
                 <Button variant="outline" onClick={postToBanter} disabled={posting}>
                   {posting ? 'Posting…' : 'Post to banter box'}
                 </Button>
@@ -404,8 +433,8 @@ function GameFrame({ children }: { children: React.ReactNode }) {
           </Link>
         </Button>
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Spin Draft</h1>
-          <p className="text-sm text-[var(--muted)]">Build an XI and chase the trophy</p>
+          <h1 className="text-xl font-semibold tracking-tight">{GAME_TITLE}</h1>
+          <p className="text-sm text-[var(--muted)]">Draft an XI and chase the trophy</p>
         </div>
       </div>
       {children}
@@ -413,53 +442,100 @@ function GameFrame({ children }: { children: React.ReactNode }) {
   )
 }
 
-function PitchSlots({
-  slots,
+function Pitch({
+  rows,
   picks,
+  selectedPlayer,
+  openSlotIds,
+  onSlotClick,
   showRatings,
 }: {
-  slots: ReturnType<typeof buildSlots>
+  rows: FormationSlot[][]
   picks: DraftPick[]
+  selectedPlayer?: SquadPlayer | null
+  openSlotIds: Set<string>
+  onSlotClick?: (slot: FormationSlot) => void
   showRatings?: boolean
 }) {
   const bySlot = new Map(picks.map((p) => [p.slotId, p]))
+
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-      {slots.map((slot) => {
-        const pick = bySlot.get(slot.id)
-        return (
-          <div
-            key={slot.id}
-            className={`rounded-lg border px-2 py-2 text-xs ${
-              pick ? 'border-[var(--primary)]/40 bg-[var(--primary)]/5' : 'border-dashed border-[var(--border)]'
-            }`}
-          >
-            <span className="block text-[10px] font-semibold uppercase text-[var(--muted)]">
-              {slot.label}
-            </span>
-            {pick ? (
-              <span className="mt-0.5 flex items-center justify-between gap-1">
-                <span className="flex min-w-0 items-center gap-1">
-                  <TeamFlag fifaCode={pick.team.fifa_code} size={16} className="!h-3 !w-[18px]" />
-                  <span className="truncate font-medium">{pick.player.name}</span>
+    <div className="space-y-2 rounded-xl bg-[color-mix(in_srgb,var(--fifa-green,#1f7a3d)_10%,var(--background))] p-3">
+      {rows.map((row, rowIndex) => (
+        <div key={rowIndex} className="flex flex-wrap justify-center gap-2">
+          {row.map((slot) => {
+            const pick = bySlot.get(slot.id)
+            const isOpen = openSlotIds.has(slot.id)
+            const selecting = Boolean(selectedPlayer) && isOpen
+            const natural = selectedPlayer ? selectedPlayer.position === slot.family : false
+
+            let stateClass = 'border-dashed border-[var(--border)] bg-[var(--card)]/60'
+            if (pick) {
+              stateClass = 'border-[var(--primary)]/40 bg-[var(--primary)]/5'
+            } else if (selecting) {
+              stateClass = natural
+                ? 'border-fifa-green bg-fifa-green/15 ring-1 ring-fifa-green'
+                : 'border-fifa-gold bg-fifa-gold/15 ring-1 ring-fifa-gold'
+            }
+
+            const content = (
+              <>
+                <span className="block text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+                  {slot.label}
                 </span>
-                {showRatings && (
-                  <span className="shrink-0 font-bold tabular-nums">{pick.player.overall_rating}</span>
+                {pick ? (
+                  <span className="mt-0.5 flex items-center justify-center gap-1">
+                    <TeamFlag fifaCode={pick.team.fifa_code} size={16} className="!h-3 !w-[18px]" />
+                    <span className="max-w-[64px] truncate text-[11px] font-medium">
+                      {pick.player.name}
+                    </span>
+                    {showRatings && (
+                      <span className="text-[11px] font-bold tabular-nums">
+                        {effectiveRating(pick)}
+                        {pick.outOfPosition && <span className="text-fifa-gold">*</span>}
+                      </span>
+                    )}
+                  </span>
+                ) : (
+                  <span className="mt-0.5 block text-[10px] text-[var(--muted)]">
+                    {selecting ? (natural ? 'Best fit' : '−10%') : 'Empty'}
+                  </span>
                 )}
-              </span>
+              </>
+            )
+
+            return selecting && onSlotClick ? (
+              <button
+                key={slot.id}
+                type="button"
+                onClick={() => onSlotClick(slot)}
+                className={`w-[80px] rounded-lg border px-1 py-1.5 text-center transition-colors ${stateClass}`}
+              >
+                {content}
+              </button>
             ) : (
-              <span className="mt-0.5 block text-[var(--muted)]">Empty</span>
-            )}
-          </div>
-        )
-      })}
+              <div
+                key={slot.id}
+                className={`w-[80px] rounded-lg border px-1 py-1.5 text-center ${stateClass}`}
+              >
+                {content}
+              </div>
+            )
+          })}
+        </div>
+      ))}
+      {showRatings && picks.some((p) => p.outOfPosition) && (
+        <p className="pt-1 text-center text-[10px] text-[var(--muted)]">
+          * out of position (−10%)
+        </p>
+      )}
     </div>
   )
 }
 
 function banterMessage(result: SimulationResult, formation: Formation): string {
   if (result.outcome === 'won') {
-    return `🏆 I won the World Cup in Spin Draft! ${formation.name} · Squad rating ${result.squadOvr}. Can you beat that?`
+    return `🏆 I won the World Cup! ${formation.name} · Squad rating ${result.squadOvr}. Can you beat that?`
   }
-  return `😤 Knocked out in the ${exitRoundLabel(result.exitRound)} in Spin Draft (${formation.name}, rating ${result.squadOvr}). Your turn.`
+  return `😤 Knocked out in the ${exitRoundLabel(result.exitRound)} (${formation.name}, rating ${result.squadOvr}). Your turn — can you win the World Cup?`
 }

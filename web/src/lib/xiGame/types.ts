@@ -1,4 +1,4 @@
-import type { PositionFamily } from './formations'
+import { OUT_OF_POSITION_PENALTY, type PositionFamily } from './formations'
 
 export type SquadPlayer = {
   id: string
@@ -20,9 +20,20 @@ export type GameTeam = {
 
 export type DraftPick = {
   slotId: string
-  family: PositionFamily
+  /** Family of the slot the player was placed in. */
+  slotFamily: PositionFamily
+  /** Specific slot label, e.g. RW. */
+  slotLabel: string
   player: SquadPlayer
   team: GameTeam
+  /** True when the player's natural family differs from the slot family. */
+  outOfPosition: boolean
+}
+
+/** Player rating after the out-of-position penalty is applied. */
+export function effectiveRating(pick: DraftPick): number {
+  if (!pick.outOfPosition) return pick.player.overall_rating
+  return Math.round(pick.player.overall_rating * (1 - OUT_OF_POSITION_PENALTY))
 }
 
 export type ExitRound =

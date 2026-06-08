@@ -120,88 +120,121 @@ export async function syncSquads(
   supabase: SupabaseClient,
   apiKey: string,
   season: string,
-): Promise<{ teams: number; players: number; withApiRating: number }> {
-  const { data: teams } = await supabase
+): Promise<{
+  teams: number;
+  players: number;
+  withApiRating: number;
+  errors: number;
+  note?: string;
+}> {
+  const teamsResult = await supabase
     .from("teams")
     .select("id, api_football_team_id, fifa_code, global_fifa_rank")
     .not("api_football_team_id", "is", null);
 
+  if (teamsResult?.error) {
+    return { teams: 0, players: 0, withApiRating: 0, errors: 1, note: teamsResult.error.message };
+  }
+
+  const teams = (teamsResult?.data ?? []) as DbTeam[];
+  if (teams.length === 0) {
+    return {
+      teams: 0,
+      players: 0,
+      withApiRating: 0,
+      errors: 0,
+      note: "No teams have api_football_team_id yet — run sync-tournament-awards first.",
+    };
+  }
+
   let teamsDone = 0;
   let playersUpserted = 0;
   let apiRated = 0;
+  let errors = 0;
   const now = new Date().toISOString();
 
-  for (const team of (teams ?? []) as DbTeam[]) {
+  for (const team of teams) {
     const apiTeamId = team.api_football_team_id;
     if (!apiTeamId) continue;
 
-    // 1. Roster from /players/squads
-    const res = await fetch(`${API_BASE}/players/squads?team=${apiTeamId}`, {
-      headers: apiHeaders(apiKey),
-    });
-    if (!res.ok) {
-      await new Promise((r) => setTimeout(r, 120));
-      continue;
-    }
-    const payload = await res.json();
-    const squad = (payload.response?.[0]?.players ?? []) as Record<string, unknown>[];
-    if (squad.length === 0) {
-      await new Promise((r) => setTimeout(r, 120));
-      continue;
-    }
-
-    // 2. Season ratings (may be empty pre-tournament)
-    const ratings = await fetchSeasonRatings(apiKey, apiTeamId, season);
-
-    const base = teamBaseRating(team.global_fifa_rank);
-    const rows: SquadRow[] = [];
-
-    for (const p of squad) {
-      const id = (p.id as number | undefined) ?? null;
-      const name = String(p.name ?? "").trim();
-      if (!name) continue;
-      const positionDetail = (p.position as string | null) ?? null;
-      const position = normalizePosition(positionDetail);
-      const apiRating = id != null ? ratings.get(id) : undefined;
-
-      let overall: number;
-      let source: string;
-      if (apiRating != null) {
-        overall = clamp(Math.round(apiRating * 10), 50, 94);
-        source = "api";
-        apiRated += 1;
-      } else {
-        overall = clamp(base + nameOffset(name), 52, 90);
-        source = "fallback";
-      }
-
-      rows.push({
-        team_id: team.id,
-        api_football_player_id: id,
-        name,
-        position,
-        position_detail: positionDetail,
-        shirt_number: (p.number as number | null) ?? null,
-        photo_url: (p.photo as string | null) ?? null,
-        overall_rating: overall,
-        rating_source: source,
-        synced_at: now,
+    try {
+      // 1. Roster from /players/squads
+      const res = await fetch(`${API_BASE}/players/squads?team=${apiTeamId}`, {
+        headers: apiHeaders(apiKey),
       });
-    }
-
-    if (rows.length > 0) {
-      // Preserve manual overrides: do not clobber rows where rating_source = 'manual'.
-      const { error } = await supabase
-        .from("squad_players")
-        .upsert(rows, { onConflict: "team_id,api_football_player_id" });
-      if (!error) {
-        playersUpserted += rows.length;
-        teamsDone += 1;
+      if (!res.ok) {
+        errors += 1;
+        await new Promise((r) => setTimeout(r, 120));
+        continue;
       }
+      const payload = await res.json().catch(() => null);
+      const squad = (payload?.response?.[0]?.players ?? []) as Record<string, unknown>[];
+      if (!Array.isArray(squad) || squad.length === 0) {
+        await new Promise((r) => setTimeout(r, 120));
+        continue;
+      }
+
+      // 2. Season ratings (may be empty pre-tournament)
+      const ratings = await fetchSeasonRatings(apiKey, apiTeamId, season);
+
+      const base = teamBaseRating(team.global_fifa_rank);
+      const rows: SquadRow[] = [];
+      const seenIds = new Set<number>();
+
+      for (const p of squad) {
+        const rawId = (p.id as number | undefined) ?? null;
+        // Skip duplicate or null ids to keep the onConflict upsert safe.
+        if (rawId == null || seenIds.has(rawId)) continue;
+        seenIds.add(rawId);
+
+        const name = String(p.name ?? "").trim();
+        if (!name) continue;
+        const positionDetail = (p.position as string | null) ?? null;
+        const position = normalizePosition(positionDetail);
+        const apiRating = ratings.get(rawId);
+
+        let overall: number;
+        let source: string;
+        if (apiRating != null) {
+          overall = clamp(Math.round(apiRating * 10), 50, 94);
+          source = "api";
+          apiRated += 1;
+        } else {
+          overall = clamp(base + nameOffset(name), 52, 90);
+          source = "fallback";
+        }
+
+        rows.push({
+          team_id: team.id,
+          api_football_player_id: rawId,
+          name,
+          position,
+          position_detail: positionDetail,
+          shirt_number: (p.number as number | null) ?? null,
+          photo_url: (p.photo as string | null) ?? null,
+          overall_rating: overall,
+          rating_source: source,
+          synced_at: now,
+        });
+      }
+
+      if (rows.length > 0) {
+        const upsertResult = await supabase
+          .from("squad_players")
+          .upsert(rows, { onConflict: "team_id,api_football_player_id" });
+        if (upsertResult?.error) {
+          errors += 1;
+        } else {
+          playersUpserted += rows.length;
+          teamsDone += 1;
+        }
+      }
+    } catch (_err) {
+      errors += 1;
     }
 
     await new Promise((r) => setTimeout(r, 150));
   }
 
-  return { teams: teamsDone, players: playersUpserted, withApiRating: apiRated };
+  return { teams: teamsDone, players: playersUpserted, withApiRating: apiRated, errors };
 }

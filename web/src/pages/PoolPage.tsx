@@ -1,6 +1,6 @@
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { CalendarDays, Share2, Shield, Trophy } from 'lucide-react'
+import { CalendarDays, Dices, Share2, Shield, Trophy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { BanterBox } from '@/components/BanterBox'
@@ -379,6 +379,25 @@ export function PoolPage() {
           </Card>
 
         </div>
+      )}
+
+      {member && (
+        <Card className="border-[var(--primary)]/40 bg-[color-mix(in_srgb,var(--primary)_6%,var(--card))] p-5 text-center sm:mx-auto sm:max-w-lg">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--primary)]/15">
+            <Dices className="h-7 w-7 text-[var(--primary)]" aria-hidden />
+          </div>
+          <CardTitle className="text-xl">Can you win the World Cup?</CardTitle>
+          <CardDescription className="mx-auto mt-2 max-w-sm">
+            Spin a random nation, draft an XI into your formation, and see how far your dream
+            team goes. Just for fun — it doesn&apos;t affect your sweep.
+          </CardDescription>
+          <Button asChild size="lg" className="mx-auto mt-5 w-full max-w-xs shadow-sm">
+            <Link to="xi-game">
+              <Dices className="h-5 w-5" />
+              Play the game
+            </Link>
+          </Button>
+        </Card>
       )}
 
       {member && (

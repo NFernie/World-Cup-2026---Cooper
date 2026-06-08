@@ -1,3 +1,4 @@
+import { effectiveRating } from './types'
 import type { DraftPick, ExitRound, SimulationResult } from './types'
 
 const EXIT_LABELS: Record<ExitRound, string> = {
@@ -14,14 +15,17 @@ export function exitRoundLabel(round: ExitRound): string {
   return EXIT_LABELS[round]
 }
 
-/** Position-weighted squad rating: spine (GK/DEF/FWD) weighted slightly higher. */
+/**
+ * Position-weighted squad rating using each player's effective rating
+ * (out-of-position players take a penalty). Spine weighted slightly higher.
+ */
 export function squadOverall(picks: DraftPick[]): number {
   if (picks.length === 0) return 0
   let weighted = 0
   let weightTotal = 0
   for (const pick of picks) {
-    const weight = pick.family === 'MID' ? 1 : 1.1
-    weighted += pick.player.overall_rating * weight
+    const weight = pick.slotFamily === 'MID' ? 1 : 1.1
+    weighted += effectiveRating(pick) * weight
     weightTotal += weight
   }
   return Math.round(weighted / weightTotal)

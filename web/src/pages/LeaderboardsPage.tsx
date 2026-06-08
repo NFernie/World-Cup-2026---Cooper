@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useOutletContext, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Dices } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -544,23 +544,6 @@ export function LeaderboardsPage() {
           </div>
         </section>
       )}
-
-      <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--primary)]/15">
-            <Dices className="h-5 w-5 text-[var(--primary)]" aria-hidden />
-          </div>
-          <div>
-            <p className="font-semibold">World Cup Spin Draft</p>
-            <p className="text-sm text-[var(--muted)]">
-              Build an XI from all 48 nations and see if you can win the World Cup.
-            </p>
-          </div>
-        </div>
-        <Button asChild variant="outline" size="sm">
-          <Link to="../xi-game">Play Spin Draft</Link>
-        </Button>
-      </Card>
     </div>
   )
 }
