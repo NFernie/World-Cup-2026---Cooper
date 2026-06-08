@@ -39,8 +39,7 @@ After a correct deploy, **sign-up and sign-in do not use the email quota** becau
 ### What we deploy from CI
 
 1. `supabase/config.toml` → `enable_confirmations = false`, `double_confirm_changes = false`
-2. `supabase config push` in `.github/workflows/deploy.yml`
-3. Management API step sets `mailer_autoconfirm: true` (auto-confirm without mail)
+2. `supabase config push` in `.github/workflows/deploy.yml` (auto-confirms users without mail)
 
 ### Manual verification (project owner)
 
