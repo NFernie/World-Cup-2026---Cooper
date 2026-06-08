@@ -16,7 +16,7 @@ import {
 import { GroupMembersSection } from '@/components/GroupMembersSection'
 import { isHostAssignmentMode } from '@/lib/poolAssignment'
 import { formatStage, isYourTeamRow } from '@/lib/poolBoards'
-import { formatGlobalRank } from '@/lib/globalRank'
+import { formatFifaWorldRanking } from '@/lib/globalRank'
 import { getTeamStaff } from '@/lib/teamStaff'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
@@ -266,7 +266,7 @@ export function LeaderboardsPage() {
             Your nation&apos;s progress in the World Cup, with global FIFA ranking for each team.
           </p>
           <div className="space-y-2">
-            {tournamentLb.data?.map((row) => {
+            {tournamentLb.data?.map((row, i) => {
               const you = isYourTeamRow(member?.id, row.pool_member_ids)
               const staff = getTeamStaff(row.fifa_code)
               const playerCount = row.co_manager_count
@@ -281,7 +281,7 @@ export function LeaderboardsPage() {
                     <TeamFlag fifaCode={row.fifa_code} size={40} title={row.team_name} />
                     <div className="min-w-0">
                       <span className="font-medium">
-                        {formatGlobalRank(row.global_fifa_rank)} {row.team_name}
+                        {row.team_name} #{i + 1}
                         {you && (
                           <span className="ml-1 text-xs font-normal text-fifa-green">(you)</span>
                         )}
@@ -302,6 +302,9 @@ export function LeaderboardsPage() {
                       </p>
                       <p className="text-xs text-[var(--muted)]">
                         Manager: {staff.headCoach} · Captain: {staff.captain}
+                      </p>
+                      <p className="text-xs text-[var(--muted)]">
+                        {formatFifaWorldRanking(row.global_fifa_rank)}
                       </p>
                     </div>
                   </div>
@@ -340,8 +343,7 @@ export function LeaderboardsPage() {
                     )}
                     <div className="min-w-0">
                       <span className="font-medium">
-                        #{i + 1} {formatGlobalRank(row.global_fifa_rank)}{' '}
-                        {row.team_name ?? 'Awaiting team'}
+                        {row.team_name ?? 'Awaiting team'} #{i + 1}
                         {isYou && (
                           <span className="ml-1 text-xs font-normal text-fifa-green">(you)</span>
                         )}
@@ -350,9 +352,14 @@ export function LeaderboardsPage() {
                         {showName ? `Player: ${playerLabel}` : 'Player: Hidden player'}
                       </p>
                       {staff && (
-                        <p className="text-xs text-[var(--muted)]">
-                          Manager: {staff.headCoach} · Captain: {staff.captain}
-                        </p>
+                        <>
+                          <p className="text-xs text-[var(--muted)]">
+                            Manager: {staff.headCoach} · Captain: {staff.captain}
+                          </p>
+                          <p className="text-xs text-[var(--muted)]">
+                            {formatFifaWorldRanking(row.global_fifa_rank)}
+                          </p>
+                        </>
                       )}
                     </div>
                   </div>
@@ -398,7 +405,10 @@ export function LeaderboardsPage() {
                         #{row.boot_rank} {row.golden_boot_player_name}
                       </span>
                       <p className="truncate text-xs text-[var(--muted)]">
-                        {formatGlobalRank(row.global_fifa_rank)} {row.team_name}
+                        {row.team_name} #{row.boot_rank}
+                      </p>
+                      <p className="truncate text-xs text-[var(--muted)]">
+                        {formatFifaWorldRanking(row.global_fifa_rank)}
                       </p>
                     </div>
                   </div>
@@ -440,7 +450,10 @@ export function LeaderboardsPage() {
                         #{row.glove_rank} {row.golden_glove_player_name}
                       </span>
                       <p className="truncate text-xs text-[var(--muted)]">
-                        {formatGlobalRank(row.global_fifa_rank)} {row.team_name}
+                        {row.team_name} #{row.glove_rank}
+                      </p>
+                      <p className="truncate text-xs text-[var(--muted)]">
+                        {formatFifaWorldRanking(row.global_fifa_rank)}
                       </p>
                     </div>
                   </div>
@@ -472,10 +485,14 @@ export function LeaderboardsPage() {
                     alt=""
                     className="h-8 w-12 rounded object-cover"
                   />
-                  <span className="font-medium">
-                    {row.global_fifa_rank != null ? `FIFA #${row.global_fifa_rank}` : `#${i + 1}`}{' '}
-                    {row.team_name}
-                  </span>
+                  <div className="min-w-0">
+                    <span className="font-medium">
+                      {row.team_name} #{i + 1}
+                    </span>
+                    <p className="text-xs text-[var(--muted)]">
+                      {formatFifaWorldRanking(row.global_fifa_rank)}
+                    </p>
+                  </div>
                 </div>
                 <span className="text-xs text-[var(--muted)]">
                   {row.group_letter ? `Group ${row.group_letter}` : 'eliminated'}
@@ -498,7 +515,7 @@ export function LeaderboardsPage() {
             </p>
           )}
           <div className="space-y-2">
-            {knockoutQuery.data?.map((row) => {
+            {knockoutQuery.data?.map((row, i) => {
               const isLowest = row.team_id === lowestKnockout?.team_id
               const you = assignedTeamId === row.team_id
               return (
@@ -509,10 +526,14 @@ export function LeaderboardsPage() {
                       alt=""
                       className="h-8 w-12 rounded object-cover"
                     />
-                    <span className="font-medium">
-                      {row.global_fifa_rank != null ? `FIFA #${row.global_fifa_rank}` : '—'}{' '}
-                      {row.team_name}
-                    </span>
+                    <div className="min-w-0">
+                      <span className="font-medium">
+                        {row.team_name} #{i + 1}
+                      </span>
+                      <p className="text-xs text-[var(--muted)]">
+                        {formatFifaWorldRanking(row.global_fifa_rank)}
+                      </p>
+                    </div>
                   </div>
                   <span className="text-xs uppercase text-[var(--muted)]">
                     {formatStage(row.tournament_stage)}

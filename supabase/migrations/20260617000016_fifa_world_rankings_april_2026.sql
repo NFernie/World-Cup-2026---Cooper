@@ -1,0 +1,57 @@
+-- Official FIFA/Coca-Cola Men's World Ranking (1 April 2026).
+-- Replaces alphabetical placeholder ranks from prompt006 seed.
+-- Source: https://inside.fifa.com/fifa-world-ranking/men
+
+update public.teams as t
+set global_fifa_rank = v.rank
+from (values
+  ('FRA', 1),
+  ('ESP', 2),
+  ('ARG', 3),
+  ('ENG', 4),
+  ('POR', 5),
+  ('BRA', 6),
+  ('NED', 7),
+  ('MAR', 8),
+  ('BEL', 9),
+  ('GER', 10),
+  ('CRO', 11),
+  ('COL', 13),
+  ('SEN', 14),
+  ('MEX', 15),
+  ('USA', 16),
+  ('URU', 17),
+  ('JPN', 18),
+  ('SUI', 19),
+  ('IRN', 21),
+  ('TUR', 22),
+  ('ECU', 23),
+  ('AUT', 24),
+  ('KOR', 25),
+  ('AUS', 27),
+  ('ALG', 28),
+  ('EGY', 29),
+  ('CAN', 30),
+  ('NOR', 31),
+  ('PAN', 33),
+  ('CIV', 34),
+  ('SWE', 38),
+  ('PAR', 40),
+  ('CZE', 41),
+  ('SCO', 43),
+  ('TUN', 44),
+  ('COD', 46),
+  ('UZB', 50),
+  ('QAT', 55),
+  ('IRQ', 57),
+  ('RSA', 60),
+  ('KSA', 61),
+  ('JOR', 63),
+  ('BIH', 65),
+  ('CPV', 69),
+  ('GHA', 74),
+  ('CUW', 82),
+  ('HAI', 83),
+  ('NZL', 85)
+) as v(fifa_code, rank)
+where t.fifa_code = v.fifa_code;
