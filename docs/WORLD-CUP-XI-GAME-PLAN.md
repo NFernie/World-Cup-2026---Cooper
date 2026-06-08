@@ -1,361 +1,366 @@
-# World Cup XI Mini-Game — Review & Implementation Plan
+# World Cup XI Mini-Game — Implementation Plan
 
 **Reference:** [38-0-0.com](https://38-0-0.com)  
-**Target product:** World Cup 2026 Cooper tipping pool (`NFernie/World-Cup-2026---Cooper`)  
-**Date:** 2026-06-08  
-**Status:** Planning — awaiting product decisions  
+**Target product:** World Cup 2026 Cooper tipping pool  
+**Last updated:** 2026-06-08  
+**Status:** Decisions locked — build after final 26-man squads are published  
 
 ---
 
-## 1. What 38-0-0.com is
+## Locked product decisions
 
-[38-0-0](https://38-0-0.com) is a free browser squad-builder with two advertised modes:
+| # | Decision | Your answer |
+|---|----------|-------------|
+| 1 | **Win condition** | Simulate the **full World Cup**. Outcome is either **“You won the World Cup”** or **“You were knocked out at Round XX”** (e.g. Group stage, Round of 32, Round of 16, Quarter-final, Semi-final, Final). |
+| 2 | **Spin pool** | All **48 WC26 nations** (equal weight). |
+| 3 | **Placement** | Link on the **Leaderboards page**, **below** the leaderboard sections. Route: `/pools/:poolId/xi-game`. |
+| 4 | **Competition** | **Casual only** — no XI-game leaderboard. Optional **“Post to banter box”** on the result screen. |
+| 5 | **Main sweep** | **Side game only** — does not affect pool points or odds leaderboard. |
+| 6 | **Ratings** | Pull player OVR + attributes from **[FUTBIN](https://www.futbin.com/)** where possible (see §4). |
+| 7 | **Squad data** | **Wait for FIFA final 26-man squads** before enabling the game. Until then: “Coming soon” on the link. |
 
-| Mode | Concept |
-|------|---------|
-| **EPL (38-0-0)** | Spin a random **Premier League club + season** → draft 1 player per round → fill an XI in a chosen formation → simulate a **38-game league season** → earn a tier badge (relegation scrap → champions → invincibles → perfect **38-0-0**). |
-| **World Cup** | Homepage advertises *“Draft a squad and chase the trophy”* — same draft loop adapted to international football (details are lighter on the public site than the EPL mode). |
+### Defaults (not explicitly answered — recommended)
 
-### Core loop (EPL — best documented)
-
-1. Pick **Classic** (ratings visible) or **Expert** (names + positions only).
-2. Pick a **formation** (4-3-3, 4-4-2, 3-5-2, etc.).
-3. **Spin** → random club + season (e.g. Arsenal 2017).
-4. **Draft** one player from that squad into a valid position slot.
-5. Repeat for **11 rounds**.
-6. **Simulate** → projected W-D-L, points, badge, shareable result.
-7. Optional **re-spin** (ad-gated on their site).
-
-### Why it works
-
-- **Fast** — one run takes minutes.
-- **Shareable** — screenshot-friendly results.
-- **Skill + luck** — spin variance keeps replays interesting.
-- **Position rules** — players only fit realistic positions (striker can’t play CB).
-- **Ratings-driven simulation** — squad OVR + position fit → projected record.
-
-### Data behind 38-0-0
-
-Their FAQ states squads and ratings come from a **public football dataset** (not live API during play). Data is **preloaded**; the game does not call an external API on each spin.
+| Topic | Recommendation |
+|-------|----------------|
+| **Modes** | Classic + Expert at launch (matches 38-0-0). |
+| **Draft pool** | Any player from the nation’s **26-man squad** (not starters-only). |
+| **Re-spin** | One free re-spin per game (no ads). |
+| **Login** | Must be a **pool member** to play and post banter (matches existing pool gates). |
+| **Simulation** | Client-side for v1 (casual side game; no prize integrity requirement). |
 
 ---
 
-## 2. Proposed WC26 variant for this website
+## 1. What we are building
 
-A natural adaptation for World Cup 2026:
-
-| 38-0-0 (EPL) | WC26 equivalent (proposed) |
-|--------------|----------------------------|
-| Spin club + season | Spin **one of the 48 WC26 nations** |
-| Draft from that club’s squad | Draft from that nation’s **World Cup squad** |
-| 38 league games | **Tournament simulation** (group + knockout), e.g. chase **7-0** (win every match) or “Win the World Cup” tier |
-| Premier League history | **2026 World Cup squads only** (your stated requirement) |
-| Classic / Expert | Same modes |
-| Standalone, no account | **Your choice** — standalone page and/or inside each pool |
-
-### Suggested name directions
-
-- **“Road to 7-0”** — perfect tournament (7 wins, 0 draws, 0 losses) if you mirror the NBA-style “82-0” / WC “7-0” meme.
-- **“Build the GOAT XI”** — draft WC26 stars, simulate how far they go.
-- **“WC26 Spin Draft”** — descriptive, on-brand with the existing pool.
-
-### Minimum viable game (MVP)
-
-1. User picks formation + mode (Classic/Expert).
-2. Eleven draft rounds: spin → nation → pick one footballer into XI.
-3. Position eligibility enforced (GK, DEF, MID, FWD families — reuse 38-0-0-style mapping).
-4. End screen: simulated tournament result, squad rating, share link/image.
-5. Optional: **one re-spin per game** (no ads initially — match your app’s style).
-
-### Stretch features (post-MVP)
-
-- Daily challenge (same spin seed for everyone).
-- Pool leaderboard (“best squad rating in Cooper’s pool”).
-- 1v1 snake draft with another pool member.
-- Tie-in: bonus points in the main sweep if your drafted nation matches your **assigned pool team**.
-
----
-
-## 3. Do you need API-Football?
-
-**Short answer: yes for names, positions, and photos — but you will likely need a rating strategy on top of raw API data.**
-
-You already use **API-Football (api-sports.io)** for fixtures, scores, odds, and awards. The same provider can supply WC26 player data.
-
-### What API-Football provides today
-
-| Endpoint | Gives you | Good for |
-|----------|-----------|----------|
-| `GET /players/squads?team={apiTeamId}` | Player **id**, **name**, **position**, age, shirt number, photo | Squad lists — **1 call per nation** (~48 calls for full refresh) |
-| `GET /players?team={apiTeamId}&season=2026` | Profile + **season statistics** per competition block; may include `games.rating`, goals, etc. | Richer stats; **paginated** (multiple calls per large squad) |
-| `GET /players?league=1&season=2026&page=N` | All players in WC competition | Bulk import; heavy on API quota |
-| `GET /fixtures/players?fixture={id}` | **Per-match** rating (0–10) | After matches kick off — useful for live updates, not pre-tournament draft |
-
-### What API-Football does *not* give you out of the box
-
-- A single **FIFA-style “overall” (OVR)** number like 38-0-0 shows (PAC/SHO/PAS/DRI/DEF/PHY).
-- Guaranteed **final World Cup squads** before FIFA’s official announcement (typically late May / early June 2026).
-- Stable ratings for players who only appear on the bench at club level.
-
-### Recommended data approach
+A **38-0-0-style spin draft** adapted for World Cup 2026:
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ 1. Sync squads (API-Football /players/squads)               │
-│    → store in Postgres: name, position, api_player_id, team │
-├─────────────────────────────────────────────────────────────┤
-│ 2. Enrich ratings (choose one or blend)                     │
-│    A) API club-season rating average (players?team&season)  │
-│    B) Derived OVR from goals/assists/minutes (formula)      │
-│    C) Manual admin overrides for stars / missing data       │
-│    D) Optional third-party OVR seed (SoFIFA etc.) — legal?  │
-├─────────────────────────────────────────────────────────────┤
-│ 3. Serve game from YOUR database (not live API per spin)    │
-│    → fast, cacheable, works offline from API outages        │
-└─────────────────────────────────────────────────────────────┘
+Pick formation + mode
+    → Spin random nation (1 of 48)
+    → Draft 1 player from that squad into your XI
+    → Repeat × 11
+    → Simulate full tournament (groups + knockouts)
+    → "You won the World Cup" OR "Knocked out at Round of 16"
+    → Optional: post result to Banter Box
 ```
 
-**You do not need to call API-Football during gameplay.** Sync on a schedule (same pattern as `sync-tournament-awards`), then the mini-game reads Postgres — exactly how 38-0-0 uses a preloaded dataset.
+### Result copy examples
 
-### API quota impact (rough)
+| Simulation outcome | User-facing message |
+|--------------------|---------------------|
+| Win final | **You won the World Cup** |
+| Lose semi-final | **You were knocked out in the Semi-final** |
+| Lose round of 16 | **You were knocked out in the Round of 16** |
+| Fail to advance from group | **You were knocked out in the Group stage** |
 
-| Action | Calls | Frequency |
-|--------|-------|-----------|
-| Full squad refresh (48 teams) | ~48 (`/players/squads`) | Daily until squads firm, then weekly |
-| Rating enrichment per team | ~48–150 (`/players?team=` paginated) | Weekly or after squad announcement |
-| Live rating updates during WC | 1 per finished match (`/fixtures/players`) | Optional; only if you want post-kickoff rating drift |
-
-Your repo already throttles awards sync (~120 ms between team calls) and gates cron jobs. A new `sync-squads` function fits the same pattern.
-
-### Alternatives to API-Football
-
-| Source | Pros | Cons |
-|--------|------|------|
-| **API-Football** (current) | Already integrated; WC league id `1`, season `2026` | No native OVR; quota limits |
-| **Manual CSV / admin UI** | Full control for demo before squads drop | Labour-intensive; stale data |
-| **FIFA / SoFIFA / FM data** | Realistic OVR | Licensing, scraping, maintenance |
-| **Wikipedia / open lists** | Free names | No ratings; no positions standard |
-
-**Recommendation:** Start with **API-Football for squads + a derived `overall_rating` column** you control. Add admin overrides for the top ~200 players users will actually draft.
+Round labels should match existing app stage names where possible (`formatStage` in `web/src/lib/poolBoards.ts`).
 
 ---
 
-## 4. What the current website already has (relevant pieces)
+## 2. UI placement
 
-| Asset | Status |
-|-------|--------|
-| 48 nations in `teams` | ✅ Seeded (`fifa_code`, `group_letter`, `api_football_team_id`) |
-| API-Football team mapping | ✅ `sync-tournament-awards` |
-| Player names in DB | ⚠️ Only goal scorers (`match_events`) + golden boot/glove on `teams` |
-| Full squads in DB | ❌ Not stored |
-| Positions / ratings in DB | ❌ Not stored |
-| Coach + captain | ✅ Static `web/src/lib/teamStaff.ts` |
-| Pool auth + routing | ✅ `/pools/:poolId/...` shell |
-| Leaderboard patterns | ✅ SQL views + `LeaderboardsPage` |
+### Leaderboards page
 
-**Naming warning:** In this codebase, “player” usually means **pool member** (human). New tables should use names like `squad_players` or `footballers` to avoid clashing with `pool_members` and `formatPlayerLine()`.
-
----
-
-## 5. What we need to add (technical breakdown)
-
-### Phase 0 — Product decisions (you)
-
-Answer the questions in **§7** before build. Several choices change schema and routing.
-
-### Phase 1 — Data layer
-
-**New migration(s):**
-
-```sql
--- Illustrative — final schema depends on your answers
-squad_players (
-  id uuid PK,
-  team_id uuid FK → teams,
-  api_football_player_id int unique,
-  name text,
-  position text,           -- GK | DEF | MID | FWD (normalized)
-  position_detail text,    -- e.g. Left-Back, from API
-  shirt_number int,
-  photo_url text,
-  overall_rating int,      -- 1–99 game rating for simulation
-  pace, shooting, ...      -- optional Classic mode attrs
-  rating_source text,      -- api | derived | manual
-  synced_at timestamptz
-)
-
-xi_game_sessions (
-  id uuid PK,
-  user_id uuid FK,
-  pool_id uuid FK nullable,  -- null = public standalone
-  mode text,                 -- classic | expert
-  formation text,
-  status text,               -- drafting | complete
-  result_json jsonb,         -- simulation output
-  created_at timestamptz
-)
-
-xi_game_picks (
-  session_id uuid FK,
-  round int,
-  spun_team_id uuid FK,
-  squad_player_id uuid FK,
-  slot_position text,        -- e.g. LB, ST
-  was_respin boolean
-)
-```
-
-**New edge function:** `sync-squads` (or extend `sync-tournament-awards`)
-
-- Input: `API_FOOTBALL_LEAGUE_ID=1`, `API_FOOTBALL_SEASON=2026`
-- Steps: ensure `api_football_team_id` → fetch squads → upsert `squad_players` → compute/merge ratings
-- Cron: daily pre-tournament; twice weekly during WC
-
-**Rating formula (example MVP):**
+Add a **card below all leaderboard sections** on `LeaderboardsPage.tsx`:
 
 ```
-overall_rating = clamp(
-  40 + (api_season_rating * 6) + position_bonus,
-  45, 94
-)
+┌─────────────────────────────────────────────┐
+│  🎮 World Cup Spin Draft                    │
+│  Build an XI from 48 nations and see if     │
+│  you can win the World Cup.                 │
+│  [ Play now ]  or  [ Coming soon ]          │
+└─────────────────────────────────────────────┘
 ```
 
-Tune against known stars (Mbappé, Messi, etc.) in admin review.
+- **Before squads sync:** button disabled / “Coming soon — squads not released yet”.
+- **After sync:** `Link` to `xi-game` under the pool shell.
 
-### Phase 2 — Game logic (shared library)
+### Game route
 
-New package or folder: `web/src/lib/xiGame/` (or `shared/` if simulation runs server-side)
+| Route | Page |
+|-------|------|
+| `/pools/:poolId/xi-game` | Hub: rules, formation picker, start game |
+| `/pools/:poolId/xi-game/play/:sessionId` | Draft board (11 rounds) |
+| `/pools/:poolId/xi-game/result/:sessionId` | Outcome + banter share |
 
-| Module | Responsibility |
-|--------|----------------|
-| `formations.ts` | Slot definitions + eligibility matrix (port from 38-0-0 rules) |
-| `spin.ts` | Weighted random nation; avoid repeats if desired |
-| `draft.ts` | Validate pick vs slot + already-used players |
-| `simulate.ts` | Nation OVR + position fit → match outcomes → knockout bracket |
-| `tiers.ts` | Badge names (Group exit, QF, Final, Champion, 7-0) |
-
-Simulation can be **client-side** for MVP (fast, no server cost) if you accept that expert players could inspect network tab — or **server-side RPC** `complete_xi_game(session_id)` for integrity.
-
-### Phase 3 — UI
-
-| Screen | Route (suggested) |
-|--------|-------------------|
-| Game hub / rules | `/pools/:poolId/xi-game` or `/xi-game` (public) |
-| Draft board | Spin animation + player picker grid |
-| Result / share | Record, badge, squad summary, “Play again” |
-| Pool leaderboard | Tab on leaderboards or dedicated board |
-
-**Components to build:**
-
-- `FormationPicker`, `SpinReel`, `PlayerDraftGrid`, `XiPitchDiagram`, `SimulationResultCard`
-- Reuse: `TeamFlag`, `Card`, pool theme via `PoolShell`
-
-### Phase 4 — Integration & ops
-
-- Link from `PoolPage` and/or home (`HomePage`)
-- Optional: `leaderboard_xi_game` view (best tier / highest squad OVR per pool)
-- Admin: override ratings, force re-sync, disable game until squads ready
-- Docs: API quota budget alongside existing `TestLiveAPI.md`
-
-### Phase 5 — Polish
-
-- Share image (canvas / OG meta)
-- Daily seed challenge
-- Analytics (Plausible/GA if you add later)
+Register routes in `web/src/App.tsx` under the existing `PoolShell` layout.
 
 ---
 
-## 6. Effort & dependency summary
+## 3. Banter box integration
 
-| Workstream | Depends on | Risk |
-|------------|------------|------|
-| Squad sync | API-Football key, squads published | Squads incomplete until ~June 2026 |
-| Ratings | Formula + manual QA | Users expect Messi > random bench player |
-| Simulation tuning | Playtesting | Too easy/hard breaks replay value |
-| UI draft flow | Formation + position rules | Largest frontend chunk |
-| Pool integration | Your answer on scope | Optional for MVP |
+Reuse `pool_banter_messages` (max **500 characters**).
 
-**MVP without pool tie-in:** data sync + standalone `/xi-game` route + local/session storage for anonymous users, or reuse Supabase auth for saved runs.
+### Result screen
 
-**MVP with pool tie-in:** add `pool_id` to sessions + one new leaderboard column.
+After simulation, show:
 
----
+- Primary: **Play again**
+- Secondary: **Post to banter box** (only if user is a pool member)
 
-## 7. Questions for you (please answer)
+### Pre-filled banter templates
 
-These block detailed implementation:
+**Won:**
+```
+🏆 Won the World Cup in Spin Draft! Formation 4-3-3 · Squad OVR 89 · Classic mode
+```
 
-### Game design
+**Knocked out:**
+```
+😤 Knocked out in the Quarter-final — Spin Draft XI (OVR 84, 4-3-3). Who beats that?
+```
 
-1. **Tournament goal:** Mimic perfect **7-0** (win every match), **win the World Cup**, or a **points-based season-style** score across a fixed number of games?
-2. **Spin source:** Random from all **48 nations**, or only nations **already in the user’s pool**, or weighted toward the user’s **assigned team**?
-3. **Draft pool per spin:** Any player from the spun nation’s **26-man squad**, or restrict to **likely starters** (top 11 by rating)?
-4. **Modes:** Both **Classic + Expert** at launch, or Classic only?
-5. **Re-spin:** Allow one re-spin per game? Free or gated (ads — 38-0-0 uses ads)?
+User can edit before posting. Insert via existing `BanterBox` pattern (`pool_banter_messages.insert`).
 
-### Product placement
-
-6. **Standalone vs pool:** Public game anyone can play, **only inside a pool**, or both?
-7. **Account required:** Must users be logged in to save results and appear on a pool leaderboard?
-8. **Leaderboard:** Global high scores, per-pool only, or no leaderboard (pure casual)?
-9. **Link to main sweep:** Should XI game results affect **pool points**, or stay a **side game**?
-
-### Data & legal
-
-10. **Rating source priority:** OK to use **derived ratings** from API stats (not official FIFA OVR)? Any desire to manually curate top players?
-11. **Squad timing:** Launch before official squads with **provisional lists**, or wait until **final 26-man squads** (likely early June 2026)?
-12. **Photos:** Show API player photos in the draft UI (check API-Football / FIFA image terms)?
-
-### Technical
-
-13. **Simulation integrity:** Client-side OK for v1, or must results be **server-validated**?
-14. **Mobile:** Primary device for draft (38-0-0 is very mobile-friendly) — confirm mobile-first layout?
+No new tables required for banter — only optional `xi_game_sessions` stores the structured result if you want “Play again” history later (not required for casual v1).
 
 ---
 
-## 8. Recommended implementation order
+## 4. Data strategy: squads + FUTBIN ratings
+
+### Two-source model
+
+| Data | Source | When |
+|------|--------|------|
+| **Who is in the squad** (name, position, shirt #, photo) | **API-Football** `/players/squads?team={id}` | After FIFA publishes final 26-man lists |
+| **OVR + attributes** (PAC, SHO, PAS, DRI, DEF, PHY) | **FUTBIN** (EA FC 26 cards) | Same sync window, matched by name + nation |
+
+Gameplay reads **only from Postgres** — never FUTBIN or API-Football during a spin.
+
+### API-Football (roster — required)
+
+You already integrate API-Football for WC (`league=1`, `season=2026`). For each of 48 teams with `api_football_team_id`:
+
+```
+GET /players/squads?team={apiTeamId}
+→ id, name, position, age, number, photo
+```
+
+~48 API calls per full refresh. Throttle like `syncGoalkeepersByTeam` (120 ms between teams).
+
+**Gate:** Admin flag `squads_ready` or row count check (`squad_players` ≥ ~1,100) before enabling the game link.
+
+### FUTBIN (ratings — preferred, with caveats)
+
+**There is no official FUTBIN API.** Ratings must be obtained by:
+
+1. **One-off / scheduled import script** (Node or Python, run locally or as a guarded edge function), not from the browser.
+2. Filter FUTBIN players by **nation** (FUTBIN nation id per country) and optionally **Men's National** / World Cup card types when EA releases them.
+3. **Fuzzy-match** API-Football squad name → FUTBIN player name (normalize accents, “Kylian Mbappé” vs “Mbappe”).
+4. Store matched ratings in `squad_players` columns; unmatched players get a **fallback rating** (see below).
+
+| FUTBIN field | DB column |
+|--------------|-----------|
+| `rating` (OVR) | `overall_rating` |
+| `position` | cross-check `position` |
+| `pace`, `shooting`, … | `attr_pace`, `attr_shooting`, … |
+| FUTBIN player id | `futbin_player_id` (optional) |
+
+**Risks:**
+
+| Risk | Mitigation |
+|------|------------|
+| FUTBIN Terms of Service / scraping | Run import **manually or on CI**, respect rate limits (5+ s between pages), store results in DB. Do not scrape from user clients. |
+| No WC-specific card for a squad player | Match to **best nation card** on FUTBIN (e.g. France gold card for a French squad player). |
+| Name mismatch | Manual admin overrides for top ~50 mismatches. |
+| Card not on FUTBIN yet | Fallback: derived rating from API-Football season stats or position-based default (65–72). |
+
+**Fallback formula** (when FUTBIN match fails):
+
+```
+overall_rating = clamp(55 + floor(api_season_rating * 5), 50, 88)
+```
+
+### Why not FUTBIN-only?
+
+FUTBIN lists **EA FC Ultimate Team cards**, not official FIFA squad announcements. The **26-man list must come from API-Football** (or FIFA) so you only offer players actually at the World Cup.
+
+### Sync pipeline (after squads drop)
 
 ```mermaid
-flowchart TD
-  A[Answer product questions §7] --> B[Schema: squad_players + game sessions]
-  B --> C[sync-squads edge function + cron]
-  C --> D[Rating formula + admin overrides]
-  D --> E[Game logic: formations, spin, simulate]
-  E --> F[UI: draft flow + result screen]
-  F --> G[Pool route + optional leaderboard]
-  G --> H[Playtesting + rating tune]
+flowchart LR
+  A[FIFA announces 26-man squads] --> B[sync-squads: API-Football]
+  B --> C[squad_players names + positions]
+  C --> D[import-futbin-ratings script]
+  D --> E[Match by nation + name]
+  E --> F[Admin QA + overrides]
+  F --> G[Enable game link on Leaderboards]
 ```
 
-1. **Week 0:** Decisions + sample squad sync for 3 nations (smoke test API).
-2. **Phase 1:** Full 48-nation sync + `squad_players` table.
-3. **Phase 2:** Simulation library + unit tests on known XIs.
-4. **Phase 3:** Draft UI (biggest UX piece).
-5. **Phase 4:** Pool hook + share.
-6. **Phase 5:** Leaderboard + daily challenge if wanted.
+---
+
+## 5. Tournament simulation (outline)
+
+### Structure (2026 format)
+
+- **12 groups of 4** — your XI does not replace a real nation; simulation uses **squad strength** vs fictional opponents.
+- Simplified v1: treat each match as win/loss based on **XI OVR**, position fit, and random variance.
+- Progress: **3 group matches** → if qualify → **R32 → R16 → QF → SF → Final**.
+
+### Knock-out round labels (for “knocked out at…”)
+
+| Internal stage | User message |
+|----------------|--------------|
+| `group` | Group stage |
+| `round_of_32` | Round of 32 |
+| `round_of_16` | Round of 16 |
+| `quarter_final` | Quarter-final |
+| `semi_final` | Semi-final |
+| `final` | Final (if lost) |
+| `champion` | You won the World Cup |
+
+### Inputs to simulation
+
+- Average `overall_rating` of XI (position-weighted like 38-0-0).
+- Optional: use six FUTBIN attributes for Classic mode display only.
+
+### Output JSON (stored on session)
+
+```json
+{
+  "outcome": "knocked_out",
+  "exit_round": "quarter_final",
+  "squad_ovr": 87,
+  "formation": "4-3-3",
+  "mode": "classic",
+  "group_record": "2W-0D-1L"
+}
+```
+
+Tune win probabilities in `web/src/lib/xiGame/simulate.ts` with playtesting — target: winning the World Cup should be rare (~1–5% for strong drafts).
 
 ---
 
-## 9. Bottom line
+## 6. Database schema (draft)
 
-| Question | Answer |
-|----------|--------|
-| Can we add a 38-0-0-style game for WC26? | **Yes** — spin nation → draft 11 → simulate tournament. |
-| Do we need API-Football? | **Yes for squad data** (names, positions, IDs, photos). **Not for live calls during play.** |
-| Do we need something beyond API-Football? | **Yes for OVR-style ratings** unless you hide ratings (Expert mode only) or derive them. |
-| Biggest gap in current repo? | **No `squad_players` table** — only national teams and a few award/scorer fields exist today. |
-| Biggest product risk? | **Squads and ratings quality** before the tournament starts; simulation balance second. |
+```sql
+-- Footballers (not pool members)
+squad_players (
+  id uuid primary key,
+  team_id uuid references teams(id),
+  api_football_player_id int,
+  futbin_player_id int,
+  name text not null,
+  position text not null,        -- normalized: GK | DEF | MID | FWD
+  position_detail text,          -- LB, ST, etc.
+  shirt_number int,
+  photo_url text,
+  overall_rating int not null,
+  attr_pace int, attr_shooting int, attr_passing int,
+  attr_dribbling int, attr_defending int, attr_physical int,
+  rating_source text,            -- futbin | fallback | manual
+  synced_at timestamptz
+);
+
+-- Optional: persist games for banter + play again
+xi_game_sessions (
+  id uuid primary key,
+  pool_id uuid references pools(id),
+  user_id uuid references auth.users(id),
+  formation text not null,
+  mode text not null,            -- classic | expert
+  status text not null,          -- drafting | complete
+  result_json jsonb,
+  created_at timestamptz
+);
+
+xi_game_picks (
+  session_id uuid references xi_game_sessions(id),
+  round int,
+  spun_team_id uuid references teams(id),
+  squad_player_id uuid references squad_players(id),
+  slot_position text,
+  was_respin boolean default false,
+  primary key (session_id, round)
+);
+
+-- Feature flag
+app_settings (
+  key text primary key,
+  value jsonb
+);
+-- e.g. { "xi_game_enabled": false } until squads_ready
+```
+
+**RLS:** `squad_players` — authenticated read. `xi_game_sessions` — insert/select own rows + same `pool_id` membership as banter.
 
 ---
 
-## 10. Next step
+## 7. Engineering phases
 
-Reply with answers to **§7** (even short bullets). With those, we can produce:
+### Phase A — Scaffold (can start now, before squads)
 
-- Final schema migration draft
-- Exact simulation rules (win probabilities / tiers)
-- UI wireframe list and route map
-- API sync schedule and quota estimate for your current API-Football plan tier
+- [ ] Route `/pools/:poolId/xi-game` + “Coming soon” card on `LeaderboardsPage`
+- [ ] `xiGame/` lib: formations, position eligibility, spin (48 nations)
+- [ ] Draft UI shell with mock data (3 nations) for UX review
+- [ ] Simulation stub returning random exit round
+- [ ] Result screen + “Post to banter box” wire-up
+
+### Phase B — Data (after final 26-man squads)
+
+- [ ] Migration: `squad_players`, `xi_game_sessions`, `xi_game_picks`
+- [ ] Edge function `sync-squads` + cron
+- [ ] Script `scripts/import-futbin-ratings.ts` (nation map + fuzzy match)
+- [ ] Admin page: sync status, unmatched players, manual OVR override
+- [ ] Flip `xi_game_enabled` → enable Leaderboards link
+
+### Phase C — Polish
+
+- [ ] Classic / Expert modes
+- [ ] One re-spin per game
+- [ ] Mobile-first pitch diagram
+- [ ] Simulation balance pass
+
+**Explicitly out of scope (per your answers):**
+
+- XI-game leaderboard
+- Pool points / sweep integration
+- Live FUTBIN/API calls during gameplay
 
 ---
 
-*Related docs: [ProgressSummary.md](../ProgressSummary.md), [TestLiveAPI.md](./TestLiveAPI.md), [PLAN.md](../PLAN.md)*
+## 8. FUTBIN nation ID map (starter)
+
+Maintain `scripts/futbin-nation-ids.json` mapping `fifa_code` → FUTBIN nation id (e.g. `FRA` → 18). Populate from FUTBIN’s nation filter URLs when running the import script.
+
+Example filter pattern: `https://www.futbin.com/players?nation={id}` — import script paginates with delay.
+
+---
+
+## 9. API quota estimate
+
+| Job | API-Football calls | Frequency |
+|-----|-------------------|-----------|
+| Full squad sync | ~48 | Once when squads announced; weekly during WC |
+| FUTBIN import | 0 (external scrape) | Same window as squad sync |
+| Gameplay | 0 | — |
+
+Existing cron budget for fixtures/results/odds is unchanged.
+
+---
+
+## 10. Open questions (minor)
+
+1. **Expert mode at launch?** Recommended yes; confirm if you want Classic-only v1.
+2. **Re-spin:** One free re-spin OK?
+3. **FUTBIN import:** Comfortable with a **manual/CI script** (not live scraping in production)? Required given no official API.
+4. **World Cup FUTBIN cards:** When EA “World’s Game” international cards appear, prefer those over generic nation golds?
+
+---
+
+## 11. Bottom line
+
+| Topic | Answer |
+|-------|--------|
+| Game type | 38-0-0-style spin draft → **full WC tournament sim** |
+| Win message | **You won the World Cup** or **knocked out at Round X** |
+| Data | **API-Football** for 26-man squads; **FUTBIN** for OVR/attrs (imported to DB) |
+| Where it lives | Link **below leaderboards** in each pool |
+| Social | Optional **banter box** post — no competitive leaderboard |
+| When to ship data | **After final 26-man squads** |
+| Can start now? | **UI scaffold + simulation logic** with mock data; real squads later |
+
+---
+
+*Related: [ProgressSummary.md](../ProgressSummary.md), [TestLiveAPI.md](./TestLiveAPI.md), [Banter migration](../supabase/migrations/20260614000013_pool_banter_box.sql)*
