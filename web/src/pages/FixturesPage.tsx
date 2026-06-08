@@ -5,8 +5,7 @@ import { ArrowLeft, Filter, Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
-import { MatchOddsGrid } from '@/components/MatchOddsGrid'
-import { MatchTeamSide } from '@/components/MatchTeamSide'
+import { MatchFixtureCard } from '@/components/MatchFixtureCard'
 import { TeamFlag } from '@/components/TeamFlag'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
@@ -490,23 +489,17 @@ export function FixturesPage() {
                 </span>
               </div>
 
-              <div className="mt-4 flex items-center gap-3">
-                <MatchTeamSide
-                  team={m.home}
-                  score={showScore ? m.home_score : undefined}
-                  align="left"
-                  highlight={m.home_team_id === assignedTeamId}
-                  playerLine={playerLineForTeam(m.home_team_id)}
-                />
-                {!showScore && (
-                  <span className="shrink-0 px-1 text-sm font-medium text-[var(--muted)]">vs</span>
-                )}
-                <MatchTeamSide
-                  team={m.away}
-                  score={showScore ? m.away_score : undefined}
-                  align="right"
-                  highlight={m.away_team_id === assignedTeamId}
-                  playerLine={playerLineForTeam(m.away_team_id)}
+              <div className="mt-4">
+                <MatchFixtureCard
+                  home={m.home}
+                  away={m.away}
+                  homeScore={showScore ? m.home_score : undefined}
+                  awayScore={showScore ? m.away_score : undefined}
+                  homeHighlight={m.home_team_id === assignedTeamId}
+                  awayHighlight={m.away_team_id === assignedTeamId}
+                  homePlayerLine={playerLineForTeam(m.home_team_id)}
+                  awayPlayerLine={playerLineForTeam(m.away_team_id)}
+                  odds={m.odds}
                 />
               </div>
 
@@ -518,8 +511,6 @@ export function FixturesPage() {
                   away={m.away}
                 />
               )}
-
-              {m.odds && m.status === 'scheduled' && <MatchOddsGrid odds={m.odds} />}
             </Card>
           )
         })}

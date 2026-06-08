@@ -17,17 +17,18 @@
 | 4 | **Competition** | **Casual only** — no XI-game leaderboard. Optional **“Post to banter box”** on the result screen. |
 | 5 | **Main sweep** | **Side game only** — does not affect pool points or odds leaderboard. |
 | 6 | **Ratings** | Pull player OVR + attributes from **[FUTBIN](https://www.futbin.com/)** where possible (see §4). |
-| 7 | **Squad data** | **Wait for FIFA final 26-man squads** before enabling the game. Until then: “Coming soon” on the link. |
+| 7 | **Squad data** | Launch with **provisional squads** from API-Football; refresh when **final 26-man** lists are published. Banner on game page until then. |
 
-### Defaults (not explicitly answered — recommended)
+### Additional locked decisions (2026-06-08)
 
-| Topic | Recommendation |
-|-------|----------------|
-| **Modes** | Classic + Expert at launch (matches 38-0-0). |
-| **Draft pool** | Any player from the nation’s **26-man squad** (not starters-only). |
-| **Re-spin** | One free re-spin per game (no ads). |
-| **Login** | Must be a **pool member** to play and post banter (matches existing pool gates). |
-| **Simulation** | Client-side for v1 (casual side game; no prize integrity requirement). |
+| Topic | Decision |
+|-------|----------|
+| **Modes** | **Classic only** (ratings visible; keep it simple). |
+| **Re-spin** | **None**. |
+| **FUTBIN import** | **Manual/CI script** — static EA FC card ratings matched to API squad list. |
+| **Squad timing** | **Ship with provisional squads now**; update when FIFA announces final 26-man lists. Game page must state squads are provisional. |
+| **Login** | Pool member required to play and post banter. |
+| **Simulation** | Client-side for v1. |
 
 ---
 
@@ -73,8 +74,8 @@ Add a **card below all leaderboard sections** on `LeaderboardsPage.tsx`:
 └─────────────────────────────────────────────┘
 ```
 
-- **Before squads sync:** button disabled / “Coming soon — squads not released yet”.
-- **After sync:** `Link` to `xi-game` under the pool shell.
+- Link to `xi-game` once provisional squad sync has run.
+- Game hub shows banner: *Provisional squads — ratings and players will update when FIFA announces final 26-man lists.*
 
 ### Game route
 
@@ -139,7 +140,7 @@ GET /players/squads?team={apiTeamId}
 
 ~48 API calls per full refresh. Throttle like `syncGoalkeepersByTeam` (120 ms between teams).
 
-**Gate:** Admin flag `squads_ready` or row count check (`squad_players` ≥ ~1,100) before enabling the game link.
+**Provisional launch:** Sync whatever API-Football returns per nation now; set `squads_provisional: true` in app settings until FIFA confirms final 26.
 
 ### FUTBIN (ratings — preferred, with caveats)
 
@@ -312,11 +313,9 @@ app_settings (
 - [ ] Mobile-first pitch diagram
 - [ ] Simulation balance pass
 
-**Explicitly out of scope (per your answers):**
+**Explicitly out of scope:**
 
-- XI-game leaderboard
-- Pool points / sweep integration
-- Live FUTBIN/API calls during gameplay
+- Expert mode, re-spins, XI-game leaderboard, pool points, live FUTBIN/API during gameplay
 
 ---
 
@@ -340,16 +339,7 @@ Existing cron budget for fixtures/results/odds is unchanged.
 
 ---
 
-## 10. Open questions (minor)
-
-1. **Expert mode at launch?** Recommended yes; confirm if you want Classic-only v1.
-2. **Re-spin:** One free re-spin OK?
-3. **FUTBIN import:** Comfortable with a **manual/CI script** (not live scraping in production)? Required given no official API.
-4. **World Cup FUTBIN cards:** When EA “World’s Game” international cards appear, prefer those over generic nation golds?
-
----
-
-## 11. Bottom line
+## 10. Bottom line
 
 | Topic | Answer |
 |-------|--------|
@@ -358,8 +348,8 @@ Existing cron budget for fixtures/results/odds is unchanged.
 | Data | **API-Football** for 26-man squads; **FUTBIN** for OVR/attrs (imported to DB) |
 | Where it lives | Link **below leaderboards** in each pool |
 | Social | Optional **banter box** post — no competitive leaderboard |
-| When to ship data | **After final 26-man squads** |
-| Can start now? | **UI scaffold + simulation logic** with mock data; real squads later |
+| When to ship data | **Provisional squads now**; final 26-man update later |
+| Modes / re-spin | **Classic only**, **no re-spins** |
 
 ---
 

@@ -3,8 +3,7 @@ import { Link } from 'react-router-dom'
 import { CalendarClock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
-import { MatchOddsGrid } from '@/components/MatchOddsGrid'
-import { MatchTeamSide } from '@/components/MatchTeamSide'
+import { MatchFixtureCard } from '@/components/MatchFixtureCard'
 import { formatStage } from '@/lib/poolBoards'
 
 type TeamSummary = {
@@ -144,24 +143,15 @@ export function NextTeamMatchCountdown({
           <span>{formatStage(match.stage)}</span>
           <span>{match.status}</span>
         </div>
-        <div className="flex items-center gap-3">
-          <MatchTeamSide
-            team={match.home}
-            align="left"
-            highlight={match.home_team_id === assignedTeamId}
-            playerLine={match.homePlayerLine}
-          />
-          <div className="shrink-0 rounded-full border border-[var(--border)] px-3 py-1 text-sm font-bold text-[var(--muted)]">
-            vs
-          </div>
-          <MatchTeamSide
-            team={match.away}
-            align="right"
-            highlight={match.away_team_id === assignedTeamId}
-            playerLine={match.awayPlayerLine}
-          />
-        </div>
-        {match.odds && match.status === 'scheduled' && <MatchOddsGrid odds={match.odds} />}
+        <MatchFixtureCard
+          home={match.home}
+          away={match.away}
+          homeHighlight={match.home_team_id === assignedTeamId}
+          awayHighlight={match.away_team_id === assignedTeamId}
+          homePlayerLine={match.homePlayerLine}
+          awayPlayerLine={match.awayPlayerLine}
+          odds={match.odds}
+        />
       </div>
     </Card>
   )

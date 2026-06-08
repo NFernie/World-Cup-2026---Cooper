@@ -9,54 +9,56 @@ export type MatchTeamSideTeam = {
   global_fifa_rank?: number | null
 }
 
-export function MatchTeamSide({
+/** Compact row: flag, name, optional score only. */
+export function MatchTeamCompact({
   team,
-  align,
   highlight,
-  playerLine,
   score,
 }: {
   team: MatchTeamSideTeam
-  align: 'left' | 'right'
   highlight?: boolean
-  playerLine?: string
   score?: number | null
 }) {
-  const staff = getTeamStaff(team.fifa_code)
-
   return (
-    <div
-      className={`flex min-w-0 flex-1 items-center gap-2 ${
-        align === 'right' ? 'flex-row-reverse text-right' : ''
-      }`}
-    >
-      <TeamFlag fifaCode={team.fifa_code} size={40} title={team.name} />
-      <div className="min-w-0">
-        <p
-          className={`truncate font-semibold leading-tight ${
-            highlight ? 'text-[var(--team-primary)]' : 'text-[var(--foreground)]'
-          }`}
-        >
-          {team.name}
-        </p>
-        {team.group_letter && (
-          <p className="text-xs text-[var(--muted)]">Group {team.group_letter}</p>
-        )}
-        {playerLine && (
-          <p className="mt-0.5 text-xs text-[var(--muted)]">{playerLine}</p>
-        )}
-        <p className="text-xs text-[var(--muted)]">
-          Manager: {staff.headCoach} · Captain: {staff.captain}
-        </p>
-        <p className="text-xs text-[var(--muted)]">
-          {formatFifaWorldRanking(team.global_fifa_rank)}
-        </p>
-      </div>
+    <div className="flex min-w-0 items-center gap-2">
+      <TeamFlag fifaCode={team.fifa_code} size={36} title={team.name} />
+      <p
+        className={`min-w-0 flex-1 truncate font-semibold leading-tight ${
+          highlight ? 'text-[var(--team-primary)]' : 'text-[var(--foreground)]'
+        }`}
+      >
+        {team.name}
+      </p>
       {score != null && (
         <span className="shrink-0 text-2xl font-bold tabular-nums text-[var(--foreground)]">
           {score}
         </span>
       )}
+    </div>
+  )
+}
+
+/** Manager, captain, FIFA rank, player line, group — shown in expanded fixture details. */
+export function MatchTeamDetails({
+  team,
+  playerLine,
+  align = 'left',
+}: {
+  team: MatchTeamSideTeam
+  playerLine?: string
+  align?: 'left' | 'right'
+}) {
+  const staff = getTeamStaff(team.fifa_code)
+
+  return (
+    <div className={`min-w-0 text-xs text-[var(--muted)] ${align === 'right' ? 'text-right' : ''}`}>
+      <p className="font-medium text-[var(--foreground)]">{team.name}</p>
+      {team.group_letter && <p>Group {team.group_letter}</p>}
+      {playerLine && <p>{playerLine}</p>}
+      <p>
+        Manager: {staff.headCoach} · Captain: {staff.captain}
+      </p>
+      <p>{formatFifaWorldRanking(team.global_fifa_rank)}</p>
     </div>
   )
 }
