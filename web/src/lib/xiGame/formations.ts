@@ -53,5 +53,5 @@ export const FAMILY_LABEL: Record<PositionFamily, string> = {
   FWD: 'Forward',
 }
 
-/** Rating penalty applied when a player is placed outside their natural family. */
+/** @deprecated Use SAME_FAMILY_PENALTY / CROSS_FAMILY_PENALTY in positions.ts */
 export const OUT_OF_POSITION_PENALTY = 0.1

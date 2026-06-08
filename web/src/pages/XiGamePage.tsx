@@ -16,17 +16,20 @@ import {
   type Formation,
   type FormationSlot,
 } from '@/lib/xiGame/formations'
+import { TournamentRun } from '@/components/xiGame/TournamentRun'
 import { isComplete, openSlots, spinTeam } from '@/lib/xiGame/draft'
-import { exitRoundLabel, simulateTournament } from '@/lib/xiGame/simulate'
+import type { TournamentRunResult } from '@/lib/xiGame/matchPresentation'
+import { exitRoundLabel } from '@/lib/xiGame/simulate'
+import { formatPositionLabel, placementFit, placementHint } from '@/lib/xiGame/positions'
 import {
+  buildDraftPick,
   effectiveRating,
   type DraftPick,
   type GameTeam,
-  type SimulationResult,
   type SquadPlayer,
 } from '@/lib/xiGame/types'
 
-type Phase = 'setup' | 'drafting' | 'result'
+type Phase = 'setup' | 'drafting' | 'tournament' | 'result'
 
 const TOTAL_ROUNDS = 11
 const GAME_TITLE = 'Can you win the World Cup?'
@@ -41,7 +44,7 @@ export function XiGamePage() {
   const [picks, setPicks] = useState<DraftPick[]>([])
   const [currentTeam, setCurrentTeam] = useState<GameTeam | null>(null)
   const [selectedPlayer, setSelectedPlayer] = useState<SquadPlayer | null>(null)
-  const [result, setResult] = useState<SimulationResult | null>(null)
+  const [result, setResult] = useState<TournamentRunResult | null>(null)
   const [banterPosted, setBanterPosted] = useState(false)
   const [banterError, setBanterError] = useState<string | null>(null)
   const [posting, setPosting] = useState(false)
@@ -79,7 +82,9 @@ export function XiGamePage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('squad_players')
-        .select('id, team_id, name, position, position_detail, shirt_number, photo_url, overall_rating')
+        .select(
+          'id, team_id, name, position, position_code, position_detail, shirt_number, photo_url, overall_rating',
+        )
         .order('overall_rating', { ascending: false })
       if (error) throw error
       return (data ?? []) as SquadPlayer[]
@@ -141,31 +146,23 @@ export function XiGamePage() {
   function placeInSlot(slot: FormationSlot) {
     if (!selectedPlayer || !currentTeam) return
     if (!openSlotIds.has(slot.id)) return
-    const pick: DraftPick = {
-      slotId: slot.id,
-      slotFamily: slot.family,
-      slotLabel: slot.label,
-      player: selectedPlayer,
-      team: currentTeam,
-      outOfPosition: selectedPlayer.position !== slot.family,
-    }
+    const pick = buildDraftPick(slot, selectedPlayer, currentTeam)
     const nextPicks = [...picks, pick]
     setPicks(nextPicks)
     setCurrentTeam(null)
     setSelectedPlayer(null)
     if (isComplete(formation, nextPicks)) {
-      finish(nextPicks)
+      setPhase('tournament')
     }
   }
 
-  function finish(finalPicks: DraftPick[]) {
-    const sim = simulateTournament(finalPicks)
+  function finishTournament(sim: TournamentRunResult) {
     setResult(sim)
     setPhase('result')
-    void persistSession(finalPicks, sim)
+    void persistSession(picks, sim)
   }
 
-  async function persistSession(finalPicks: DraftPick[], sim: SimulationResult) {
+  async function persistSession(finalPicks: DraftPick[], sim: TournamentRunResult) {
     if (!user) return
     try {
       const { data: session, error } = await supabase
@@ -250,7 +247,7 @@ export function XiGamePage() {
             <CardTitle className="text-xl">{GAME_TITLE}</CardTitle>
             <CardDescription className="mt-1">
               Spin a random nation, draft a player into your XI, and place them in your formation.
-              Players in their natural position perform best — playing out of position costs 10%.
+              Natural positions perform best — wrong role costs 5%, wrong area costs 10%.
               Fill all 11 spots, then see how far your squad goes.
             </CardDescription>
           </div>
@@ -304,7 +301,7 @@ export function XiGamePage() {
             {selectedPlayer && (
               <p className="mt-3 text-center text-xs text-[var(--muted)]">
                 Tap a highlighted slot to place <strong>{selectedPlayer.name}</strong>.
-                Green = natural position, amber = out of position (−10%).
+                Green = natural fit, amber = wrong role (−5%) or wrong area (−10%).
               </p>
             )}
           </Card>
@@ -351,8 +348,7 @@ export function XiGamePage() {
                         <span className="min-w-0">
                           <span className="block truncate font-medium">{player.name}</span>
                           <span className="text-xs text-[var(--muted)]">
-                            {player.position}
-                            {player.position_detail ? ` · ${player.position_detail}` : ''}
+                            {formatPositionLabel(player)}
                           </span>
                         </span>
                         <span className="shrink-0 rounded-md bg-[var(--background)] px-2 py-1 text-xs font-bold tabular-nums">
@@ -366,6 +362,10 @@ export function XiGamePage() {
             )}
           </Card>
         </div>
+      )}
+
+      {phase === 'tournament' && picks.length === TOTAL_ROUNDS && (
+        <TournamentRun picks={picks} onComplete={finishTournament} />
       )}
 
       {phase === 'result' && result && (
@@ -389,6 +389,28 @@ export function XiGamePage() {
               Squad rating {result.squadOvr} · {formation.name} · Group {result.groupRecord}
             </CardDescription>
           </Card>
+
+          {result.matches.length > 0 && (
+            <Card className="p-4">
+              <p className="mb-3 text-sm font-semibold">Tournament matches</p>
+              <ul className="space-y-2 text-sm">
+                {result.matches.map((m) => (
+                  <li
+                    key={m.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)] px-3 py-2"
+                  >
+                    <span className="text-[var(--muted)]">{m.stageLabel}</span>
+                    <span>
+                      vs {m.opponentName}{' '}
+                      <strong className="tabular-nums">
+                        {m.score.user}–{m.score.opponent}
+                      </strong>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
 
           <Card className="p-4">
             <p className="mb-3 text-sm font-semibold">Your XI</p>
@@ -467,7 +489,9 @@ function Pitch({
             const pick = bySlot.get(slot.id)
             const isOpen = openSlotIds.has(slot.id)
             const selecting = Boolean(selectedPlayer) && isOpen
-            const natural = selectedPlayer ? selectedPlayer.position === slot.family : false
+            const fit = selectedPlayer ? placementFit(selectedPlayer, slot) : null
+            const natural = fit === 'natural'
+            const wrongSlot = fit === 'wrong_slot'
 
             let stateClass = 'border-dashed border-[var(--border)] bg-[var(--card)]/60'
             if (pick) {
@@ -475,7 +499,9 @@ function Pitch({
             } else if (selecting) {
               stateClass = natural
                 ? 'border-fifa-green bg-fifa-green/15 ring-1 ring-fifa-green'
-                : 'border-fifa-gold bg-fifa-gold/15 ring-1 ring-fifa-gold'
+                : wrongSlot
+                  ? 'border-amber-500 bg-amber-500/15 ring-1 ring-amber-500'
+                  : 'border-fifa-gold bg-fifa-gold/15 ring-1 ring-fifa-gold'
             }
 
             const content = (
@@ -492,13 +518,17 @@ function Pitch({
                     {showRatings && (
                       <span className="text-[11px] font-bold tabular-nums">
                         {effectiveRating(pick)}
-                        {pick.outOfPosition && <span className="text-fifa-gold">*</span>}
+                        {pick.placementFit !== 'natural' && (
+                          <span className="text-fifa-gold">*</span>
+                        )}
                       </span>
                     )}
                   </span>
                 ) : (
                   <span className="mt-0.5 block text-[10px] text-[var(--muted)]">
-                    {selecting ? (natural ? 'Best fit' : '−10%') : 'Empty'}
+                    {selecting && fit
+                      ? placementHint(fit)
+                      : 'Empty'}
                   </span>
                 )}
               </>
@@ -524,16 +554,16 @@ function Pitch({
           })}
         </div>
       ))}
-      {showRatings && picks.some((p) => p.outOfPosition) && (
+      {showRatings && picks.some((p) => p.placementFit !== 'natural') && (
         <p className="pt-1 text-center text-[10px] text-[var(--muted)]">
-          * out of position (−10%)
+          * wrong role (−5%) or wrong area (−10%)
         </p>
       )}
     </div>
   )
 }
 
-function banterMessage(result: SimulationResult, formation: Formation): string {
+function banterMessage(result: TournamentRunResult, formation: Formation): string {
   if (result.outcome === 'won') {
     return `🏆 I won the World Cup! ${formation.name} · Squad rating ${result.squadOvr}. Can you beat that?`
   }

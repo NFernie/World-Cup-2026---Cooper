@@ -13,6 +13,7 @@
  * upgrades to real ratings automatically once matches are recorded.
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { gridToPositionCode } from "./position-grid.ts";
 
 const API_BASE = "https://v3.football.api-sports.io";
 
@@ -103,11 +104,62 @@ async function fetchSeasonRatings(
   return ratings;
 }
 
+/** Infer LB/ST/etc. from the most recent national-team lineup with grid data. */
+async function fetchLineupPositionCodes(
+  apiKey: string,
+  apiTeamId: number,
+): Promise<Map<number, string>> {
+  const codes = new Map<number, string>();
+  const fixturesRes = await fetch(
+    `${API_BASE}/fixtures?team=${apiTeamId}&last=8`,
+    { headers: apiHeaders(apiKey) },
+  );
+  if (!fixturesRes.ok) return codes;
+
+  const fixturesPayload = await fixturesRes.json().catch(() => null);
+  const fixtures = (fixturesPayload?.response ?? []) as Record<string, unknown>[];
+
+  for (const row of fixtures) {
+    const fixture = row.fixture as Record<string, unknown> | undefined;
+    const fixtureId = fixture?.id as number | undefined;
+    if (!fixtureId) continue;
+
+    const lineupsRes = await fetch(
+      `${API_BASE}/fixtures/lineups?fixture=${fixtureId}&team=${apiTeamId}`,
+      { headers: apiHeaders(apiKey) },
+    );
+    if (!lineupsRes.ok) continue;
+
+    const lineupsPayload = await lineupsRes.json().catch(() => null);
+    const lineup = (lineupsPayload?.response?.[0] ?? null) as Record<string, unknown> | null;
+    if (!lineup) continue;
+
+    const formation = String(lineup.formation ?? "");
+    const startXI = (lineup.startXI ?? []) as Record<string, unknown>[];
+    if (!formation || startXI.length === 0) continue;
+
+    for (const entry of startXI) {
+      const player = entry.player as Record<string, unknown> | undefined;
+      const id = player?.id as number | undefined;
+      if (!id || codes.has(id)) continue;
+      const pos = String(player?.pos ?? "");
+      const grid = player?.grid as string | null | undefined;
+      const code = gridToPositionCode(formation, pos, grid);
+      if (code) codes.set(id, code);
+    }
+
+    if (codes.size > 0) break;
+  }
+
+  return codes;
+}
+
 type SquadRow = {
   team_id: string;
   api_football_player_id: number | null;
   name: string;
   position: string;
+  position_code: string | null;
   position_detail: string | null;
   shirt_number: number | null;
   photo_url: string | null;
@@ -147,19 +199,27 @@ export async function syncSquads(
   supabase: SupabaseClient,
   apiKey: string,
   season: string,
-  opts: { force?: boolean; includeRatings?: boolean; budgetMs?: number } = {},
+  opts: {
+    force?: boolean;
+    includeRatings?: boolean;
+    includePositions?: boolean;
+    budgetMs?: number;
+  } = {},
 ): Promise<{
   teams: number;
   players: number;
   withApiRating: number;
+  withPositionCode: number;
   errors: number;
   skipped?: boolean;
   lastSyncedAt?: string;
   includeRatings?: boolean;
+  includePositions?: boolean;
   note?: string;
 }> {
   const force = opts.force === true;
   const includeRatings = opts.includeRatings === true;
+  const includePositions = opts.includePositions === true;
   const budgetMs = opts.budgetMs ?? DEFAULT_BUDGET_MS;
   const startedAt = Date.now();
 
@@ -174,8 +234,10 @@ export async function syncSquads(
       teams: 0,
       players: 0,
       withApiRating: 0,
+      withPositionCode: 0,
       errors: 1,
       includeRatings,
+      includePositions,
       note: `Failed to read sync metadata: ${metaResult.error.message}`,
     };
   }
@@ -188,10 +250,12 @@ export async function syncSquads(
         teams: 0,
         players: 0,
         withApiRating: 0,
+        withPositionCode: 0,
         errors: 0,
         skipped: true,
         lastSyncedAt,
         includeRatings,
+        includePositions,
         note: `Already synced ${ageHours.toFixed(1)}h ago (min ${MIN_HOURS_BETWEEN_SYNCS}h). Pass {"force": true} to override.`,
       };
     }
@@ -207,8 +271,10 @@ export async function syncSquads(
       teams: 0,
       players: 0,
       withApiRating: 0,
+      withPositionCode: 0,
       errors: 1,
       includeRatings,
+      includePositions,
       note: teamsResult.error.message,
     };
   }
@@ -219,8 +285,10 @@ export async function syncSquads(
       teams: 0,
       players: 0,
       withApiRating: 0,
+      withPositionCode: 0,
       errors: 0,
       includeRatings,
+      includePositions,
       note: "No teams have api_football_team_id yet — run sync-tournament-awards first.",
     };
   }
@@ -228,6 +296,7 @@ export async function syncSquads(
   let teamsDone = 0;
   let playersUpserted = 0;
   let apiRated = 0;
+  let positionCoded = 0;
   let errors = 0;
   let budgetReached = false;
   const now = new Date().toISOString();
@@ -262,6 +331,11 @@ export async function syncSquads(
         ? await fetchSeasonRatings(apiKey, apiTeamId, season)
         : new Map<number, number>();
 
+      // 3. Specific positions from recent lineups (LB, ST, etc.) when requested
+      const lineupCodes = includePositions
+        ? await fetchLineupPositionCodes(apiKey, apiTeamId)
+        : new Map<number, string>();
+
       const base = teamBaseRating(team.global_fifa_rank);
       const rows: SquadRow[] = [];
       const seenIds = new Set<number>();
@@ -289,11 +363,15 @@ export async function syncSquads(
           source = "fallback";
         }
 
+        const positionCode = lineupCodes.get(rawId) ?? null;
+        if (positionCode) positionCoded += 1;
+
         rows.push({
           team_id: team.id,
           api_football_player_id: rawId,
           name,
           position,
+          position_code: positionCode,
           position_detail: positionDetail,
           shirt_number: (p.number as number | null) ?? null,
           photo_url: (p.photo as string | null) ?? null,
@@ -336,12 +414,14 @@ export async function syncSquads(
     teams: teamsDone,
     players: playersUpserted,
     withApiRating: apiRated,
+    withPositionCode: positionCoded,
     errors,
     includeRatings,
+    includePositions,
     note: budgetReached
       ? "Time budget reached — run again (or wait for cron) to finish remaining teams."
-      : includeRatings
+      : includeRatings || includePositions
         ? undefined
-        : "Roster-only sync (no season ratings). Pass {\"includeRatings\": true} for full rating refresh.",
+        : "Roster-only sync. Pass {\"includeRatings\": true} or {\"includePositions\": true} for enrichment.",
   };
 }

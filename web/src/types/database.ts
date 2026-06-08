@@ -179,6 +179,7 @@ export interface Database {
           api_football_player_id: number | null
           name: string
           position: string
+          position_code: string | null
           position_detail: string | null
           shirt_number: number | null
           photo_url: string | null

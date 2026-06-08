@@ -6,6 +6,7 @@
  * POST body (all optional):
  *   { "force": true }           — bypass once-per-day guard
  *   { "includeRatings": true }  — also fetch season ratings (slow; cron uses this)
+ *   { "includePositions": true } — derive LB/ST/etc. from recent lineups (slow)
  *   { "status": true }          — return last sync metadata only (fast health check)
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
@@ -36,6 +37,7 @@ Deno.serve(async (req) => {
 
   let force = false;
   let includeRatings = false;
+  let includePositions = false;
   let statusOnly = false;
   try {
     const text = await req.text();
@@ -43,6 +45,7 @@ Deno.serve(async (req) => {
       const body = JSON.parse(text) as Record<string, unknown>;
       force = body.force === true;
       includeRatings = body.includeRatings === true;
+      includePositions = body.includePositions === true;
       statusOnly = body.status === true;
     }
   } catch {
@@ -61,6 +64,7 @@ Deno.serve(async (req) => {
     const result = await syncSquads(supabase, apiKey, season, {
       force,
       includeRatings,
+      includePositions,
     });
     const ok = result.skipped === true || (result.errors ?? 0) === 0;
     return jsonResponse({ ok, ...result }, ok ? 200 : 500);

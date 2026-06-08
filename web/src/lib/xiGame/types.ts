@@ -1,10 +1,14 @@
-import { OUT_OF_POSITION_PENALTY, type PositionFamily } from './formations'
+import { placementFit, placementPenalty, type PlacementFit } from './positions'
+import type { PositionFamily } from './formations'
+import type { FormationSlot } from './formations'
 
 export type SquadPlayer = {
   id: string
   team_id: string
   name: string
   position: PositionFamily
+  /** Specific role when known, e.g. LB, ST. */
+  position_code: string | null
   position_detail: string | null
   shirt_number: number | null
   photo_url: string | null
@@ -20,20 +24,34 @@ export type GameTeam = {
 
 export type DraftPick = {
   slotId: string
-  /** Family of the slot the player was placed in. */
   slotFamily: PositionFamily
-  /** Specific slot label, e.g. RW. */
   slotLabel: string
   player: SquadPlayer
   team: GameTeam
-  /** True when the player's natural family differs from the slot family. */
-  outOfPosition: boolean
+  placementFit: PlacementFit
+}
+
+export function buildDraftPick(
+  slot: FormationSlot,
+  player: SquadPlayer,
+  team: GameTeam,
+): DraftPick {
+  const fit = placementFit(player, slot)
+  return {
+    slotId: slot.id,
+    slotFamily: slot.family,
+    slotLabel: slot.label,
+    player,
+    team,
+    placementFit: fit,
+  }
 }
 
 /** Player rating after the out-of-position penalty is applied. */
 export function effectiveRating(pick: DraftPick): number {
-  if (!pick.outOfPosition) return pick.player.overall_rating
-  return Math.round(pick.player.overall_rating * (1 - OUT_OF_POSITION_PENALTY))
+  const penalty = placementPenalty(pick.placementFit)
+  if (penalty === 0) return pick.player.overall_rating
+  return Math.round(pick.player.overall_rating * (1 - penalty))
 }
 
 export type ExitRound =

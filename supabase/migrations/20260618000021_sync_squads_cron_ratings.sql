@@ -15,7 +15,8 @@ select cron.schedule(
     url := 'https://fyiegingyipqtxaiopng.supabase.co/functions/v1/sync-squads',
     headers := '{"Content-Type": "application/json"}'::jsonb,
     body := jsonb_build_object(
-      'includeRatings', extract(dow from now() at time zone 'utc') = 0
+      'includeRatings', extract(dow from now() at time zone 'utc') = 0,
+      'includePositions', extract(dow from now() at time zone 'utc') = 0
     ),
     timeout_milliseconds := 300000
   ) as request_id;
