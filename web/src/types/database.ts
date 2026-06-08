@@ -173,6 +173,7 @@ export interface Database {
           assigned_team_id: string | null
           team_name: string | null
           fifa_code: string | null
+          global_fifa_rank: number | null
           total_points: number
           wins_scored: number
         }
@@ -185,6 +186,7 @@ export interface Database {
           fifa_code: string
           tournament_stage: string
           tournament_rank: number | null
+          global_fifa_rank: number | null
           group_letter: string | null
           group_position: number | null
           group_points: number

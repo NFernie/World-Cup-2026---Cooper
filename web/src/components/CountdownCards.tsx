@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { CalendarClock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
+import { MatchOddsGrid } from '@/components/MatchOddsGrid'
 import { TeamFlag } from '@/components/TeamFlag'
 import { formatStage } from '@/lib/poolBoards'
 
@@ -26,6 +27,11 @@ export type CountdownMatch = {
   away: TeamSummary
   homeManagerLine?: string
   awayManagerLine?: string
+  odds?: {
+    home_win_decimal: number
+    draw_decimal: number
+    away_win_decimal: number
+  } | null
 }
 
 function useNow(intervalMs = 1000) {
@@ -191,6 +197,7 @@ export function NextTeamMatchCountdown({
             managerLine={match.awayManagerLine}
           />
         </div>
+        {match.odds && match.status === 'scheduled' && <MatchOddsGrid odds={match.odds} />}
       </div>
     </Card>
   )

@@ -16,6 +16,7 @@ import {
 import { GroupMembersSection } from '@/components/GroupMembersSection'
 import { isHostAssignmentMode } from '@/lib/poolAssignment'
 import { formatStage, isYourTeamRow } from '@/lib/poolBoards'
+import { formatGlobalRank } from '@/lib/globalRank'
 import { getTeamStaff } from '@/lib/teamStaff'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
@@ -262,10 +263,10 @@ export function LeaderboardsPage() {
         <section className={board === 'all' ? 'space-y-3 border-b border-[var(--border)] pb-8' : ''}>
           <h2 className="mb-2 text-lg font-semibold">Overall leaderboard</h2>
           <p className="mb-3 text-sm text-[var(--muted)]">
-            Your nation&apos;s progress in the World Cup (by team).
+            Your nation&apos;s progress in the World Cup, with global FIFA ranking for each team.
           </p>
           <div className="space-y-2">
-            {tournamentLb.data?.map((row, i) => {
+            {tournamentLb.data?.map((row) => {
               const you = isYourTeamRow(member?.id, row.pool_member_ids)
               const staff = getTeamStaff(row.fifa_code)
               const playerCount = row.co_manager_count
@@ -280,11 +281,16 @@ export function LeaderboardsPage() {
                     <TeamFlag fifaCode={row.fifa_code} size={40} title={row.team_name} />
                     <div className="min-w-0">
                       <span className="font-medium">
-                        #{row.tournament_rank ?? i + 1} {row.team_name}
+                        {formatGlobalRank(row.global_fifa_rank)} {row.team_name}
                         {you && (
                           <span className="ml-1 text-xs font-normal text-fifa-green">(you)</span>
                         )}
                       </span>
+                      {row.tournament_rank != null && (
+                        <p className="text-xs text-[var(--muted)]">
+                          Tournament position #{row.tournament_rank}
+                        </p>
+                      )}
                       <p className="mt-0.5 text-xs text-[var(--muted)]">
                         {formatManagerLine(
                           managerLabels,
@@ -320,27 +326,42 @@ export function LeaderboardsPage() {
             {oddsLb.data?.map((row, i) => {
               const playerLabel = maskMemberName(row.display_name, nameVisibility, row.user_id)
               const showName = playerLabel !== 'Hidden player'
+              const staff = row.fifa_code ? getTeamStaff(row.fifa_code) : null
+              const isYou = member?.id === row.pool_member_id
               return (
-              <LeaderboardRow
-                key={row.pool_member_id}
-                highlight={member?.id === row.pool_member_id}
-              >
-                <span className="font-medium">
-                  #{i + 1} {row.team_name ?? 'Awaiting team'}
-                  {showName && (
-                    <span className="ml-1 text-sm font-normal text-[var(--muted)]">
-                      · {playerLabel}
-                    </span>
-                  )}
-                  {member?.id === row.pool_member_id && (
-                    <span className="ml-1 text-xs font-normal text-fifa-green">(you)</span>
-                  )}
-                </span>
-                <span className="font-bold text-[var(--team-primary)]">
-                  {formatPoints(row.total_points)} pts
-                </span>
-              </LeaderboardRow>
-            )})}
+                <LeaderboardRow key={row.pool_member_id} highlight={isYou}>
+                  <div className="flex min-w-0 flex-1 items-start gap-3">
+                    {row.fifa_code ? (
+                      <TeamFlag fifaCode={row.fifa_code} size={40} title={row.team_name ?? ''} />
+                    ) : (
+                      <div className="flex h-10 w-14 shrink-0 items-center justify-center rounded-md border border-dashed border-[var(--border)] bg-[var(--background)] text-xs text-[var(--muted)]">
+                        TBD
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <span className="font-medium">
+                        #{i + 1} {formatGlobalRank(row.global_fifa_rank)}{' '}
+                        {row.team_name ?? 'Awaiting team'}
+                        {isYou && (
+                          <span className="ml-1 text-xs font-normal text-fifa-green">(you)</span>
+                        )}
+                      </span>
+                      <p className="mt-0.5 text-xs text-[var(--muted)]">
+                        {showName ? `Player: ${playerLabel}` : 'Player: Hidden player'}
+                      </p>
+                      {staff && (
+                        <p className="text-xs text-[var(--muted)]">
+                          Manager: {staff.headCoach} · Captain: {staff.captain}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <span className="shrink-0 font-bold text-[var(--team-primary)]">
+                    {formatPoints(row.total_points)} pts
+                  </span>
+                </LeaderboardRow>
+              )
+            })}
             {!oddsLb.data?.length && (
               <p className="text-sm text-[var(--muted)]">No points yet.</p>
             )}
@@ -376,7 +397,9 @@ export function LeaderboardsPage() {
                       <span className="font-medium">
                         #{row.boot_rank} {row.golden_boot_player_name}
                       </span>
-                      <p className="truncate text-xs text-[var(--muted)]">{row.team_name}</p>
+                      <p className="truncate text-xs text-[var(--muted)]">
+                        {formatGlobalRank(row.global_fifa_rank)} {row.team_name}
+                      </p>
                     </div>
                   </div>
                   <span className="shrink-0 font-bold text-[var(--team-primary)]">
@@ -416,7 +439,9 @@ export function LeaderboardsPage() {
                       <span className="font-medium">
                         #{row.glove_rank} {row.golden_glove_player_name}
                       </span>
-                      <p className="truncate text-xs text-[var(--muted)]">{row.team_name}</p>
+                      <p className="truncate text-xs text-[var(--muted)]">
+                        {formatGlobalRank(row.global_fifa_rank)} {row.team_name}
+                      </p>
                     </div>
                   </div>
                   <span className="shrink-0 font-bold text-[var(--team-primary)]">

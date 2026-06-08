@@ -136,18 +136,34 @@ export function PoolPage() {
       if (matchError) throw matchError
       if (!match) return null
 
-      const { data: teams, error: teamsError } = await supabase
-        .from('teams')
-        .select('id, name, fifa_code, group_letter')
-        .in('id', [match.home_team_id, match.away_team_id])
+      const [{ data: teams, error: teamsError }, { data: odds, error: oddsError }] =
+        await Promise.all([
+          supabase
+            .from('teams')
+            .select('id, name, fifa_code, group_letter')
+            .in('id', [match.home_team_id, match.away_team_id]),
+          supabase.from('match_odds').select('*').eq('match_id', match.id).maybeSingle(),
+        ])
       if (teamsError) throw teamsError
+      if (oddsError) throw oddsError
 
       const teamMap = new Map((teams ?? []).map((t) => [t.id, t as TeamSummary]))
       const home = teamMap.get(match.home_team_id)
       const away = teamMap.get(match.away_team_id)
       if (!home || !away) return null
 
-      return { ...match, home, away } as CountdownMatch
+      return {
+        ...match,
+        home,
+        away,
+        odds: odds
+          ? {
+              home_win_decimal: odds.home_win_decimal,
+              draw_decimal: odds.draw_decimal,
+              away_win_decimal: odds.away_win_decimal,
+            }
+          : null,
+      } as CountdownMatch
     },
   })
 

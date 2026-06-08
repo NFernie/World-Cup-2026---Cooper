@@ -5,6 +5,7 @@ import { ArrowLeft, Filter, Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
+import { MatchOddsGrid } from '@/components/MatchOddsGrid'
 import { TeamFlag } from '@/components/TeamFlag'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
@@ -13,7 +14,6 @@ import {
   isRevealNamesEnabled,
   maskMemberName,
 } from '@/lib/poolNames'
-import { formatPoints } from '@/lib/utils'
 import {
   STAGE_FILTER_OPTIONS,
   formatDateFilterLabel,
@@ -559,22 +559,7 @@ export function FixturesPage() {
                 />
               )}
 
-              {m.odds && m.status === 'scheduled' && (
-                <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
-                  <div className="rounded-lg bg-[var(--background)] p-2">
-                    <div className="text-[var(--muted)]">Home</div>
-                    <div className="font-semibold tabular-nums">{formatPoints(m.odds.home_win_decimal)}</div>
-                  </div>
-                  <div className="rounded-lg bg-[var(--background)] p-2">
-                    <div className="text-[var(--muted)]">Draw</div>
-                    <div className="font-semibold tabular-nums">{formatPoints(m.odds.draw_decimal)}</div>
-                  </div>
-                  <div className="rounded-lg bg-[var(--background)] p-2">
-                    <div className="text-[var(--muted)]">Away</div>
-                    <div className="font-semibold tabular-nums">{formatPoints(m.odds.away_win_decimal)}</div>
-                  </div>
-                </div>
-              )}
+              {m.odds && m.status === 'scheduled' && <MatchOddsGrid odds={m.odds} />}
             </Card>
           )
         })}
