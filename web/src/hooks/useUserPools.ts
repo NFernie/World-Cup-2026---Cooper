@@ -41,14 +41,14 @@ export function useUserPools(userId: string | undefined) {
           host_user_id: string
         } | null
         if (!pool) continue
-        const team = teamMap.get(row.assigned_team_id)
+        const team = row.assigned_team_id ? teamMap.get(row.assigned_team_id) : undefined
         map.set(pool.id, {
           id: pool.id,
           name: pool.name,
           invite_code: pool.invite_code,
           isHost: pool.host_user_id === userId,
           displayName: row.display_name,
-          teamName: team?.name,
+          teamName: team?.name ?? (row.assigned_team_id ? undefined : 'Awaiting team'),
           fifaCode: team?.fifa_code,
         })
       }

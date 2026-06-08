@@ -4,11 +4,14 @@ import { getTeamTheme } from '@/lib/teamColors'
 
 type Team = { fifa_code: string; name: string }
 
+export type RevealSpeed = 'normal' | 'fast'
+
 type Props = {
   allTeams: Team[]
   assigned: Team
   /** Remaining nations in the pool sweep (e.g. 38 when 10 members have joined). */
   spinTeamCount?: number
+  speed?: RevealSpeed
   onComplete: () => void
 }
 
@@ -16,14 +19,23 @@ type Props = {
 const SPIN_TICKS = 52
 const REVEAL_MS = 5000
 
-function delayForTick(t: number): number {
-  if (t < 18) return 140
-  if (t < 32) return 200
-  if (t < 44) return 280
-  return 380
+function delayForTick(t: number, speed: RevealSpeed): number {
+  const base =
+    t < 18 ? 140 : t < 32 ? 200 : t < 44 ? 280 : 380
+  return speed === 'fast' ? Math.round(base / 2) : base
 }
 
-export function TeamRevealAnimation({ allTeams, assigned, spinTeamCount, onComplete }: Props) {
+function revealDuration(speed: RevealSpeed): number {
+  return speed === 'fast' ? REVEAL_MS / 2 : REVEAL_MS
+}
+
+export function TeamRevealAnimation({
+  allTeams,
+  assigned,
+  spinTeamCount,
+  speed = 'normal',
+  onComplete,
+}: Props) {
   const [index, setIndex] = useState(0)
   const [phase, setPhase] = useState<'spin' | 'reveal'>('spin')
   const [imgError, setImgError] = useState(false)
@@ -66,7 +78,7 @@ export function TeamRevealAnimation({ allTeams, assigned, spinTeamCount, onCompl
   useEffect(() => {
     if (codes.length === 0) {
       setPhase('reveal')
-      const id = window.setTimeout(() => onCompleteRef.current(), REVEAL_MS)
+      const id = window.setTimeout(() => onCompleteRef.current(), revealDuration(speed))
       return () => window.clearTimeout(id)
     }
 
@@ -80,7 +92,7 @@ export function TeamRevealAnimation({ allTeams, assigned, spinTeamCount, onCompl
 
       if (tick < SPIN_TICKS) {
         setIndex((i) => (i + 1) % codes.length)
-        timeoutId = window.setTimeout(runTick, delayForTick(tick))
+        timeoutId = window.setTimeout(runTick, delayForTick(tick, speed))
         return
       }
 
@@ -88,16 +100,16 @@ export function TeamRevealAnimation({ allTeams, assigned, spinTeamCount, onCompl
       setPhase('reveal')
       timeoutId = window.setTimeout(() => {
         if (!cancelled) onCompleteRef.current()
-      }, REVEAL_MS)
+      }, revealDuration(speed))
     }
 
-    timeoutId = window.setTimeout(runTick, delayForTick(0))
+    timeoutId = window.setTimeout(runTick, delayForTick(0, speed))
 
     return () => {
       cancelled = true
       window.clearTimeout(timeoutId)
     }
-  }, [codes.length, assignedIndex])
+  }, [codes.length, assignedIndex, speed])
 
   const flagSrc = getFlagUrl(
     currentCode,

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
@@ -9,9 +9,11 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { TeamRevealAnimation } from '@/components/TeamRevealAnimation'
 import { useJoinReveal } from '@/hooks/useJoinReveal'
+import { isAutomaticAssignmentMode } from '@/lib/poolAssignment'
 import { getGroupJoinUrl } from '@/lib/urls'
 
 export function JoinPoolPage() {
+  const navigate = useNavigate()
   const { inviteCode: inviteCodeParam } = useParams<{ inviteCode?: string }>()
   const [searchParams] = useSearchParams()
   const inviteFromQuery = searchParams.get('code') ?? ''
@@ -74,14 +76,24 @@ export function JoinPoolPage() {
 
   const joinMutation = useMutation({
     mutationFn: async (poolId: string) => {
-      const { data, error } = await supabase.rpc('join_pool', {
-        p_pool_id: poolId,
-        p_display_name: displayName.trim(),
-      })
+      const [{ data, error }, { data: pool, error: poolError }] = await Promise.all([
+        supabase.rpc('join_pool', {
+          p_pool_id: poolId,
+          p_display_name: displayName.trim(),
+        }),
+        supabase.from('pools').select('team_assignment_mode').eq('id', poolId).single(),
+      ])
       if (error) throw error
-      return data
+      if (poolError) throw poolError
+      return { member: data, assignmentMode: pool.team_assignment_mode }
     },
-    onSuccess: (data) => startReveal(data.pool_id, data.assigned_team_id),
+    onSuccess: ({ member, assignmentMode }) => {
+      if (isAutomaticAssignmentMode(assignmentMode) && member.assigned_team_id) {
+        void startReveal(member.pool_id, member.assigned_team_id)
+        return
+      }
+      navigate(`/pools/${member.pool_id}`)
+    },
   })
 
   const activePool =
@@ -140,6 +152,7 @@ export function JoinPoolPage() {
           allTeams={reveal.allTeams}
           assigned={reveal.assigned}
           spinTeamCount={reveal.spinTeamCount}
+          speed={reveal.speed}
           onComplete={completeReveal}
         />
       )}

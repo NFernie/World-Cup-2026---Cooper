@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
@@ -8,11 +9,14 @@ import { supabase } from '@/lib/supabase'
 import { TeamRevealAnimation } from '@/components/TeamRevealAnimation'
 import { useJoinReveal } from '@/hooks/useJoinReveal'
 import { useAuth } from '@/hooks/useAuth'
+import type { TeamAssignmentMode } from '@/lib/poolAssignment'
 
 export function CreatePoolPage() {
+  const navigate = useNavigate()
   const { user, username: authUsername } = useAuth()
 
   const { reveal, startReveal, completeReveal } = useJoinReveal()
+  const [assignmentMode, setAssignmentMode] = useState<TeamAssignmentMode>('automatic')
   const [revealNames, setRevealNames] = useState(false)
   const [name, setName] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -32,6 +36,7 @@ export function CreatePoolPage() {
           name: name.trim(),
           host_user_id: user.id,
           reveal_names: revealNames,
+          team_assignment_mode: assignmentMode,
         })
         .select()
         .single()
@@ -43,9 +48,15 @@ export function CreatePoolPage() {
       })
       if (joinError) throw joinError
 
-      return { pool, member }
+      return { pool, member, assignmentMode }
     },
-    onSuccess: ({ pool, member }) => startReveal(pool.id, member.assigned_team_id),
+    onSuccess: ({ pool, member, assignmentMode: mode }) => {
+      if (mode === 'automatic' && member.assigned_team_id) {
+        void startReveal(pool.id, member.assigned_team_id)
+        return
+      }
+      navigate(`/pools/${pool.id}`)
+    },
   })
 
   return (
@@ -55,13 +66,16 @@ export function CreatePoolPage() {
           allTeams={reveal.allTeams}
           assigned={reveal.assigned}
           spinTeamCount={reveal.spinTeamCount}
+          speed={reveal.speed}
           onComplete={completeReveal}
         />
       )}
       <Card className="mx-auto max-w-md">
         <CardTitle>Create a group</CardTitle>
         <CardDescription className="mt-1">
-          You&apos;ll join automatically with your own team assignment in this group.
+          {assignmentMode === 'automatic'
+            ? 'Members receive a nation automatically when they join.'
+            : 'Members join first; you assign nations from the leaderboard.'}
         </CardDescription>
         <form
           className="mt-4 space-y-4"
@@ -70,6 +84,33 @@ export function CreatePoolPage() {
             createPool.mutate()
           }}
         >
+          <div className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--background)] p-3">
+            <Label>Team assignment</Label>
+            <p className="text-xs text-[var(--muted)]">
+              Choose whether nations are assigned automatically on join, or manually by you as host.
+            </p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                size="sm"
+                className="flex-1"
+                variant={assignmentMode === 'automatic' ? 'default' : 'outline'}
+                onClick={() => setAssignmentMode('automatic')}
+              >
+                Automatic
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="flex-1"
+                variant={assignmentMode === 'host' ? 'default' : 'outline'}
+                onClick={() => setAssignmentMode('host')}
+              >
+                Host assigns
+              </Button>
+            </div>
+          </div>
+
           <div className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--background)] p-3">
             <Label>Reveal user names</Label>
             <p className="text-xs text-[var(--muted)]">

@@ -13,6 +13,8 @@ import {
   maskManagerNames,
   maskMemberName,
 } from '@/lib/poolNames'
+import { GroupMembersSection } from '@/components/GroupMembersSection'
+import { isHostAssignmentMode } from '@/lib/poolAssignment'
 import { formatStage, isYourTeamRow } from '@/lib/poolBoards'
 import { getTeamStaff } from '@/lib/teamStaff'
 import { supabase } from '@/lib/supabase'
@@ -20,8 +22,9 @@ import { useAuth } from '@/hooks/useAuth'
 import { formatPoints } from '@/lib/utils'
 import type { PoolOutletContext } from '@/pages/PoolShell'
 
-const LEADERBOARD_OPTIONS = [
+const BASE_LEADERBOARD_OPTIONS = [
   { id: 'all', label: 'All leaderboards' },
+  { id: 'members', label: 'Group members' },
   { id: 'overall', label: 'Overall leaderboard' },
   { id: 'odds', label: 'Odds leaderboard' },
   { id: 'golden-boot', label: 'Golden Boot' },
@@ -30,7 +33,7 @@ const LEADERBOARD_OPTIONS = [
   { id: 'knockout', label: 'Knockout qualifiers' },
 ] as const
 
-type LeaderboardId = (typeof LEADERBOARD_OPTIONS)[number]['id']
+type LeaderboardId = (typeof BASE_LEADERBOARD_OPTIONS)[number]['id']
 type SingleBoardId = Exclude<LeaderboardId, 'all'>
 
 function LeaderboardRow({
@@ -64,13 +67,6 @@ export function LeaderboardsPage() {
   const { user } = useAuth()
   const { assignedTeamId } = useOutletContext<PoolOutletContext>()
 
-  const paramBoard = searchParams.get('board') as LeaderboardId | null
-  const initialBoard =
-    paramBoard && LEADERBOARD_OPTIONS.some((o) => o.id === paramBoard) ? paramBoard : 'all'
-  const [board, setBoard] = useState<LeaderboardId>(initialBoard)
-
-  const show = (id: SingleBoardId) => board === 'all' || board === id
-
   const poolQuery = useQuery({
     queryKey: ['pool', poolId],
     enabled: Boolean(poolId),
@@ -80,6 +76,19 @@ export function LeaderboardsPage() {
       return data
     },
   })
+
+  const pool = poolQuery.data
+  const isHostMode = isHostAssignmentMode(pool?.team_assignment_mode)
+  const leaderboardOptions = BASE_LEADERBOARD_OPTIONS.filter(
+    (option) => option.id !== 'members' || isHostMode,
+  )
+
+  const paramBoard = searchParams.get('board') as LeaderboardId | null
+  const initialBoard =
+    paramBoard && leaderboardOptions.some((o) => o.id === paramBoard) ? paramBoard : 'all'
+  const [board, setBoard] = useState<LeaderboardId>(initialBoard)
+
+  const show = (id: SingleBoardId) => board === 'all' || board === id
 
   const memberQuery = useQuery({
     queryKey: ['pool-member', poolId, user?.id],
@@ -96,7 +105,7 @@ export function LeaderboardsPage() {
     },
   })
 
-  const pool = poolQuery.data
+  const isHost = pool?.host_user_id === user?.id
   const nameVisibility = {
     revealNames: isRevealNamesEnabled(pool?.reveal_names),
     hostUserId: pool?.host_user_id ?? '',
@@ -192,8 +201,8 @@ export function LeaderboardsPage() {
   const lowestKnockout = knockoutQuery.data?.[0]
 
   const boardMeta = useMemo(
-    () => LEADERBOARD_OPTIONS.find((o) => o.id === board) ?? LEADERBOARD_OPTIONS[0],
-    [board],
+    () => leaderboardOptions.find((o) => o.id === board) ?? leaderboardOptions[0],
+    [board, leaderboardOptions],
   )
 
   function onBoardChange(id: LeaderboardId) {
@@ -228,7 +237,7 @@ export function LeaderboardsPage() {
             value={board}
             onChange={(e) => onBoardChange(e.target.value as LeaderboardId)}
           >
-            {LEADERBOARD_OPTIONS.map((o) => (
+            {leaderboardOptions.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.label}
               </option>
@@ -236,6 +245,18 @@ export function LeaderboardsPage() {
           </select>
         </div>
       </Card>
+
+      {show('members') && isHostMode && poolId && (
+        <section className={board === 'all' ? 'space-y-3 border-b border-[var(--border)] pb-8' : ''}>
+          <GroupMembersSection
+            poolId={poolId}
+            isHost={isHost}
+            revealNames={nameVisibility.revealNames}
+            hostUserId={nameVisibility.hostUserId}
+            viewerUserId={user?.id}
+          />
+        </section>
+      )}
 
       {show('overall') && (
         <section className={board === 'all' ? 'space-y-3 border-b border-[var(--border)] pb-8' : ''}>
@@ -305,7 +326,7 @@ export function LeaderboardsPage() {
                 highlight={member?.id === row.pool_member_id}
               >
                 <span className="font-medium">
-                  #{i + 1} {row.team_name}
+                  #{i + 1} {row.team_name ?? 'Awaiting team'}
                   {showName && (
                     <span className="ml-1 text-sm font-normal text-[var(--muted)]">
                       · {playerLabel}

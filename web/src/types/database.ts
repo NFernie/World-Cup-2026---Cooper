@@ -38,15 +38,18 @@ export interface Database {
           host_user_id: string
           invite_code: string
           reveal_names: boolean
+          team_assignment_mode: 'automatic' | 'host'
           created_at: string
         }
         Insert: {
           name: string
           host_user_id: string
           reveal_names?: boolean
+          team_assignment_mode?: 'automatic' | 'host'
         }
         Update: {
           reveal_names?: boolean
+          team_assignment_mode?: 'automatic' | 'host'
         }
       }
       pool_reveal_name_votes: {
@@ -92,7 +95,7 @@ export interface Database {
           pool_id: string
           user_id: string
           display_name: string
-          assigned_team_id: string
+          assigned_team_id: string | null
           join_order: number
           assignment_round: number
           created_at: string
@@ -167,9 +170,9 @@ export interface Database {
           pool_member_id: string
           user_id: string
           display_name: string
-          assigned_team_id: string
-          team_name: string
-          fifa_code: string
+          assigned_team_id: string | null
+          team_name: string | null
+          fifa_code: string | null
           total_points: number
           wins_scored: number
         }
@@ -264,6 +267,10 @@ export interface Database {
       set_pool_reveal_names: {
         Args: { p_pool_id: string; p_reveal_names: boolean }
         Returns: Database['public']['Tables']['pools']['Row']
+      }
+      assign_pool_member_team: {
+        Args: { p_pool_member_id: string }
+        Returns: Database['public']['Tables']['pool_members']['Row']
       }
       recalculate_pool_member_points: {
         Args: { p_match_id?: string }

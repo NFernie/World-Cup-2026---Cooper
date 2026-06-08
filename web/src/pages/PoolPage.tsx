@@ -15,6 +15,7 @@ import { RevealNamesPoll } from '@/components/RevealNamesPoll'
 import { TeamFlag } from '@/components/TeamFlag'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
+import { isHostAssignmentMode } from '@/lib/poolAssignment'
 import { formatManagerLine, isRevealNamesEnabled, maskMemberName } from '@/lib/poolNames'
 import { getGroupJoinUrl } from '@/lib/urls'
 
@@ -31,7 +32,7 @@ type PoolMemberSummary = {
   id: string
   user_id: string
   display_name: string
-  assigned_team_id: string
+  assigned_team_id: string | null
 }
 
 export function PoolPage() {
@@ -161,6 +162,7 @@ export function PoolPage() {
   const playerCount = memberCountQuery.data ?? 0
   const playersNeeded = Math.max(0, TOTAL_NATIONS - playerCount)
   const namesRevealed = isRevealNamesEnabled(pool.reveal_names)
+  const isHostAssignment = isHostAssignmentMode(pool.team_assignment_mode)
   const nameVisibility = {
     revealNames: namesRevealed,
     hostUserId: pool.host_user_id,
@@ -225,12 +227,32 @@ export function PoolPage() {
           <CardTitle>{isHost ? 'Join your pool as a player' : 'Not in this pool yet'}</CardTitle>
           <CardDescription className="mt-1">
             {isHost
-              ? 'Hosts need to join to get a team assignment and points in this pool.'
+              ? isHostAssignment
+                ? 'Join to appear on the group leaderboard, then assign nations to members.'
+                : 'Hosts need to join to get a team assignment and points in this pool.'
               : 'Use the invite link to join with your display name.'}
           </CardDescription>
           <Button asChild className="mt-3">
             <Link to={`/join/${pool.invite_code}`}>Join pool</Link>
           </Button>
+        </Card>
+      )}
+
+      {member && !team && (
+        <Card className="border-[var(--border)] bg-[var(--card)]">
+          <CardTitle className="text-xl">Awaiting team assignment</CardTitle>
+          <CardDescription className="mt-1">
+            {isHostAssignment && isHost
+              ? 'You are on the leaderboard without a nation yet. Assign teams from the leaderboard when members have joined.'
+              : isHostAssignment
+                ? 'Your host will assign your nation from the group leaderboard.'
+                : 'Your nation has not been assigned yet.'}
+          </CardDescription>
+          {(isHostAssignment || isHost) && (
+            <Button asChild className="mt-4" variant="outline">
+              <Link to="leaderboards?board=members">Open group leaderboard</Link>
+            </Button>
+          )}
         </Card>
       )}
 
