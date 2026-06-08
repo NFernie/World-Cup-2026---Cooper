@@ -6,11 +6,12 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { MatchOddsGrid } from '@/components/MatchOddsGrid'
+import { MatchTeamSide } from '@/components/MatchTeamSide'
 import { TeamFlag } from '@/components/TeamFlag'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import {
-  formatManagerLine,
+  formatPlayerLine,
   isRevealNamesEnabled,
   maskMemberName,
 } from '@/lib/poolNames'
@@ -28,6 +29,7 @@ type TeamRow = {
   fifa_code: string
   group_letter: string | null
   api_football_team_id: number | null
+  global_fifa_rank: number | null
 }
 
 type MatchEventRow = {
@@ -88,50 +90,6 @@ function filterSelectClass() {
   return (
     'h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm ' +
     'text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]'
-  )
-}
-
-function TeamLine({
-  team,
-  score,
-  align,
-  highlight,
-  managerLine,
-}: {
-  team: TeamRow
-  score?: number | null
-  align: 'left' | 'right'
-  highlight?: boolean
-  managerLine?: string
-}) {
-  return (
-    <div
-      className={`flex flex-1 items-center gap-2 min-w-0 ${
-        align === 'right' ? 'flex-row-reverse text-right' : ''
-      }`}
-    >
-      <TeamFlag fifaCode={team.fifa_code} size={40} title={team.name} />
-      <div className="min-w-0">
-        <p
-          className={`truncate font-semibold leading-tight ${
-            highlight ? 'text-[var(--team-primary)]' : 'text-[var(--foreground)]'
-          }`}
-        >
-          {team.name}
-        </p>
-        {team.group_letter && (
-          <p className="text-xs text-[var(--muted)]">Group {team.group_letter}</p>
-        )}
-        {managerLine && (
-          <p className="mt-0.5 text-xs text-[var(--muted)]">{managerLine}</p>
-        )}
-      </div>
-      {score != null && (
-        <span className="shrink-0 text-2xl font-bold tabular-nums text-[var(--foreground)]">
-          {score}
-        </span>
-      )}
-    </div>
   )
 }
 
@@ -199,7 +157,9 @@ export function FixturesPage() {
         { data: odds, error: oErr },
       ] = await Promise.all([
         supabase.from('matches').select('*').order('kickoff_at', { ascending: true }),
-        supabase.from('teams').select('id, name, fifa_code, group_letter, api_football_team_id'),
+        supabase
+          .from('teams')
+          .select('id, name, fifa_code, group_letter, api_football_team_id, global_fifa_rank'),
         supabase.from('match_odds').select('*'),
       ])
       if (mErr) throw mErr
@@ -293,13 +253,13 @@ export function FixturesPage() {
     viewerUserId: user?.id,
   }
 
-  const managerLineForTeam = (teamId: string) => {
-    const managers = (poolMembersQuery.data ?? []).filter((m) => m.assigned_team_id === teamId)
-    if (managers.length === 0) return undefined
-    return formatManagerLine(
-      managers.map((m) => maskMemberName(m.display_name, nameVisibility, m.user_id)),
-      managers.map((m) => m.id),
-      managers.length,
+  const playerLineForTeam = (teamId: string) => {
+    const players = (poolMembersQuery.data ?? []).filter((m) => m.assigned_team_id === teamId)
+    if (players.length === 0) return undefined
+    return formatPlayerLine(
+      players.map((m) => maskMemberName(m.display_name, nameVisibility, m.user_id)),
+      players.map((m) => m.id),
+      players.length,
       nameVisibility,
       memberQuery.data?.id,
     )
@@ -531,22 +491,22 @@ export function FixturesPage() {
               </div>
 
               <div className="mt-4 flex items-center gap-3">
-                <TeamLine
+                <MatchTeamSide
                   team={m.home}
                   score={showScore ? m.home_score : undefined}
                   align="left"
                   highlight={m.home_team_id === assignedTeamId}
-                  managerLine={managerLineForTeam(m.home_team_id)}
+                  playerLine={playerLineForTeam(m.home_team_id)}
                 />
                 {!showScore && (
                   <span className="shrink-0 px-1 text-sm font-medium text-[var(--muted)]">vs</span>
                 )}
-                <TeamLine
+                <MatchTeamSide
                   team={m.away}
                   score={showScore ? m.away_score : undefined}
                   align="right"
                   highlight={m.away_team_id === assignedTeamId}
-                  managerLine={managerLineForTeam(m.away_team_id)}
+                  playerLine={playerLineForTeam(m.away_team_id)}
                 />
               </div>
 

@@ -4,7 +4,7 @@ import { CalendarClock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { MatchOddsGrid } from '@/components/MatchOddsGrid'
-import { TeamFlag } from '@/components/TeamFlag'
+import { MatchTeamSide } from '@/components/MatchTeamSide'
 import { formatStage } from '@/lib/poolBoards'
 
 type TeamSummary = {
@@ -12,6 +12,7 @@ type TeamSummary = {
   name: string
   fifa_code: string
   group_letter: string | null
+  global_fifa_rank: number | null
 }
 
 export type CountdownMatch = {
@@ -25,8 +26,8 @@ export type CountdownMatch = {
   stage: string
   home: TeamSummary
   away: TeamSummary
-  homeManagerLine?: string
-  awayManagerLine?: string
+  homePlayerLine?: string
+  awayPlayerLine?: string
   odds?: {
     home_win_decimal: number
     draw_decimal: number
@@ -92,43 +93,6 @@ function CountdownDigits({ targetIso, compact = false }: { targetIso: string; co
   )
 }
 
-function FixtureTeamLine({
-  team,
-  align,
-  highlight,
-  managerLine,
-}: {
-  team: TeamSummary
-  align: 'left' | 'right'
-  highlight?: boolean
-  managerLine?: string
-}) {
-  return (
-    <div
-      className={`flex flex-1 items-center gap-2 min-w-0 ${
-        align === 'right' ? 'flex-row-reverse text-right' : ''
-      }`}
-    >
-      <TeamFlag fifaCode={team.fifa_code} size={40} title={team.name} />
-      <div className="min-w-0">
-        <p
-          className={`truncate font-semibold leading-tight ${
-            highlight ? 'text-[var(--team-primary)]' : 'text-[var(--foreground)]'
-          }`}
-        >
-          {team.name}
-        </p>
-        {team.group_letter && (
-          <p className="text-xs text-[var(--muted)]">Group {team.group_letter}</p>
-        )}
-        {managerLine && (
-          <p className="mt-0.5 text-xs text-[var(--muted)]">{managerLine}</p>
-        )}
-      </div>
-    </div>
-  )
-}
-
 export function WorldCupCountdown({ firstKickoffAt }: { firstKickoffAt: string | undefined }) {
   const now = useNow()
   if (!firstKickoffAt || new Date(firstKickoffAt).getTime() <= now) return null
@@ -181,20 +145,20 @@ export function NextTeamMatchCountdown({
           <span>{match.status}</span>
         </div>
         <div className="flex items-center gap-3">
-          <FixtureTeamLine
+          <MatchTeamSide
             team={match.home}
             align="left"
             highlight={match.home_team_id === assignedTeamId}
-            managerLine={match.homeManagerLine}
+            playerLine={match.homePlayerLine}
           />
           <div className="shrink-0 rounded-full border border-[var(--border)] px-3 py-1 text-sm font-bold text-[var(--muted)]">
             vs
           </div>
-          <FixtureTeamLine
+          <MatchTeamSide
             team={match.away}
             align="right"
             highlight={match.away_team_id === assignedTeamId}
-            managerLine={match.awayManagerLine}
+            playerLine={match.awayPlayerLine}
           />
         </div>
         {match.odds && match.status === 'scheduled' && <MatchOddsGrid odds={match.odds} />}

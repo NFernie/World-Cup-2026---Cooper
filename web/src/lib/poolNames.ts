@@ -52,3 +52,20 @@ export function formatManagerLine(
   }
   return `Players assigned ${playerCount}`
 }
+
+export function formatPlayerLine(
+  playerLabels: string[],
+  memberIds: string[],
+  playerCount: number,
+  visibility: PoolNameVisibility,
+  viewerMemberId: string | undefined,
+): string {
+  if (visibility.revealNames) {
+    return `Player: ${playerLabels.join(', ')}`
+  }
+  const youIdx = viewerMemberId ? memberIds.findIndex((id) => id === viewerMemberId) : -1
+  if (youIdx >= 0) {
+    return `Player: ${playerLabels[youIdx]} (you)`
+  }
+  return `Players assigned ${playerCount}`
+}

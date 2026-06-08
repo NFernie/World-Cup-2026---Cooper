@@ -16,7 +16,7 @@ import { TeamFlag } from '@/components/TeamFlag'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { isHostAssignmentMode } from '@/lib/poolAssignment'
-import { formatManagerLine, isRevealNamesEnabled, maskMemberName } from '@/lib/poolNames'
+import { formatPlayerLine, isRevealNamesEnabled, maskMemberName } from '@/lib/poolNames'
 import { getGroupJoinUrl } from '@/lib/urls'
 
 const TOTAL_NATIONS = 48
@@ -26,6 +26,7 @@ type TeamSummary = {
   name: string
   fifa_code: string
   group_letter: string | null
+  global_fifa_rank: number | null
 }
 
 type PoolMemberSummary = {
@@ -140,7 +141,7 @@ export function PoolPage() {
         await Promise.all([
           supabase
             .from('teams')
-            .select('id, name, fifa_code, group_letter')
+            .select('id, name, fifa_code, group_letter, global_fifa_rank')
             .in('id', [match.home_team_id, match.away_team_id]),
           supabase.from('match_odds').select('*').eq('match_id', match.id).maybeSingle(),
         ])
@@ -185,13 +186,13 @@ export function PoolPage() {
     viewerUserId: user?.id,
   }
 
-  const managerLineForTeam = (teamId: string) => {
-    const managers = (poolMembersQuery.data ?? []).filter((m) => m.assigned_team_id === teamId)
-    if (managers.length === 0) return undefined
-    return formatManagerLine(
-      managers.map((m) => maskMemberName(m.display_name, nameVisibility, m.user_id)),
-      managers.map((m) => m.id),
-      managers.length,
+  const playerLineForTeam = (teamId: string) => {
+    const players = (poolMembersQuery.data ?? []).filter((m) => m.assigned_team_id === teamId)
+    if (players.length === 0) return undefined
+    return formatPlayerLine(
+      players.map((m) => maskMemberName(m.display_name, nameVisibility, m.user_id)),
+      players.map((m) => m.id),
+      players.length,
       nameVisibility,
       member?.id,
     )
@@ -200,8 +201,8 @@ export function PoolPage() {
   const nextTeamMatch = nextTeamMatchQuery.data
     ? {
         ...nextTeamMatchQuery.data,
-        homeManagerLine: managerLineForTeam(nextTeamMatchQuery.data.home_team_id),
-        awayManagerLine: managerLineForTeam(nextTeamMatchQuery.data.away_team_id),
+        homePlayerLine: playerLineForTeam(nextTeamMatchQuery.data.home_team_id),
+        awayPlayerLine: playerLineForTeam(nextTeamMatchQuery.data.away_team_id),
       }
     : nextTeamMatchQuery.data
 

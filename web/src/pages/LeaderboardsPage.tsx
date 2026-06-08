@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { TeamFlag } from '@/components/TeamFlag'
 import { getFlagUrl } from '@/lib/flags'
 import {
-  formatManagerLine,
+  formatPlayerLine,
   isRevealNamesEnabled,
   maskManagerNames,
   maskMemberName,
@@ -292,7 +292,7 @@ export function LeaderboardsPage() {
                         </p>
                       )}
                       <p className="mt-0.5 text-xs text-[var(--muted)]">
-                        {formatManagerLine(
+                        {formatPlayerLine(
                           managerLabels,
                           row.pool_member_ids,
                           playerCount,
