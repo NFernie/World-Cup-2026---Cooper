@@ -16,7 +16,7 @@
 | 3 | **Placement** | Link on the **Leaderboards page**, **below** the leaderboard sections. Route: `/pools/:poolId/xi-game`. |
 | 4 | **Competition** | **Casual only** — no XI-game leaderboard. Optional **“Post to banter box”** on the result screen. |
 | 5 | **Main sweep** | **Side game only** — does not affect pool points or odds leaderboard. |
-| 6 | **Ratings** | Pull player OVR + attributes from **[FUTBIN](https://www.futbin.com/)** where possible (see §4). |
+| 6 | **Ratings** | **API-Football** (see [SPIN-DRAFT-RATINGS-STRATEGY.md](./SPIN-DRAFT-RATINGS-STRATEGY.md)). |
 | 7 | **Squad data** | Launch with **provisional squads** from API-Football; refresh when **final 26-man** lists are published. Banner on game page until then. |
 
 ### Additional locked decisions (2026-06-08)
@@ -25,7 +25,7 @@
 |-------|----------|
 | **Modes** | **Classic only** (ratings visible; keep it simple). |
 | **Re-spin** | **None**. |
-| **FUTBIN import** | **Manual/CI script** — static EA FC card ratings matched to API squad list. |
+| **Ratings** | **API-Football** season rating (0–10 → OVR). Optional manual overrides for stars. **Not FUTBIN in prod** — see [SPIN-DRAFT-RATINGS-STRATEGY.md](./SPIN-DRAFT-RATINGS-STRATEGY.md). |
 | **Squad timing** | **Ship with provisional squads now**; update when FIFA announces final 26-man lists. Game page must state squads are provisional. |
 | **Login** | Pool member required to play and post banter. |
 | **Simulation** | Client-side for v1. |
@@ -118,75 +118,25 @@ No new tables required for banter — only optional `xi_game_sessions` stores th
 
 ---
 
-## 4. Data strategy: squads + FUTBIN ratings
+## 4. Data strategy: API-Football only
 
-### Two-source model
+**Full analysis:** [SPIN-DRAFT-RATINGS-STRATEGY.md](./SPIN-DRAFT-RATINGS-STRATEGY.md)
 
-| Data | Source | When |
-|------|--------|------|
-| **Who is in the squad** (name, position, shirt #, photo) | **API-Football** `/players/squads?team={id}` | After FIFA publishes final 26-man lists |
-| **OVR + attributes** (PAC, SHO, PAS, DRI, DEF, PHY) | **FUTBIN** (EA FC 26 cards) | Same sync window, matched by name + nation |
+| Data | Source |
+|------|--------|
+| Squad (name, position, photo) | API-Football `/players/squads?team=` |
+| OVR for Classic mode | API-Football `/players?team=&season=2026` → `rating` × 10 |
+| Overrides (optional) | Small CSV or admin edits for star players |
 
-Gameplay reads **only from Postgres** — never FUTBIN or API-Football during a spin.
+Gameplay reads **only Postgres** — same pattern as 38-0-0’s preloaded dataset.
 
-### API-Football (roster — required)
-
-You already integrate API-Football for WC (`league=1`, `season=2026`). For each of 48 teams with `api_football_team_id`:
-
-```
-GET /players/squads?team={apiTeamId}
-→ id, name, position, age, number, photo
-```
-
-~48 API calls per full refresh. Throttle like `syncGoalkeepersByTeam` (120 ms between teams).
-
-**Provisional launch:** Sync whatever API-Football returns per nation now; set `squads_provisional: true` in app settings until FIFA confirms final 26.
-
-### FUTBIN (ratings — preferred, with caveats)
-
-**There is no official FUTBIN API.** Ratings must be obtained by:
-
-1. **One-off / scheduled import script** (Node or Python, run locally or as a guarded edge function), not from the browser.
-2. Filter FUTBIN players by **nation** (FUTBIN nation id per country) and optionally **Men's National** / World Cup card types when EA releases them.
-3. **Fuzzy-match** API-Football squad name → FUTBIN player name (normalize accents, “Kylian Mbappé” vs “Mbappe”).
-4. Store matched ratings in `squad_players` columns; unmatched players get a **fallback rating** (see below).
-
-| FUTBIN field | DB column |
-|--------------|-----------|
-| `rating` (OVR) | `overall_rating` |
-| `position` | cross-check `position` |
-| `pace`, `shooting`, … | `attr_pace`, `attr_shooting`, … |
-| FUTBIN player id | `futbin_player_id` (optional) |
-
-**Risks:**
-
-| Risk | Mitigation |
-|------|------------|
-| FUTBIN Terms of Service / scraping | Run import **manually or on CI**, respect rate limits (5+ s between pages), store results in DB. Do not scrape from user clients. |
-| No WC-specific card for a squad player | Match to **best nation card** on FUTBIN (e.g. France gold card for a French squad player). |
-| Name mismatch | Manual admin overrides for top ~50 mismatches. |
-| Card not on FUTBIN yet | Fallback: derived rating from API-Football season stats or position-based default (65–72). |
-
-**Fallback formula** (when FUTBIN match fails):
-
-```
-overall_rating = clamp(55 + floor(api_season_rating * 5), 50, 88)
-```
-
-### Why not FUTBIN-only?
-
-FUTBIN lists **EA FC Ultimate Team cards**, not official FIFA squad announcements. The **26-man list must come from API-Football** (or FIFA) so you only offer players actually at the World Cup.
-
-### Sync pipeline (after squads drop)
+**Provisional launch:** Sync now; `squads_provisional: true` until FIFA confirms final 26.
 
 ```mermaid
 flowchart LR
-  A[FIFA announces 26-man squads] --> B[sync-squads: API-Football]
-  B --> C[squad_players names + positions]
-  C --> D[import-futbin-ratings script]
-  D --> E[Match by nation + name]
-  E --> F[Admin QA + overrides]
-  F --> G[Enable game link on Leaderboards]
+  A[sync-squads edge function] --> B[squad_players table]
+  B --> C[Optional manual overrides]
+  C --> D[Spin Draft UI]
 ```
 
 ---
@@ -214,7 +164,7 @@ flowchart LR
 ### Inputs to simulation
 
 - Average `overall_rating` of XI (position-weighted like 38-0-0).
-- Optional: use six FUTBIN attributes for Classic mode display only.
+- Classic mode shows **OVR only** (from API rating × 10).
 
 ### Output JSON (stored on session)
 
@@ -241,7 +191,6 @@ squad_players (
   id uuid primary key,
   team_id uuid references teams(id),
   api_football_player_id int,
-  futbin_player_id int,
   name text not null,
   position text not null,        -- normalized: GK | DEF | MID | FWD
   position_detail text,          -- LB, ST, etc.
@@ -250,7 +199,7 @@ squad_players (
   overall_rating int not null,
   attr_pace int, attr_shooting int, attr_passing int,
   attr_dribbling int, attr_defending int, attr_physical int,
-  rating_source text,            -- futbin | fallback | manual
+  rating_source text,            -- api | fallback | manual
   synced_at timestamptz
 );
 
@@ -302,7 +251,7 @@ app_settings (
 
 - [ ] Migration: `squad_players`, `xi_game_sessions`, `xi_game_picks`
 - [ ] Edge function `sync-squads` + cron
-- [ ] Script `scripts/import-futbin-ratings.ts` (nation map + fuzzy match)
+- [ ] Optional `data/spin-draft-rating-overrides.csv` + import script for star players
 - [ ] Admin page: sync status, unmatched players, manual OVR override
 - [ ] Flip `xi_game_enabled` → enable Leaderboards link
 
@@ -315,24 +264,16 @@ app_settings (
 
 **Explicitly out of scope:**
 
-- Expert mode, re-spins, XI-game leaderboard, pool points, live FUTBIN/API during gameplay
+- Expert mode, re-spins, XI-game leaderboard, pool points, live external API during gameplay
 
 ---
 
-## 8. FUTBIN nation ID map (starter)
-
-Maintain `scripts/futbin-nation-ids.json` mapping `fifa_code` → FUTBIN nation id (e.g. `FRA` → 18). Populate from FUTBIN’s nation filter URLs when running the import script.
-
-Example filter pattern: `https://www.futbin.com/players?nation={id}` — import script paginates with delay.
-
----
-
-## 9. API quota estimate
+## 8. API quota estimate
 
 | Job | API-Football calls | Frequency |
 |-----|-------------------|-----------|
 | Full squad sync | ~48 | Once when squads announced; weekly during WC |
-| FUTBIN import | 0 (external scrape) | Same window as squad sync |
+| Rating overrides CSV | 0 | Optional one-time |
 | Gameplay | 0 | — |
 
 Existing cron budget for fixtures/results/odds is unchanged.
@@ -345,7 +286,7 @@ Existing cron budget for fixtures/results/odds is unchanged.
 |-------|--------|
 | Game type | 38-0-0-style spin draft → **full WC tournament sim** |
 | Win message | **You won the World Cup** or **knocked out at Round X** |
-| Data | **API-Football** for 26-man squads; **FUTBIN** for OVR/attrs (imported to DB) |
+| Data | **API-Football** for squads + OVR (stored in DB) |
 | Where it lives | Link **below leaderboards** in each pool |
 | Social | Optional **banter box** post — no competitive leaderboard |
 | When to ship data | **Provisional squads now**; final 26-man update later |
