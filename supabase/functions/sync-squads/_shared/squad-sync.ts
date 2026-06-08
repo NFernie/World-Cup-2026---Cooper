@@ -118,13 +118,36 @@ type SquadRow = {
 
 const SYNC_META_KEY = "spin_draft_sync";
 const MIN_HOURS_BETWEEN_SYNCS = 20;
-const DEFAULT_BUDGET_MS = 110_000;
+/** Stay under the platform edge-function wall (~60s) so the Dashboard always gets JSON. */
+const DEFAULT_BUDGET_MS = 50_000;
+
+export async function getSyncStatus(supabase: SupabaseClient): Promise<{
+  lastSyncedAt: string | null;
+  squadPlayerCount: number;
+}> {
+  const [metaResult, countResult] = await Promise.all([
+    supabase.from("app_settings").select("value").eq("key", SYNC_META_KEY).maybeSingle(),
+    supabase.from("squad_players").select("id", { count: "exact", head: true }),
+  ]);
+
+  if (metaResult.error) {
+    throw new Error(`Failed to read sync metadata: ${metaResult.error.message}`);
+  }
+  if (countResult.error) {
+    throw new Error(`Failed to count squad players: ${countResult.error.message}`);
+  }
+
+  const lastSyncedAt =
+    (metaResult.data?.value as { last_synced_at?: string } | null)?.last_synced_at ?? null;
+
+  return { lastSyncedAt, squadPlayerCount: countResult.count ?? 0 };
+}
 
 export async function syncSquads(
   supabase: SupabaseClient,
   apiKey: string,
   season: string,
-  opts: { force?: boolean; budgetMs?: number } = {},
+  opts: { force?: boolean; includeRatings?: boolean; budgetMs?: number } = {},
 ): Promise<{
   teams: number;
   players: number;
@@ -132,9 +155,11 @@ export async function syncSquads(
   errors: number;
   skipped?: boolean;
   lastSyncedAt?: string;
+  includeRatings?: boolean;
   note?: string;
 }> {
   const force = opts.force === true;
+  const includeRatings = opts.includeRatings === true;
   const budgetMs = opts.budgetMs ?? DEFAULT_BUDGET_MS;
   const startedAt = Date.now();
 
@@ -144,7 +169,17 @@ export async function syncSquads(
     .select("value")
     .eq("key", SYNC_META_KEY)
     .maybeSingle();
-  const lastSyncedAt = (metaResult?.data?.value as { last_synced_at?: string } | null)
+  if (metaResult.error) {
+    return {
+      teams: 0,
+      players: 0,
+      withApiRating: 0,
+      errors: 1,
+      includeRatings,
+      note: `Failed to read sync metadata: ${metaResult.error.message}`,
+    };
+  }
+  const lastSyncedAt = (metaResult.data?.value as { last_synced_at?: string } | null)
     ?.last_synced_at;
   if (!force && lastSyncedAt) {
     const ageHours = (Date.now() - new Date(lastSyncedAt).getTime()) / 3_600_000;
@@ -156,6 +191,7 @@ export async function syncSquads(
         errors: 0,
         skipped: true,
         lastSyncedAt,
+        includeRatings,
         note: `Already synced ${ageHours.toFixed(1)}h ago (min ${MIN_HOURS_BETWEEN_SYNCS}h). Pass {"force": true} to override.`,
       };
     }
@@ -166,17 +202,25 @@ export async function syncSquads(
     .select("id, api_football_team_id, fifa_code, global_fifa_rank")
     .not("api_football_team_id", "is", null);
 
-  if (teamsResult?.error) {
-    return { teams: 0, players: 0, withApiRating: 0, errors: 1, note: teamsResult.error.message };
+  if (teamsResult.error) {
+    return {
+      teams: 0,
+      players: 0,
+      withApiRating: 0,
+      errors: 1,
+      includeRatings,
+      note: teamsResult.error.message,
+    };
   }
 
-  const teams = (teamsResult?.data ?? []) as DbTeam[];
+  const teams = (teamsResult.data ?? []) as DbTeam[];
   if (teams.length === 0) {
     return {
       teams: 0,
       players: 0,
       withApiRating: 0,
       errors: 0,
+      includeRatings,
       note: "No teams have api_football_team_id yet — run sync-tournament-awards first.",
     };
   }
@@ -213,8 +257,10 @@ export async function syncSquads(
         continue;
       }
 
-      // 2. Season ratings (may be empty pre-tournament)
-      const ratings = await fetchSeasonRatings(apiKey, apiTeamId, season);
+      // 2. Season ratings (optional — skipped by default for fast Dashboard/cron roster sync)
+      const ratings = includeRatings
+        ? await fetchSeasonRatings(apiKey, apiTeamId, season)
+        : new Map<number, number>();
 
       const base = teamBaseRating(team.global_fifa_rank);
       const rows: SquadRow[] = [];
@@ -261,7 +307,7 @@ export async function syncSquads(
         const upsertResult = await supabase
           .from("squad_players")
           .upsert(rows, { onConflict: "team_id,api_football_player_id" });
-        if (upsertResult?.error) {
+        if (upsertResult.error) {
           errors += 1;
         } else {
           playersUpserted += rows.length;
@@ -291,8 +337,11 @@ export async function syncSquads(
     players: playersUpserted,
     withApiRating: apiRated,
     errors,
+    includeRatings,
     note: budgetReached
       ? "Time budget reached — run again (or wait for cron) to finish remaining teams."
-      : undefined,
+      : includeRatings
+        ? undefined
+        : "Roster-only sync (no season ratings). Pass {\"includeRatings\": true} for full rating refresh.",
   };
 }

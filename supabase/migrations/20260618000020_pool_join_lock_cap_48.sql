@@ -1,0 +1,81 @@
+-- When join_locked is on, still allow joins until the group reaches 48 players.
+
+create or replace function public.join_pool(
+  p_pool_id uuid,
+  p_display_name text
+)
+returns public.pool_members
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_team_id uuid;
+  v_join_order int;
+  v_round int;
+  v_mode public.team_assignment_mode;
+  v_locked boolean;
+  v_member_count int;
+  v_member public.pool_members;
+begin
+  if v_user_id is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  if exists (
+    select 1 from public.pool_members where pool_id = p_pool_id and user_id = v_user_id
+  ) then
+    raise exception 'Already a member of this pool';
+  end if;
+
+  select team_assignment_mode, join_locked
+  into v_mode, v_locked
+  from public.pools
+  where id = p_pool_id;
+
+  if v_mode is null then
+    raise exception 'Pool not found';
+  end if;
+
+  select count(*)::int into v_member_count
+  from public.pool_members
+  where pool_id = p_pool_id;
+
+  if v_locked and v_member_count >= 48 then
+    raise exception 'This group is full (48 players). The host has closed sign-ups.';
+  end if;
+
+  insert into public.profiles (id, email, username)
+  select
+    u.id,
+    u.email,
+    coalesce(
+      nullif(lower(trim(u.raw_user_meta_data->>'username')), ''),
+      lower(split_part(coalesce(u.email, ''), '@', 1))
+    )
+  from auth.users u
+  where u.id = v_user_id
+  on conflict (id) do nothing;
+
+  select coalesce(max(join_order), 0) + 1 into v_join_order
+  from public.pool_members where pool_id = p_pool_id;
+
+  v_round := (v_join_order - 1) / 48;
+
+  if v_mode = 'automatic' then
+    v_team_id := public.assign_team_for_pool_member(p_pool_id);
+  else
+    v_team_id := null;
+  end if;
+
+  insert into public.pool_members (
+    pool_id, user_id, display_name, assigned_team_id, join_order, assignment_round
+  ) values (
+    p_pool_id, v_user_id, p_display_name, v_team_id, v_join_order, v_round
+  )
+  returning * into v_member;
+
+  return v_member;
+end;
+$$;

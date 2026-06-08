@@ -366,8 +366,10 @@ export function PoolPage() {
                   </p>
                   <p className="text-xs text-[var(--muted)]">
                     {joinLocked
-                      ? 'New players cannot join this group.'
-                      : 'Close sign-ups to cap the group and block new players.'}
+                      ? playerCount >= TOTAL_NATIONS
+                        ? 'This group is full — no more players can join.'
+                        : `Sign-ups are closed, but new players can still join until the group reaches ${TOTAL_NATIONS} (${TOTAL_NATIONS - playerCount} spot${TOTAL_NATIONS - playerCount === 1 ? '' : 's'} left).`
+                      : `Close sign-ups to cap the group at ${TOTAL_NATIONS} players.`}
                   </p>
                 </div>
                 <Button
