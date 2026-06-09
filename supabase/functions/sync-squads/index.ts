@@ -2,6 +2,7 @@
  * Import World Cup 2026 national-team squads + derived ratings into public.squad_players.
  * Env: API_FOOTBALL_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
  * Optional: API_FOOTBALL_SEASON (default 2026)
+ * Optional: API_FOOTBALL_FRIENDLIES_LEAGUE_ID (default 10 — International Friendlies)
  *
  * POST body (all optional):
  *   { "force": true }           — bypass once-per-day guard

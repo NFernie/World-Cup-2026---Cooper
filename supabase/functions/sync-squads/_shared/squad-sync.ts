@@ -104,26 +104,76 @@ async function fetchSeasonRatings(
   return ratings;
 }
 
-/** Infer LB/ST/etc. from the most recent national-team lineup with grid data. */
+function extractFixtureIds(payload: Record<string, unknown> | null): number[] {
+  const rows = (payload?.response ?? []) as Record<string, unknown>[];
+  const ids: number[] = [];
+  for (const row of rows) {
+    const fixture = row.fixture as Record<string, unknown> | undefined;
+    const id = fixture?.id as number | undefined;
+    if (id) ids.push(id);
+  }
+  return ids;
+}
+
+/**
+ * Collect recent fixture ids for a national team — any competition plus
+ * explicit International Friendlies (league 10 on API-Sports v3).
+ */
+async function collectPositionFixtureIds(
+  apiKey: string,
+  apiTeamId: number,
+  opts: { friendliesLeagueId: string; seasons: string[] },
+): Promise<number[]> {
+  const seen = new Set<number>();
+  const ordered: number[] = [];
+
+  const addIds = (ids: number[]) => {
+    for (const id of ids) {
+      if (!seen.has(id)) {
+        seen.add(id);
+        ordered.push(id);
+      }
+    }
+  };
+
+  // 1. Recent friendlies (best pre-tournament source for lineup grids)
+  for (const season of opts.seasons) {
+    const res = await fetch(
+      `${API_BASE}/fixtures?league=${opts.friendliesLeagueId}&season=${season}&team=${apiTeamId}&status=FT&last=5`,
+      { headers: apiHeaders(apiKey) },
+    );
+    if (res.ok) {
+      addIds(extractFixtureIds(await res.json().catch(() => null)));
+    }
+    await new Promise((r) => setTimeout(r, 80));
+  }
+
+  // 2. Any recent national-team fixtures (qualifiers, Nations League, etc.)
+  const anyRes = await fetch(`${API_BASE}/fixtures?team=${apiTeamId}&last=10`, {
+    headers: apiHeaders(apiKey),
+  });
+  if (anyRes.ok) {
+    addIds(extractFixtureIds(await anyRes.json().catch(() => null)));
+  }
+
+  return ordered;
+}
+
+/** Infer LB/ST/etc. from recent lineups (friendlies first, then any national fixture). */
 async function fetchLineupPositionCodes(
   apiKey: string,
   apiTeamId: number,
+  season: string,
 ): Promise<Map<number, string>> {
   const codes = new Map<number, string>();
-  const fixturesRes = await fetch(
-    `${API_BASE}/fixtures?team=${apiTeamId}&last=8`,
-    { headers: apiHeaders(apiKey) },
-  );
-  if (!fixturesRes.ok) return codes;
+  const friendliesLeagueId = Deno.env.get("API_FOOTBALL_FRIENDLIES_LEAGUE_ID") ?? "10";
+  const priorSeason = String(parseInt(season, 10) - 1);
+  const fixtureIds = await collectPositionFixtureIds(apiKey, apiTeamId, {
+    friendliesLeagueId,
+    seasons: [season, priorSeason],
+  });
 
-  const fixturesPayload = await fixturesRes.json().catch(() => null);
-  const fixtures = (fixturesPayload?.response ?? []) as Record<string, unknown>[];
-
-  for (const row of fixtures) {
-    const fixture = row.fixture as Record<string, unknown> | undefined;
-    const fixtureId = fixture?.id as number | undefined;
-    if (!fixtureId) continue;
-
+  for (const fixtureId of fixtureIds) {
     const lineupsRes = await fetch(
       `${API_BASE}/fixtures/lineups?fixture=${fixtureId}&team=${apiTeamId}`,
       { headers: apiHeaders(apiKey) },
@@ -131,7 +181,10 @@ async function fetchLineupPositionCodes(
     if (!lineupsRes.ok) continue;
 
     const lineupsPayload = await lineupsRes.json().catch(() => null);
-    const lineup = (lineupsPayload?.response?.[0] ?? null) as Record<string, unknown> | null;
+    const response = (lineupsPayload?.response ?? []) as Record<string, unknown>[];
+    const lineup = response.find(
+      (r) => (r.team as Record<string, unknown> | undefined)?.id === apiTeamId,
+    ) ?? response[0] ?? null;
     if (!lineup) continue;
 
     const formation = String(lineup.formation ?? "");
@@ -148,7 +201,7 @@ async function fetchLineupPositionCodes(
       if (code) codes.set(id, code);
     }
 
-    if (codes.size > 0) break;
+    if (codes.size >= 8) break;
   }
 
   return codes;
@@ -333,7 +386,7 @@ export async function syncSquads(
 
       // 3. Specific positions from recent lineups (LB, ST, etc.) when requested
       const lineupCodes = includePositions
-        ? await fetchLineupPositionCodes(apiKey, apiTeamId)
+        ? await fetchLineupPositionCodes(apiKey, apiTeamId, season)
         : new Map<number, string>();
 
       const base = teamBaseRating(team.global_fifa_rank);
