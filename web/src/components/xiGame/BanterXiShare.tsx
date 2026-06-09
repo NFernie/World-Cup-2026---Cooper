@@ -1,3 +1,7 @@
+import { Link } from 'react-router-dom'
+import { Dices } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { XiPitch } from '@/components/xiGame/XiPitch'
 import { getFormation } from '@/lib/xiGame/formations'
 import {
   isXiGameBanterMetadata,
@@ -5,18 +9,18 @@ import {
   type XiGameBanterMetadata,
 } from '@/lib/xiGame/banterShare'
 import { exitRoundLabel } from '@/lib/xiGame/simulate'
-import { XiPitch } from '@/components/xiGame/XiPitch'
 
 type Props = {
   metadata: unknown
+  poolId: string
 }
 
-export function BanterXiShare({ metadata }: Props) {
+export function BanterXiShare({ metadata, poolId }: Props) {
   if (!isXiGameBanterMetadata(metadata)) return null
-  return <BanterXiShareCard meta={metadata} />
+  return <BanterXiShareCard meta={metadata} poolId={poolId} />
 }
 
-function BanterXiShareCard({ meta }: { meta: XiGameBanterMetadata }) {
+function BanterXiShareCard({ meta, poolId }: { meta: XiGameBanterMetadata; poolId: string }) {
   const formation = getFormation(meta.formationId)
   const picks = metadataToDraftPicks(meta)
 
@@ -32,6 +36,11 @@ function BanterXiShareCard({ meta }: { meta: XiGameBanterMetadata }) {
         {meta.formationName} · Rating {meta.squadOvr} · Group {meta.groupRecord}
       </p>
       <XiPitch formation={formation} picks={picks} size="share" showRatings />
+      <Button asChild className="mt-2 w-full sm:w-auto">
+        <Link to={`/pools/${poolId}/xi-game`}>
+          <Dices className="h-4 w-4" /> Have a crack!
+        </Link>
+      </Button>
     </div>
   )
 }

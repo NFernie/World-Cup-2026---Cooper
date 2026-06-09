@@ -126,7 +126,9 @@ export function BanterBox({ poolId, memberId, displayName, userId }: Props) {
               <p className="text-xs text-[var(--muted)]">{formatMessageTime(item.created_at)}</p>
             </div>
             <p className="mt-1 whitespace-pre-wrap text-sm">{item.message}</p>
-            {item.metadata_json != null && <BanterXiShare metadata={item.metadata_json} />}
+            {item.metadata_json != null && (
+              <BanterXiShare metadata={item.metadata_json} poolId={poolId} />
+            )}
           </div>
         ))}
         {!messagesQuery.isLoading && messages.length === 0 && (

@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarDays, Dices, Lock, Share2, Shield, Trophy, Unlock } from 'lucide-react'
+import { BookOpen, CalendarDays, Dices, Lock, Share2, Shield, Trophy, Unlock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { BanterBox } from '@/components/BanterBox'
+import { GameRulesDialog } from '@/components/GameRulesDialog'
 import { CoManagerBanner } from '@/components/CoManagerBanner'
 import {
   NextTeamMatchCountdown,
@@ -40,6 +42,7 @@ export function PoolPage() {
   const { poolId } = useParams<{ poolId: string }>()
   const { user, isSuperAdmin } = useAuth()
   const queryClient = useQueryClient()
+  const [rulesOpen, setRulesOpen] = useState(false)
 
   const poolQuery = useQuery({
     queryKey: ['pool', poolId],
@@ -239,6 +242,9 @@ export function PoolPage() {
           <p className="text-sm text-[var(--muted)]">World Cup 2026</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={() => setRulesOpen(true)}>
+            <BookOpen className="h-4 w-4" /> Game rules
+          </Button>
           <Button variant="outline" size="sm" onClick={shareGroup}>
             <Share2 className="h-4 w-4" /> Share group
           </Button>
@@ -251,6 +257,8 @@ export function PoolPage() {
           )}
         </div>
       </div>
+
+      <GameRulesDialog open={rulesOpen} onClose={() => setRulesOpen(false)} />
 
       <WorldCupCountdown firstKickoffAt={firstKickoffQuery.data} />
 

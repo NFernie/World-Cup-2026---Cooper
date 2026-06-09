@@ -31,13 +31,13 @@ export function XiPitch({
   return (
     <div
       className={`rounded-xl bg-[color-mix(in_srgb,var(--fifa-green,#1f7a3d)_10%,var(--background))] ${
-        share ? 'space-y-3 p-4' : 'space-y-2 p-3'
+        share ? 'space-y-2 p-3' : 'space-y-2 p-3'
       }`}
     >
       {rows.map((row, rowIndex) => (
         <div
           key={rowIndex}
-          className={`flex flex-wrap justify-center ${share ? 'gap-2.5 sm:gap-3' : 'gap-2'}`}
+          className={`flex flex-wrap justify-center ${share ? 'gap-1.5' : 'gap-2'}`}
         >
           {row.map((slot) => {
             const pick = bySlot.get(slot.id)
@@ -59,37 +59,37 @@ export function XiPitch({
             }
 
             const slotClass = share
-              ? `min-h-[88px] w-[calc(50%-0.375rem)] min-w-[120px] max-w-[168px] rounded-lg border px-2 py-2 text-center sm:w-[calc(33.333%-0.75rem)] sm:min-w-[128px]`
+              ? `min-h-[72px] w-[calc(25%-0.45rem)] min-w-0 max-w-[100px] shrink-0 rounded-lg border px-1 py-1.5 text-center`
               : `w-[80px] rounded-lg border px-1 py-1.5 text-center`
 
             const content = (
               <>
                 <span
                   className={`block font-semibold uppercase tracking-wide text-[var(--muted)] ${
-                    share ? 'text-[11px]' : 'text-[10px]'
+                    share ? 'text-[9px]' : 'text-[10px]'
                   }`}
                 >
                   {slot.label}
                 </span>
                 {pick ? (
-                  <span className={`mt-1 flex flex-col items-center gap-1 ${share ? '' : 'gap-0.5'}`}>
+                  <span className={`mt-0.5 flex flex-col items-center ${share ? 'gap-0.5' : 'gap-0.5'}`}>
                     <TeamFlag
                       fifaCode={pick.team.fifa_code}
-                      size={share ? 24 : 16}
+                      size={share ? 18 : 16}
                       title={pick.team.name}
-                      className={share ? '!h-4 !w-6' : '!h-3 !w-[18px]'}
+                      className={share ? '!h-3 !w-[18px]' : '!h-3 !w-[18px]'}
                     />
                     <span
-                      className={`font-medium leading-snug text-[var(--foreground)] ${
+                      className={`font-medium text-[var(--foreground)] ${
                         share
-                          ? 'w-full break-words text-xs sm:text-sm'
+                          ? 'w-full break-words text-[10px] leading-tight'
                           : 'max-w-[72px] truncate text-[11px]'
                       }`}
                     >
                       {pick.player.name}
                     </span>
                     {showRatings && (
-                      <span className={`font-bold tabular-nums ${share ? 'text-sm' : 'text-[11px]'}`}>
+                      <span className={`font-bold tabular-nums ${share ? 'text-[10px]' : 'text-[11px]'}`}>
                         {effectiveRating(pick)}
                         {pick.placementFit !== 'natural' && (
                           <span className="text-fifa-gold">*</span>
