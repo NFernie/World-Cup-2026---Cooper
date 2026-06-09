@@ -3,12 +3,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { MessageCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
+import { BanterXiShare } from '@/components/xiGame/BanterXiShare'
 import { supabase } from '@/lib/supabase'
 
 type BanterMessage = {
   id: string
   display_name: string
   message: string
+  metadata_json: unknown
   created_at: string
 }
 
@@ -38,7 +40,7 @@ export function BanterBox({ poolId, memberId, displayName, userId }: Props) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('pool_banter_messages')
-        .select('id, display_name, message, created_at')
+        .select('id, display_name, message, metadata_json, created_at')
         .eq('pool_id', poolId)
         .order('created_at', { ascending: false })
         .limit(50)
@@ -124,6 +126,7 @@ export function BanterBox({ poolId, memberId, displayName, userId }: Props) {
               <p className="text-xs text-[var(--muted)]">{formatMessageTime(item.created_at)}</p>
             </div>
             <p className="mt-1 whitespace-pre-wrap text-sm">{item.message}</p>
+            {item.metadata_json != null && <BanterXiShare metadata={item.metadata_json} />}
           </div>
         ))}
         {!messagesQuery.isLoading && messages.length === 0 && (

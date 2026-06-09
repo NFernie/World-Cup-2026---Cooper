@@ -82,6 +82,7 @@ export interface Database {
           user_id: string
           display_name: string
           message: string
+          metadata_json: Record<string, unknown> | null
           created_at: string
         }
         Insert: {
@@ -90,6 +91,7 @@ export interface Database {
           user_id: string
           display_name: string
           message: string
+          metadata_json?: Record<string, unknown> | null
         }
       }
       pool_members: {

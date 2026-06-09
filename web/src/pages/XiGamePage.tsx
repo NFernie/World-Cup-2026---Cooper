@@ -9,23 +9,18 @@ import { TeamFlag } from '@/components/TeamFlag'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import type { PoolOutletContext } from '@/pages/PoolShell'
-import {
-  FORMATIONS,
-  getFormation,
-  pitchRows,
-  type Formation,
-  type FormationSlot,
-} from '@/lib/xiGame/formations'
+import { FORMATIONS, getFormation, type FormationSlot } from '@/lib/xiGame/formations'
+import { XiPitch } from '@/components/xiGame/XiPitch'
 import { TournamentRun } from '@/components/xiGame/TournamentRun'
+import { buildXiGameBanterMetadata, banterSummaryText } from '@/lib/xiGame/banterShare'
 import { autoDraftWithRounds } from '@/lib/xiGame/autoDraft'
 import { isComplete, openSlots, spinTeam } from '@/lib/xiGame/draft'
 import { fetchAllSquadPlayers } from '@/lib/xiGame/squads'
 import type { TournamentRunResult } from '@/lib/xiGame/matchPresentation'
 import { exitRoundLabel } from '@/lib/xiGame/simulate'
-import { formatPositionLabel, placementFit, placementHint } from '@/lib/xiGame/positions'
+import { formatPositionLabel } from '@/lib/xiGame/positions'
 import {
   buildDraftPick,
-  effectiveRating,
   type DraftPick,
   type GameTeam,
   type SquadPlayer,
@@ -112,7 +107,6 @@ export function XiGamePage() {
   }, [squadsQuery.data])
 
   const formation = getFormation(formationId)
-  const rows = pitchRows(formation)
   const usedTeamIds = picks.map((p) => p.team.id)
   const usedPlayerIds = new Set(picks.map((p) => p.player.id))
   const round = picks.length + 1
@@ -231,7 +225,8 @@ export function XiGamePage() {
         pool_member_id: member.id,
         user_id: user!.id,
         display_name: member.display_name,
-        message: banterMessage(result, formation),
+        message: banterSummaryText(result, formation),
+        metadata_json: buildXiGameBanterMetadata(picks, formation, result),
       })
       if (error) throw error
       setBanterPosted(true)
@@ -360,8 +355,8 @@ export function XiGamePage() {
               </p>
               <p className="text-xs text-[var(--muted)]">{formation.name}</p>
             </div>
-            <Pitch
-              rows={rows}
+            <XiPitch
+              formation={formation}
               picks={picks}
               selectedPlayer={selectedPlayer}
               openSlotIds={openSlotIds}
@@ -483,7 +478,7 @@ export function XiGamePage() {
 
           <Card className="p-4">
             <p className="mb-3 text-sm font-semibold">Your XI</p>
-            <Pitch rows={rows} picks={picks} showRatings openSlotIds={new Set()} />
+            <XiPitch formation={formation} picks={picks} size="share" showRatings />
           </Card>
 
           <Card className="space-y-3 p-4">
@@ -491,7 +486,9 @@ export function XiGamePage() {
               <p className="text-sm font-medium text-fifa-green">Posted to the Banter Box.</p>
             ) : (
               <>
-                <p className="text-sm text-[var(--muted)]">Share your result with the group.</p>
+                <p className="text-sm text-[var(--muted)]">
+                  Share your result and full XI with the group so others can see your squad.
+                </p>
                 <Button variant="outline" onClick={postToBanter} disabled={posting}>
                   {posting ? 'Posting…' : 'Post to banter box'}
                 </Button>
@@ -538,108 +535,3 @@ function GameFrame({ children }: { children: React.ReactNode }) {
   )
 }
 
-function Pitch({
-  rows,
-  picks,
-  selectedPlayer,
-  openSlotIds,
-  onSlotClick,
-  showRatings,
-}: {
-  rows: FormationSlot[][]
-  picks: DraftPick[]
-  selectedPlayer?: SquadPlayer | null
-  openSlotIds: Set<string>
-  onSlotClick?: (slot: FormationSlot) => void
-  showRatings?: boolean
-}) {
-  const bySlot = new Map(picks.map((p) => [p.slotId, p]))
-
-  return (
-    <div className="space-y-2 rounded-xl bg-[color-mix(in_srgb,var(--fifa-green,#1f7a3d)_10%,var(--background))] p-3">
-      {rows.map((row, rowIndex) => (
-        <div key={rowIndex} className="flex flex-wrap justify-center gap-2">
-          {row.map((slot) => {
-            const pick = bySlot.get(slot.id)
-            const isOpen = openSlotIds.has(slot.id)
-            const selecting = Boolean(selectedPlayer) && isOpen
-            const fit = selectedPlayer ? placementFit(selectedPlayer, slot) : null
-            const natural = fit === 'natural'
-            const wrongSlot = fit === 'wrong_slot'
-
-            let stateClass = 'border-dashed border-[var(--border)] bg-[var(--card)]/60'
-            if (pick) {
-              stateClass = 'border-[var(--primary)]/40 bg-[var(--primary)]/5'
-            } else if (selecting) {
-              stateClass = natural
-                ? 'border-fifa-green bg-fifa-green/15 ring-1 ring-fifa-green'
-                : wrongSlot
-                  ? 'border-amber-500 bg-amber-500/15 ring-1 ring-amber-500'
-                  : 'border-fifa-gold bg-fifa-gold/15 ring-1 ring-fifa-gold'
-            }
-
-            const content = (
-              <>
-                <span className="block text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">
-                  {slot.label}
-                </span>
-                {pick ? (
-                  <span className="mt-0.5 flex items-center justify-center gap-1">
-                    <TeamFlag fifaCode={pick.team.fifa_code} size={16} className="!h-3 !w-[18px]" />
-                    <span className="max-w-[64px] truncate text-[11px] font-medium">
-                      {pick.player.name}
-                    </span>
-                    {showRatings && (
-                      <span className="text-[11px] font-bold tabular-nums">
-                        {effectiveRating(pick)}
-                        {pick.placementFit !== 'natural' && (
-                          <span className="text-fifa-gold">*</span>
-                        )}
-                      </span>
-                    )}
-                  </span>
-                ) : (
-                  <span className="mt-0.5 block text-[10px] text-[var(--muted)]">
-                    {selecting && fit
-                      ? placementHint(fit)
-                      : 'Empty'}
-                  </span>
-                )}
-              </>
-            )
-
-            return selecting && onSlotClick ? (
-              <button
-                key={slot.id}
-                type="button"
-                onClick={() => onSlotClick(slot)}
-                className={`w-[80px] rounded-lg border px-1 py-1.5 text-center transition-colors ${stateClass}`}
-              >
-                {content}
-              </button>
-            ) : (
-              <div
-                key={slot.id}
-                className={`w-[80px] rounded-lg border px-1 py-1.5 text-center ${stateClass}`}
-              >
-                {content}
-              </div>
-            )
-          })}
-        </div>
-      ))}
-      {showRatings && picks.some((p) => p.placementFit !== 'natural') && (
-        <p className="pt-1 text-center text-[10px] text-[var(--muted)]">
-          * wrong role (−5%) or wrong area (−10%)
-        </p>
-      )}
-    </div>
-  )
-}
-
-function banterMessage(result: TournamentRunResult, formation: Formation): string {
-  if (result.outcome === 'won') {
-    return `🏆 I won the World Cup! ${formation.name} · Squad rating ${result.squadOvr}. Can you beat that?`
-  }
-  return `😤 Knocked out in the ${exitRoundLabel(result.exitRound)} (${formation.name}, rating ${result.squadOvr}). Your turn — can you win the World Cup?`
-}
