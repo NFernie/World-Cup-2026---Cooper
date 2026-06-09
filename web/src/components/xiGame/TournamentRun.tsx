@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { FastForward, Play } from 'lucide-react'
+import { ChevronDown, ChevronUp, FastForward, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
+import { CommentaryFeed } from '@/components/xiGame/CommentaryFeed'
 import {
   buildMatchPresentation,
   buildTournamentSchedule,
@@ -14,6 +15,7 @@ import {
   type TournamentRunResult,
 } from '@/lib/xiGame/matchPresentation'
 import type { DraftPick } from '@/lib/xiGame/types'
+
 type SubPhase = 'preview' | 'playing' | 'match_result'
 
 type Props = {
@@ -50,6 +52,7 @@ export function TournamentRun({ picks, onComplete }: Props) {
   const [current, setCurrent] = useState<PlayedMatch | null>(null)
   const [subPhase, setSubPhase] = useState<SubPhase>('preview')
   const [commentaryIndex, setCommentaryIndex] = useState(0)
+  const [showFullCommentary, setShowFullCommentary] = useState(true)
 
   const nextPreview = remainingSchedule(played)[0] ?? null
 
@@ -82,6 +85,7 @@ export function TournamentRun({ picks, onComplete }: Props) {
     const match = buildMatchPresentation(nextPreview, picks, outcome, Math.random)
     setCurrent(match)
     setSubPhase('playing')
+    setShowFullCommentary(true)
   }
 
   function skipAll() {
@@ -169,7 +173,6 @@ export function TournamentRun({ picks, onComplete }: Props) {
   }
 
   if (subPhase === 'playing' && current) {
-    const visible = current.commentary.slice(0, commentaryIndex + 1)
     return (
       <Card className="space-y-3 p-5">
         <CardTitle className="text-lg">
@@ -178,13 +181,11 @@ export function TournamentRun({ picks, onComplete }: Props) {
         <p className="text-sm text-[var(--muted)]">
           Rating {current.userOvr} vs {current.opponentOvr}
         </p>
-        <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 font-mono text-xs leading-relaxed">
-          {visible.map((line, i) => (
-            <p key={i} className={line.includes('GOOOAL') ? 'font-bold text-[var(--primary)]' : ''}>
-              {line}
-            </p>
-          ))}
-        </div>
+        <CommentaryFeed
+          lines={current.commentary}
+          limit={commentaryIndex + 1}
+          className="max-h-64 overflow-y-auto font-mono"
+        />
       </Card>
     )
   }
@@ -193,31 +194,67 @@ export function TournamentRun({ picks, onComplete }: Props) {
     const won = current.outcome === 'win'
     const drew = current.outcome === 'draw'
     return (
-      <Card className="space-y-4 p-5 text-center">
-        <CardTitle className="text-xl">
-          {won ? 'Victory!' : drew ? 'Draw' : 'Defeat'}
-        </CardTitle>
-        <p className="text-3xl font-bold tabular-nums">
-          {current.score.user} – {current.score.opponent}
-        </p>
-        <p className="text-sm text-[var(--muted)]">
-          Your XI vs {current.opponentName}
-        </p>
+      <Card className="space-y-4 p-5">
+        <div className="text-center">
+          <CardTitle className="text-xl">
+            {won ? 'Victory!' : drew ? 'Draw' : 'Defeat'}
+          </CardTitle>
+          <p className="mt-2 text-3xl font-bold tabular-nums">
+            {current.score.user} – {current.score.opponent}
+          </p>
+          <p className="text-sm text-[var(--muted)]">
+            Your XI vs {current.opponentName}
+          </p>
+        </div>
+
         {current.goals.length > 0 && (
-          <ul className="mx-auto max-w-sm space-y-1 text-left text-xs text-[var(--muted)]">
+          <ul className="mx-auto max-w-sm space-y-2 text-left">
             {current.goals.map((g, i) => (
-              <li key={i}>
-                {g.minute}&apos; {g.scorer} ({g.team === 'user' ? 'You' : current.opponentName})
+              <li
+                key={i}
+                className="rounded-md border border-fifa-gold/30 bg-fifa-gold/10 px-3 py-2"
+              >
+                <p className="text-sm font-extrabold uppercase text-fifa-gold">
+                  {g.minute}&apos; GOOOOAL!
+                </p>
+                <p className="text-sm font-semibold text-fifa-gold">
+                  {g.scorer} ({g.team === 'user' ? 'Your XI' : current.opponentName})
+                </p>
               </li>
             ))}
           </ul>
         )}
-        <Button onClick={continueAfterMatch} className="w-full sm:w-auto">
-          {remainingSchedule([...played, current]).length === 0 &&
-          (current.isKnockout && current.outcome === 'win')
-            ? 'See final result'
-            : 'Next match'}
-        </Button>
+
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={() => setShowFullCommentary((v) => !v)}
+            className="flex w-full items-center justify-between rounded-lg border border-[var(--border)] px-3 py-2 text-left text-sm font-semibold hover:bg-[var(--primary)]/5"
+          >
+            Match commentary (min-by-min)
+            {showFullCommentary ? (
+              <ChevronUp className="h-4 w-4 shrink-0" />
+            ) : (
+              <ChevronDown className="h-4 w-4 shrink-0" />
+            )}
+          </button>
+          {showFullCommentary && (
+            <CommentaryFeed
+              lines={current.commentary}
+              className="max-h-72 overflow-y-auto font-mono"
+            />
+          )}
+        </div>
+
+        <div className="text-center">
+          <Button onClick={continueAfterMatch} className="w-full sm:w-auto">
+            {remainingSchedule([...played, current]).length === 0 &&
+            current.isKnockout &&
+            current.outcome === 'win'
+              ? 'See final result'
+              : 'Next match'}
+          </Button>
+        </div>
       </Card>
     )
   }

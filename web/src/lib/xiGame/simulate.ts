@@ -58,12 +58,34 @@ export type GoalEvent = {
   team: 'user' | 'opponent'
 }
 
+export type CommentaryEventType =
+  | 'kickoff'
+  | 'chance'
+  | 'foul'
+  | 'free_kick'
+  | 'corner'
+  | 'yellow_card'
+  | 'penalty_awarded'
+  | 'penalty_saved'
+  | 'goal'
+  | 'halftime'
+  | 'fulltime'
+
+export type CommentaryLine = {
+  minute: number
+  type: CommentaryEventType
+  text: string
+  scorer?: string
+  team?: 'user' | 'opponent'
+  teamLabel?: string
+}
+
 export type PlayedMatch = TournamentMatchPreview & {
   userOvr: number
   outcome: MatchOutcome
   score: { user: number; opponent: number }
   goals: GoalEvent[]
-  commentary: string[]
+  commentary: CommentaryLine[]
 }
 
 const GROUP_OPPONENTS = [
@@ -193,31 +215,180 @@ function distributeGoals(
   return goals.sort((a, b) => a.minute - b.minute)
 }
 
-const COMMENTARY_OPENERS = [
-  'Kicks off!',
-  'Early pressure from {user}.',
-  '{opponent} settle into shape.',
-  'End-to-end stuff in the opening minutes.',
-  '{user} win a dangerous free kick.',
-  '{opponent} break at pace.',
-  'Huge save keeps the score level.',
-  'The crowd roars as {user} surge forward.',
-  '{opponent} sit deep and soak it up.',
-  'Tactical chess — neither side giving an inch.',
+const COMMENTARY_CHANCE = [
+  '{user} carve out a half-chance.',
+  '{opponent} probe down the right.',
+  'Shot from distance — comfortably wide.',
+  '{user} win a corner but nothing comes of it.',
+  'Brilliant run — final ball just evades the striker.',
+  '{opponent} hit the woodwork! Still level.',
+  'Keeper spills it — cleared off the line!',
+  '{user} string passes together in the final third.',
+]
+
+const COMMENTARY_FOUL = [
+  'Late challenge — free kick to {team}.',
+  'Referee blows for a foul on {team}.',
+  'Scrappy midfield battle — play stopped.',
+  '{team} win a soft free kick wide.',
+]
+
+const COMMENTARY_FREE_KICK = [
+  'Dangerous free kick for {team}… whipped in and cleared.',
+  '{team} line up a set piece — headed away.',
+  'Free kick floated in — the defence deals with it.',
+]
+
+const COMMENTARY_CORNER = [
+  'Corner for {team} — headed clear at the near post.',
+  '{team} swing one in from the corner flag.',
+]
+
+const COMMENTARY_YELLOW = [
+  'Yellow card shown — {team} need to calm down.',
+  'Booking for a cynical foul by {team}.',
+]
+
+const COMMENTARY_PENALTY_AWARDED = [
+  'PENALTY! The referee points to the spot for {team}!',
+  'VAR check… penalty confirmed for {team}!',
+  'Handball in the box — {team} awarded a penalty!',
+]
+
+const COMMENTARY_PENALTY_SAVED = [
+  'Saved! The keeper denies {team} from the spot!',
+  'Penalty struck — brilliant save!',
 ]
 
 const COMMENTARY_GOAL = [
-  "GOOOAL! {scorer} finishes for {team}!",
-  '{scorer} buries it — {team} lead!',
-  'What a strike! {scorer} makes it count.',
+  'GOOOOOOAL! {scorer} scores for {team}!',
+  'The crowd goes wild! {scorer} finds the net for {team}!',
+  'GOOOAL! What a finish from {scorer} — {team} are on the scoresheet!',
+  '{scorer} buries it! {team} erupt!',
+  'Back of the net! {scorer} makes no mistake for {team}!',
+  'Sensational strike! {scorer} wheels away in celebration for {team}!',
 ]
 
-const COMMENTARY_CLOSERS = [
-  'Half-time — all to play for.',
-  'Second half underway.',
-  'Tense final ten minutes.',
-  'Full time.',
+const COMMENTARY_HALFTIME = [
+  'Half-time whistle — all to play for.',
+  'Interval — managers will have plenty to say.',
 ]
+
+const COMMENTARY_SECOND_HALF = [
+  'Second half underway.',
+  'We\'re back for the second 45.',
+]
+
+const COMMENTARY_LATE = [
+  'Tense final ten minutes.',
+  'Stoppage time approaching — everything on the line.',
+  'The crowd are on their feet.',
+]
+
+function pickTemplate(templates: string[], rng: () => number): string {
+  return templates[Math.floor(rng() * templates.length)]
+}
+
+function fillLabels(
+  template: string,
+  userLabel: string,
+  oppLabel: string,
+  team?: 'user' | 'opponent',
+): string {
+  const teamLabel = team === 'user' ? userLabel : team === 'opponent' ? oppLabel : ''
+  return template
+    .replaceAll('{user}', userLabel)
+    .replaceAll('{opponent}', oppLabel)
+    .replaceAll('{team}', teamLabel)
+}
+
+function goalCommentaryLine(
+  g: GoalEvent,
+  userLabel: string,
+  oppLabel: string,
+  rng: () => number,
+): CommentaryLine {
+  const teamLabel = g.team === 'user' ? userLabel : oppLabel
+  const template = pickTemplate(COMMENTARY_GOAL, rng)
+  return {
+    minute: g.minute,
+    type: 'goal',
+    text: template.replace('{scorer}', g.scorer).replace('{team}', teamLabel),
+    scorer: g.scorer,
+    team: g.team,
+    teamLabel,
+  }
+}
+
+function buildFillerEvent(
+  minute: number,
+  userLabel: string,
+  oppLabel: string,
+  rng: () => number,
+): CommentaryLine {
+  const roll = rng()
+  const side: 'user' | 'opponent' = rng() < 0.5 ? 'user' : 'opponent'
+
+  if (roll < 0.14) {
+    return {
+      minute,
+      type: 'foul',
+      text: fillLabels(pickTemplate(COMMENTARY_FOUL, rng), userLabel, oppLabel, side),
+    }
+  }
+  if (roll < 0.22) {
+    return {
+      minute,
+      type: 'free_kick',
+      text: fillLabels(pickTemplate(COMMENTARY_FREE_KICK, rng), userLabel, oppLabel, side),
+    }
+  }
+  if (roll < 0.28) {
+    return {
+      minute,
+      type: 'corner',
+      text: fillLabels(pickTemplate(COMMENTARY_CORNER, rng), userLabel, oppLabel, side),
+    }
+  }
+  if (roll < 0.33) {
+    return {
+      minute,
+      type: 'yellow_card',
+      text: fillLabels(pickTemplate(COMMENTARY_YELLOW, rng), userLabel, oppLabel, side),
+    }
+  }
+  if (roll < 0.38) {
+    const penaltySide: 'user' | 'opponent' = rng() < 0.5 ? 'user' : 'opponent'
+    if (rng() < 0.35) {
+      return {
+        minute,
+        type: 'penalty_saved',
+        text: fillLabels(
+          pickTemplate(COMMENTARY_PENALTY_SAVED, rng),
+          userLabel,
+          oppLabel,
+          penaltySide,
+        ),
+      }
+    }
+    return {
+      minute,
+      type: 'penalty_awarded',
+      text: fillLabels(
+        pickTemplate(COMMENTARY_PENALTY_AWARDED, rng),
+        userLabel,
+        oppLabel,
+        penaltySide,
+      ),
+    }
+  }
+
+  return {
+    minute,
+    type: 'chance',
+    text: fillLabels(pickTemplate(COMMENTARY_CHANCE, rng), userLabel, oppLabel),
+  }
+}
 
 export function buildMatchPresentation(
   preview: TournamentMatchPreview,
@@ -231,40 +402,76 @@ export function buildMatchPresentation(
   const oppGoals = distributeGoals(score.opponent, picks, 'opponent', rng)
   const goals = [...userGoals, ...oppGoals].sort((a, b) => a.minute - b.minute)
 
-  const commentary: string[] = []
+  const commentary: CommentaryLine[] = []
   const userLabel = 'Your XI'
   const oppLabel = preview.opponentName
 
-  commentary.push(
-    COMMENTARY_OPENERS[0].replace('{user}', userLabel).replace('{opponent}', oppLabel),
-  )
+  commentary.push({
+    minute: 0,
+    type: 'kickoff',
+    text: `Kicks off! ${userLabel} vs ${oppLabel}.`,
+  })
 
+  const eventMinutes = new Set<number>()
+  for (let m = 4; m <= 88; m += 4 + Math.floor(rng() * 5)) {
+    eventMinutes.add(m)
+  }
+  for (const g of goals) eventMinutes.add(g.minute)
+  eventMinutes.add(45)
+  eventMinutes.add(46)
+  eventMinutes.add(85)
+  eventMinutes.add(90)
+
+  const sortedMinutes = [...eventMinutes].sort((a, b) => a - b)
   let goalIdx = 0
-  for (let minute = 5; minute <= 90; minute += 7 + Math.floor(rng() * 6)) {
+
+  for (const minute of sortedMinutes) {
     while (goalIdx < goals.length && goals[goalIdx].minute <= minute) {
-      const g = goals[goalIdx]
-      const teamName = g.team === 'user' ? userLabel : oppLabel
-      const line = COMMENTARY_GOAL[Math.floor(rng() * COMMENTARY_GOAL.length)]
-        .replace('{scorer}', g.scorer)
-        .replace('{team}', teamName)
-      commentary.push(`${g.minute}' ${line}`)
+      commentary.push(goalCommentaryLine(goals[goalIdx], userLabel, oppLabel, rng))
       goalIdx++
     }
-    if (commentary.length >= 14) break
-    const template = COMMENTARY_OPENERS[1 + Math.floor(rng() * (COMMENTARY_OPENERS.length - 1))]
-    commentary.push(`${minute}' ${template.replace('{user}', userLabel).replace('{opponent}', oppLabel)}`)
+
+    if (minute === 45) {
+      commentary.push({
+        minute: 45,
+        type: 'halftime',
+        text: pickTemplate(COMMENTARY_HALFTIME, rng),
+      })
+      continue
+    }
+    if (minute === 46) {
+      commentary.push({
+        minute: 46,
+        type: 'kickoff',
+        text: pickTemplate(COMMENTARY_SECOND_HALF, rng),
+      })
+      continue
+    }
+    if (minute === 85) {
+      commentary.push({
+        minute: 85,
+        type: 'chance',
+        text: pickTemplate(COMMENTARY_LATE, rng),
+      })
+      continue
+    }
+    if (minute === 90) continue
+
+    commentary.push(buildFillerEvent(minute, userLabel, oppLabel, rng))
   }
 
   while (goalIdx < goals.length) {
-    const g = goals[goalIdx]
-    const teamName = g.team === 'user' ? userLabel : oppLabel
-    commentary.push(
-      `${g.minute}' ${COMMENTARY_GOAL[0].replace('{scorer}', g.scorer).replace('{team}', teamName)}`,
-    )
+    commentary.push(goalCommentaryLine(goals[goalIdx], userLabel, oppLabel, rng))
     goalIdx++
   }
 
-  commentary.push(COMMENTARY_CLOSERS[COMMENTARY_CLOSERS.length - 1])
+  commentary.push({
+    minute: 90,
+    type: 'fulltime',
+    text: `Full time — ${userLabel} ${score.user}, ${oppLabel} ${score.opponent}.`,
+  })
+
+  commentary.sort((a, b) => a.minute - b.minute || (a.type === 'goal' ? 1 : 0))
 
   return {
     ...preview,

@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useOutletContext, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Dices, Info, RotateCcw, Trophy } from 'lucide-react'
+import { ArrowLeft, Dices, Info, RotateCcw, Sparkles, Trophy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -17,7 +17,9 @@ import {
   type FormationSlot,
 } from '@/lib/xiGame/formations'
 import { TournamentRun } from '@/components/xiGame/TournamentRun'
+import { autoDraftWithRounds } from '@/lib/xiGame/autoDraft'
 import { isComplete, openSlots, spinTeam } from '@/lib/xiGame/draft'
+import { fetchAllSquadPlayers } from '@/lib/xiGame/squads'
 import type { TournamentRunResult } from '@/lib/xiGame/matchPresentation'
 import { exitRoundLabel } from '@/lib/xiGame/simulate'
 import { formatPositionLabel, placementFit, placementHint } from '@/lib/xiGame/positions'
@@ -29,7 +31,7 @@ import {
   type SquadPlayer,
 } from '@/lib/xiGame/types'
 
-type Phase = 'setup' | 'drafting' | 'tournament' | 'result'
+type Phase = 'setup' | 'auto_drafting' | 'drafting' | 'tournament' | 'result'
 
 const TOTAL_ROUNDS = 11
 const GAME_TITLE = 'Can you win the World Cup?'
@@ -48,6 +50,8 @@ export function XiGamePage() {
   const [banterPosted, setBanterPosted] = useState(false)
   const [banterError, setBanterError] = useState<string | null>(null)
   const [posting, setPosting] = useState(false)
+  const [autoDraftRounds, setAutoDraftRounds] = useState<ReturnType<typeof autoDraftWithRounds>>([])
+  const [autoDraftIndex, setAutoDraftIndex] = useState(0)
 
   const settingQuery = useQuery({
     queryKey: ['app-setting', 'spin_draft'],
@@ -79,16 +83,7 @@ export function XiGamePage() {
 
   const squadsQuery = useQuery({
     queryKey: ['xi-game-squads'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('squad_players')
-        .select(
-          'id, team_id, name, position, position_code, position_detail, shirt_number, photo_url, overall_rating',
-        )
-        .order('overall_rating', { ascending: false })
-      if (error) throw error
-      return (data ?? []) as SquadPlayer[]
-    },
+    queryFn: fetchAllSquadPlayers,
   })
 
   const memberQuery = useQuery({
@@ -126,15 +121,44 @@ export function XiGamePage() {
   const squadsReady = (squadsQuery.data?.length ?? 0) > 0
   const provisional = settingQuery.data?.squads_provisional !== false
 
-  function startGame() {
+  function resetSession() {
     setPicks([])
     setCurrentTeam(null)
     setSelectedPlayer(null)
     setResult(null)
     setBanterPosted(false)
     setBanterError(null)
+    setAutoDraftRounds([])
+    setAutoDraftIndex(0)
+  }
+
+  function startGame() {
+    resetSession()
     setPhase('drafting')
   }
+
+  function startAutoFill() {
+    const teams = (teamsQuery.data ?? []).filter((t) => squadsByTeam.has(t.id))
+    if (teams.length === 0) return
+    const rounds = autoDraftWithRounds(formation, teams, squadsByTeam)
+    resetSession()
+    setAutoDraftRounds(rounds)
+    setAutoDraftIndex(0)
+    setPhase('auto_drafting')
+  }
+
+  useEffect(() => {
+    if (phase !== 'auto_drafting' || autoDraftRounds.length === 0) return
+    const timer = window.setTimeout(() => {
+      if (autoDraftIndex + 1 >= autoDraftRounds.length) {
+        setPicks(autoDraftRounds.map((r) => r.pick))
+        setPhase('tournament')
+      } else {
+        setAutoDraftIndex((i) => i + 1)
+      }
+    }, 700)
+    return () => window.clearTimeout(timer)
+  }, [phase, autoDraftIndex, autoDraftRounds])
 
   function spin() {
     const teams = (teamsQuery.data ?? []).filter((t) => squadsByTeam.has(t.id))
@@ -275,10 +299,55 @@ export function XiGamePage() {
                 : 'Squads have not been loaded yet. Check back once the squad sync has run.'}
             </p>
           ) : (
-            <Button onClick={startGame} className="w-full sm:w-auto">
-              <Dices className="h-4 w-4" /> Start drafting
-            </Button>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button onClick={startGame} className="w-full sm:w-auto">
+                <Dices className="h-4 w-4" /> Start drafting
+              </Button>
+              <Button variant="outline" onClick={startAutoFill} className="w-full sm:w-auto">
+                <Sparkles className="h-4 w-4" /> Auto-fill team
+              </Button>
+            </div>
           )}
+          {squadsReady && (
+            <p className="text-xs text-[var(--muted)]">
+              Auto-fill spins 11 nations, drafts the best natural-fit players, and jumps straight
+              to kick-off.
+            </p>
+          )}
+        </Card>
+      )}
+
+      {phase === 'auto_drafting' && autoDraftRounds.length > 0 && (
+        <Card className="space-y-4 p-5 text-center">
+          <CardTitle className="text-lg">Auto-filling your XI…</CardTitle>
+          <CardDescription>
+            Round {Math.min(autoDraftIndex + 1, TOTAL_ROUNDS)} of {TOTAL_ROUNDS}
+          </CardDescription>
+          {autoDraftRounds[autoDraftIndex] && (
+            <div className="flex flex-col items-center gap-3 py-4">
+              <div className="animate-pulse">
+                <Dices className="h-10 w-10 text-[var(--primary)]" aria-hidden />
+              </div>
+              <TeamFlag
+                fifaCode={autoDraftRounds[autoDraftIndex].team.fifa_code}
+                size={48}
+                title={autoDraftRounds[autoDraftIndex].team.name}
+              />
+              <p className="font-semibold">{autoDraftRounds[autoDraftIndex].team.name}</p>
+              {autoDraftIndex > 0 && (
+                <p className="text-xs text-[var(--muted)]">
+                  Placed{' '}
+                  <strong>{autoDraftRounds[autoDraftIndex - 1].pick.player.name}</strong> at{' '}
+                  {autoDraftRounds[autoDraftIndex - 1].pick.slotLabel}
+                </p>
+              )}
+            </div>
+          )}
+          <div className="mx-auto flex max-w-xs flex-wrap justify-center gap-1">
+            {autoDraftRounds.slice(0, autoDraftIndex).map((r) => (
+              <TeamFlag key={r.round} fifaCode={r.team.fifa_code} size={20} title={r.team.name} />
+            ))}
+          </div>
         </Card>
       )}
 
@@ -429,9 +498,14 @@ export function XiGamePage() {
                 {banterError && <p className="text-sm text-red-600">{banterError}</p>}
               </>
             )}
-            <Button onClick={startGame}>
-              <RotateCcw className="h-4 w-4" /> Play again
-            </Button>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button onClick={startGame}>
+                <RotateCcw className="h-4 w-4" /> Draft again
+              </Button>
+              <Button variant="outline" onClick={startAutoFill}>
+                <Sparkles className="h-4 w-4" /> Auto-fill again
+              </Button>
+            </div>
           </Card>
 
           {assignedTeamName && (

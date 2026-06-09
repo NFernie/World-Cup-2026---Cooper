@@ -4,6 +4,8 @@ export {
   determineMatchOutcome,
   simulateTournamentFull,
   squadOverall,
+  type CommentaryEventType,
+  type CommentaryLine,
   type GoalEvent,
   type MatchOutcome,
   type PlayedMatch,
