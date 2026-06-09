@@ -63,6 +63,117 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
 }
 
+type RosterPlayer = {
+  id: number;
+  name: string;
+  positionDetail: string | null;
+  shirtNumber: number | null;
+  photoUrl: string | null;
+};
+
+/** Current squad from /players/squads (API's registered national-team roster). */
+async function fetchSquadsRoster(
+  apiKey: string,
+  apiTeamId: number,
+): Promise<RosterPlayer[]> {
+  const res = await fetch(`${API_BASE}/players/squads?team=${apiTeamId}`, {
+    headers: apiHeaders(apiKey),
+  });
+  if (!res.ok) return [];
+  const payload = await res.json().catch(() => null);
+  const squad = (payload?.response?.[0]?.players ?? []) as Record<string, unknown>[];
+  if (!Array.isArray(squad)) return [];
+
+  const players: RosterPlayer[] = [];
+  for (const p of squad) {
+    const id = p.id as number | undefined;
+    const name = String(p.name ?? "").trim();
+    if (!id || !name) continue;
+    players.push({
+      id,
+      name,
+      positionDetail: (p.position as string | null) ?? null,
+      shirtNumber: (p.number as number | null) ?? null,
+      photoUrl: (p.photo as string | null) ?? null,
+    });
+  }
+  return players;
+}
+
+/**
+ * WC season roster from /players?team=&season= — often has the full 26-man list
+ * after FIFA squad submission even when /players/squads is still thin.
+ */
+async function fetchSeasonRoster(
+  apiKey: string,
+  apiTeamId: number,
+  season: string,
+): Promise<RosterPlayer[]> {
+  const players: RosterPlayer[] = [];
+  const seen = new Set<number>();
+  let page = 1;
+  let totalPages = 1;
+
+  do {
+    const res = await fetch(
+      `${API_BASE}/players?team=${apiTeamId}&season=${season}&page=${page}`,
+      { headers: apiHeaders(apiKey) },
+    );
+    if (!res.ok) break;
+    const payload = await res.json();
+    totalPages = payload?.paging?.total ?? 1;
+
+    for (const row of payload.response ?? []) {
+      const player = row.player as Record<string, unknown> | undefined;
+      const stats = (row.statistics as Record<string, unknown>[] | undefined) ?? [];
+      const id = player?.id as number | undefined;
+      const name = String(player?.name ?? "").trim();
+      if (!id || !name || seen.has(id)) continue;
+      seen.add(id);
+
+      const stat = stats[0] as Record<string, unknown> | undefined;
+      const games = stat?.games as Record<string, unknown> | undefined;
+      players.push({
+        id,
+        name,
+        positionDetail: (games?.position as string | null) ??
+          (player?.position as string | null) ?? null,
+        shirtNumber: (games?.number as number | null) ?? null,
+        photoUrl: (player?.photo as string | null) ?? null,
+      });
+    }
+
+    page += 1;
+    await new Promise((r) => setTimeout(r, 80));
+  } while (page <= totalPages && page <= 5);
+
+  return players;
+}
+
+/** Prefer the larger of squads vs season roster (target ~26 after FIFA deadline). */
+async function fetchBestRoster(
+  apiKey: string,
+  apiTeamId: number,
+  season: string,
+): Promise<{ players: RosterPlayer[]; source: "squads" | "season" | "both" }> {
+  const squads = await fetchSquadsRoster(apiKey, apiTeamId);
+  await new Promise((r) => setTimeout(r, 80));
+
+  // After FIFA's 1 June deadline, season endpoint should have the full WC squad.
+  if (squads.length >= 22) {
+    return { players: squads, source: "squads" };
+  }
+
+  const seasonRoster = await fetchSeasonRoster(apiKey, apiTeamId, season);
+  if (seasonRoster.length > squads.length) {
+    return { players: seasonRoster, source: "season" };
+  }
+  if (squads.length > 0) {
+    return { players: squads, source: "squads" };
+  }
+  return { players: seasonRoster, source: seasonRoster.length > 0 ? "season" : "squads" };
+}
+
 /** Average season rating per api player id from /players?team=&season= (paginated). */
 async function fetchSeasonRatings(
   apiKey: string,
@@ -263,6 +374,7 @@ export async function syncSquads(
   players: number;
   withApiRating: number;
   withPositionCode: number;
+  teamsAtFullSquad: number;
   errors: number;
   skipped?: boolean;
   lastSyncedAt?: string;
@@ -288,6 +400,7 @@ export async function syncSquads(
       players: 0,
       withApiRating: 0,
       withPositionCode: 0,
+      teamsAtFullSquad: 0,
       errors: 1,
       includeRatings,
       includePositions,
@@ -304,6 +417,7 @@ export async function syncSquads(
         players: 0,
         withApiRating: 0,
         withPositionCode: 0,
+        teamsAtFullSquad: 0,
         errors: 0,
         skipped: true,
         lastSyncedAt,
@@ -325,6 +439,7 @@ export async function syncSquads(
       players: 0,
       withApiRating: 0,
       withPositionCode: 0,
+      teamsAtFullSquad: 0,
       errors: 1,
       includeRatings,
       includePositions,
@@ -339,6 +454,7 @@ export async function syncSquads(
       players: 0,
       withApiRating: 0,
       withPositionCode: 0,
+      teamsAtFullSquad: 0,
       errors: 0,
       includeRatings,
       includePositions,
@@ -350,60 +466,35 @@ export async function syncSquads(
   let playersUpserted = 0;
   let apiRated = 0;
   let positionCoded = 0;
+  let teamsAtFullSquad = 0;
   let errors = 0;
   let budgetReached = false;
   const now = new Date().toISOString();
+  const rosterByTeam = new Map<string, SquadRow[]>();
 
+  // Phase 1 — rosters for every nation (no position calls; must complete all 48).
   for (const team of teams) {
-    if (Date.now() - startedAt > budgetMs) {
-      budgetReached = true;
-      break;
-    }
     const apiTeamId = team.api_football_team_id;
     if (!apiTeamId) continue;
 
     try {
-      // 1. Roster from /players/squads
-      const res = await fetch(`${API_BASE}/players/squads?team=${apiTeamId}`, {
-        headers: apiHeaders(apiKey),
-      });
-      if (!res.ok) {
+      const { players: roster } = await fetchBestRoster(apiKey, apiTeamId, season);
+      if (roster.length === 0) {
         errors += 1;
-        await new Promise((r) => setTimeout(r, 120));
         continue;
       }
-      const payload = await res.json().catch(() => null);
-      const squad = (payload?.response?.[0]?.players ?? []) as Record<string, unknown>[];
-      if (!Array.isArray(squad) || squad.length === 0) {
-        await new Promise((r) => setTimeout(r, 120));
-        continue;
-      }
+      if (roster.length >= 24) teamsAtFullSquad += 1;
 
-      // 2. Season ratings (optional — skipped by default for fast Dashboard/cron roster sync)
       const ratings = includeRatings
         ? await fetchSeasonRatings(apiKey, apiTeamId, season)
         : new Map<number, number>();
 
-      // 3. Specific positions from recent lineups (LB, ST, etc.) when requested
-      const lineupCodes = includePositions
-        ? await fetchLineupPositionCodes(apiKey, apiTeamId, season)
-        : new Map<number, string>();
-
       const base = teamBaseRating(team.global_fifa_rank);
       const rows: SquadRow[] = [];
-      const seenIds = new Set<number>();
 
-      for (const p of squad) {
-        const rawId = (p.id as number | undefined) ?? null;
-        // Skip duplicate or null ids to keep the onConflict upsert safe.
-        if (rawId == null || seenIds.has(rawId)) continue;
-        seenIds.add(rawId);
-
-        const name = String(p.name ?? "").trim();
-        if (!name) continue;
-        const positionDetail = (p.position as string | null) ?? null;
-        const position = normalizePosition(positionDetail);
-        const apiRating = ratings.get(rawId);
+      for (const p of roster) {
+        const position = normalizePosition(p.positionDetail);
+        const apiRating = ratings.get(p.id);
 
         let overall: number;
         let source: string;
@@ -412,22 +503,19 @@ export async function syncSquads(
           source = "api";
           apiRated += 1;
         } else {
-          overall = clamp(base + nameOffset(name), 52, 90);
+          overall = clamp(base + nameOffset(p.name), 52, 90);
           source = "fallback";
         }
 
-        const positionCode = lineupCodes.get(rawId) ?? null;
-        if (positionCode) positionCoded += 1;
-
         rows.push({
           team_id: team.id,
-          api_football_player_id: rawId,
-          name,
+          api_football_player_id: p.id,
+          name: p.name,
           position,
-          position_code: positionCode,
-          position_detail: positionDetail,
-          shirt_number: (p.number as number | null) ?? null,
-          photo_url: (p.photo as string | null) ?? null,
+          position_code: null,
+          position_detail: p.positionDetail,
+          shirt_number: p.shirtNumber,
+          photo_url: p.photoUrl,
           overall_rating: overall,
           rating_source: source,
           synced_at: now,
@@ -443,18 +531,53 @@ export async function syncSquads(
         } else {
           playersUpserted += rows.length;
           teamsDone += 1;
+          rosterByTeam.set(team.id, rows);
         }
       }
     } catch (_err) {
       errors += 1;
     }
 
-    await new Promise((r) => setTimeout(r, 120));
+    await new Promise((r) => setTimeout(r, 100));
   }
 
-  // Only record the daily timestamp when the full set completed, so a
-  // budget-truncated run lets the next invocation continue.
-  if (!budgetReached) {
+  // Phase 2 — position codes (optional; may truncate on time budget).
+  if (includePositions) {
+    for (const team of teams) {
+      if (Date.now() - startedAt > budgetMs) {
+        budgetReached = true;
+        break;
+      }
+      const apiTeamId = team.api_football_team_id;
+      if (!apiTeamId) continue;
+      const existing = rosterByTeam.get(team.id);
+      if (!existing || existing.length === 0) continue;
+
+      try {
+        const lineupCodes = await fetchLineupPositionCodes(apiKey, apiTeamId, season);
+        if (lineupCodes.size === 0) continue;
+
+        const updated = existing.map((row) => {
+          const playerId = row.api_football_player_id ?? -1;
+          const code = lineupCodes.get(playerId) ?? row.position_code;
+          if (lineupCodes.has(playerId)) positionCoded += 1;
+          return { ...row, position_code: code, synced_at: now };
+        });
+
+        const upsertResult = await supabase
+          .from("squad_players")
+          .upsert(updated, { onConflict: "team_id,api_football_player_id" });
+        if (upsertResult.error) errors += 1;
+      } catch (_err) {
+        errors += 1;
+      }
+
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
+
+  const rostersComplete = teamsDone >= teams.length;
+  if (rostersComplete && !budgetReached) {
     await supabase
       .from("app_settings")
       .upsert(
@@ -463,18 +586,26 @@ export async function syncSquads(
       );
   }
 
+  const expectedPlayers = 48 * 26;
+  let note: string | undefined;
+  if (budgetReached) {
+    note = "Rosters synced; position enrichment hit time budget — will continue tomorrow.";
+  } else if (playersUpserted < expectedPlayers * 0.8) {
+    note =
+      `Only ${playersUpserted} players (expected ~${expectedPlayers}). Run {"force": true} after checking API has 26-man squads for season ${season}.`;
+  } else if (!includeRatings && !includePositions) {
+    note = "Roster-only sync. Pass {\"includeRatings\": true} or {\"includePositions\": true} for enrichment.";
+  }
+
   return {
     teams: teamsDone,
     players: playersUpserted,
     withApiRating: apiRated,
     withPositionCode: positionCoded,
+    teamsAtFullSquad,
     errors,
     includeRatings,
     includePositions,
-    note: budgetReached
-      ? "Time budget reached — run again (or wait for cron) to finish remaining teams."
-      : includeRatings || includePositions
-        ? undefined
-        : "Roster-only sync. Pass {\"includeRatings\": true} or {\"includePositions\": true} for enrichment.",
+    note,
   };
 }
