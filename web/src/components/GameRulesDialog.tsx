@@ -6,14 +6,26 @@ type Props = {
   onClose: () => void
 }
 
-const RULES = [
+type Rule = {
+  title: string
+  body: string
+  bullets?: readonly string[]
+}
+
+const RULES: readonly Rule[] = [
   {
     title: 'Classic',
     body: 'Teams are ranked based on overall standing in the tournament.',
   },
   {
     title: 'Odds Based',
-    body: 'The winner of each match will gain points based on the odds to win or draw. For example England Vs Croatia, 2:10 to win. If Croatia win they get 10 points and England 0. Both teams get points on a draw.',
+    body: 'In this format your team will gain points based on official betting odds. It is designed to favour lower ranked teams who overperform in the group stage.',
+    bullets: [
+      'Each match can gain points based on betting odds determined 2hrs before Kick-Off.',
+      'If your team wins it gains the number of points determined by odds on to Win',
+      'The losing team earns no points',
+      'In the case of a draw, the lower ranked team gains points equal to the draw odds. The higher rank team gains points equal to the draw odds/2.',
+    ],
   },
   {
     title: 'Golden Boot / Glove',
@@ -27,7 +39,7 @@ const RULES = [
     title: "People's champion",
     body: 'Lowest Rank team to make it out of the group stage is our competitions peoples champion.',
   },
-] as const
+]
 
 export function GameRulesDialog({ open, onClose }: Props) {
   if (!open) return null
@@ -59,6 +71,13 @@ export function GameRulesDialog({ open, onClose }: Props) {
             <li key={rule.title}>
               <p className="font-semibold text-[var(--foreground)]">{rule.title}</p>
               <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">{rule.body}</p>
+              {rule.bullets && (
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-relaxed text-[var(--muted)]">
+                  {rule.bullets.map((bullet) => (
+                    <li key={bullet}>{bullet}</li>
+                  ))}
+                </ul>
+              )}
             </li>
           ))}
         </ul>
