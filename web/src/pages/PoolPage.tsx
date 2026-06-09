@@ -442,6 +442,9 @@ export function PoolPage() {
             <Dices className="h-7 w-7 text-[var(--primary)]" aria-hidden />
           </div>
           <CardTitle className="text-xl">Can you win the World Cup?</CardTitle>
+          <p className="mt-1 text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">
+            Beta
+          </p>
           <CardDescription className="mx-auto mt-2 max-w-sm">
             Spin a random nation, draft an XI into your formation, and see how far your dream
             team goes. Just for fun — it doesn&apos;t affect your sweep.
