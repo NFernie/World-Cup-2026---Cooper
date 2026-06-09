@@ -30,8 +30,8 @@ const BASE_LEADERBOARD_OPTIONS = [
   { id: 'odds', label: 'Odds leaderboard' },
   { id: 'golden-boot', label: 'Golden Boot' },
   { id: 'golden-glove', label: 'Golden Glove' },
-  { id: 'eliminations', label: 'Group eliminations' },
-  { id: 'knockout', label: 'Knockout qualifiers' },
+  { id: 'eliminations', label: 'Wooden spoon' },
+  { id: 'knockout', label: "People's champion" },
 ] as const
 
 type LeaderboardId = (typeof BASE_LEADERBOARD_OPTIONS)[number]['id']
@@ -199,7 +199,8 @@ export function LeaderboardsPage() {
   const member = memberQuery.data
   const bootLeader = goldenBootLb.data?.[0]
   const gloveLeader = goldenGloveLb.data?.[0]
-  const lowestKnockout = knockoutQuery.data?.[0]
+  const woodenSpoonHolder = eliminationsQuery.data?.[0]
+  const peoplesChampion = knockoutQuery.data?.[0]
 
   const boardMeta = useMemo(
     () => leaderboardOptions.find((o) => o.id === board) ?? leaderboardOptions[0],
@@ -469,57 +470,64 @@ export function LeaderboardsPage() {
 
       {show('eliminations') && (
         <section className={board === 'all' ? 'space-y-3 border-b border-[var(--border)] pb-8' : ''}>
-          <h2 className="mb-2 text-lg font-semibold">Group stage eliminations</h2>
+          <h2 className="mb-2 text-lg font-semibold">Wooden spoon</h2>
           <p className="mb-3 text-sm text-[var(--muted)]">
-            Nations eliminated in the group stage, ordered by global FIFA rank.
+            Group-stage exits ranked highest FIFA rank first — the top team holds the wooden spoon.
           </p>
+          {woodenSpoonHolder && (
+            <p className="mb-3 rounded-lg border border-[var(--team-primary)]/40 px-3 py-2 text-sm">
+              Wooden spoon: <strong>{woodenSpoonHolder.team_name}</strong>
+            </p>
+          )}
           <div className="space-y-2">
-            {eliminationsQuery.data?.map((row, i) => (
-              <LeaderboardRow
-                key={row.team_id}
-                highlight={assignedTeamId === row.team_id}
-              >
-                <div className="flex items-center gap-3">
-                  <img
-                    src={getFlagUrl(row.fifa_code, 80)}
-                    alt=""
-                    className="h-8 w-12 rounded object-cover"
-                  />
-                  <div className="min-w-0">
-                    <span className="font-medium">
-                      {row.team_name} #{i + 1}
-                    </span>
-                    <p className="text-xs text-[var(--muted)]">
-                      {formatFifaWorldRanking(row.global_fifa_rank)}
-                    </p>
+            {eliminationsQuery.data?.map((row, i) => {
+              const isSpoon = row.team_id === woodenSpoonHolder?.team_id
+              const you = assignedTeamId === row.team_id
+              return (
+                <LeaderboardRow key={row.team_id} highlight={you || isSpoon}>
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={getFlagUrl(row.fifa_code, 80)}
+                      alt=""
+                      className="h-8 w-12 rounded object-cover"
+                    />
+                    <div className="min-w-0">
+                      <span className="font-medium">
+                        {row.team_name} #{i + 1}
+                      </span>
+                      <p className="text-xs text-[var(--muted)]">
+                        {formatFifaWorldRanking(row.global_fifa_rank)}
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <span className="text-xs text-[var(--muted)]">
-                  {row.group_letter ? `Group ${row.group_letter}` : 'eliminated'}
-                </span>
-              </LeaderboardRow>
-            ))}
+                  <span className="text-xs text-[var(--muted)]">
+                    {row.group_letter ? `Group ${row.group_letter}` : 'eliminated'}
+                  </span>
+                </LeaderboardRow>
+              )
+            })}
           </div>
         </section>
       )}
 
       {show('knockout') && (
         <section className={board === 'all' ? 'space-y-3' : ''}>
-          <h2 className="mb-2 text-lg font-semibold">Knockout qualifiers</h2>
+          <h2 className="mb-2 text-lg font-semibold">People&apos;s champion</h2>
           <p className="mb-3 text-sm text-[var(--muted)]">
-            Teams that advanced from the groups into the knockout round.
+            Teams through the group stage, ranked lowest FIFA rank first — the top team is
+            people&apos;s champion.
           </p>
-          {lowestKnockout && (
+          {peoplesChampion && (
             <p className="mb-3 rounded-lg border border-[var(--team-primary)]/40 px-3 py-2 text-sm">
-              Lowest-ranked qualifier: <strong>{lowestKnockout.team_name}</strong>
+              People&apos;s champion: <strong>{peoplesChampion.team_name}</strong>
             </p>
           )}
           <div className="space-y-2">
             {knockoutQuery.data?.map((row, i) => {
-              const isLowest = row.team_id === lowestKnockout?.team_id
+              const isChampion = row.team_id === peoplesChampion?.team_id
               const you = assignedTeamId === row.team_id
               return (
-                <LeaderboardRow key={row.team_id} highlight={you || isLowest}>
+                <LeaderboardRow key={row.team_id} highlight={you || isChampion}>
                   <div className="flex items-center gap-3">
                     <img
                       src={getFlagUrl(row.fifa_code, 80)}

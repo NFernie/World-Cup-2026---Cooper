@@ -431,7 +431,8 @@ export function PoolPage() {
             </div>
             <CardTitle className="text-xl">Sweep leaderboards</CardTitle>
             <CardDescription className="mx-auto mt-2 max-w-sm">
-              Overall standings, odds points, Golden Boot, Golden Glove, and knockout boards.
+              Overall standings, odds points, Golden Boot, Golden Glove, wooden spoon, and
+              people&apos;s champion.
             </CardDescription>
             <Button asChild size="lg" className="mx-auto mt-5 w-full max-w-xs shadow-sm">
               <Link to="leaderboards">
