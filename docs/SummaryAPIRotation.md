@@ -83,7 +83,19 @@ $body = '{"force":true,"includeRatings":true,"includePositions":true}'
 Invoke-RestMethod -Uri $uri -Method Post -ContentType "application/json; charset=utf-8" -Body $body
 ```
 
-Or open the GET URL above in a browser (may take ~50s per run). You should see JSON with `"ok": true`, `"partial": true`, and `"ratingsBudgetReached": true` — **re-run the same URL** until `ratingsBudgetReached` is gone (~8–10 runs for all ~1,200 players).
+Run **ratings and positions separately** after deploy:
+
+```
+# Ratings only (after api/fallback cleared)
+?force=true&includeRatings=true
+
+# Positions only — batched per club (~5 API calls/club, not per player)
+?force=true&includePositions=true
+```
+
+Position runs report `clubsProcessed`, `withPositionCode`, `positionApiCalls`, and `positionsSkipped`. Re-run until `position_code` null count stops falling.
+
+Or open the GET URL in a browser (may take up to ~4 min per run).
 
 Older deployments returned HTTP **500** even when ratings were syncing (Supabase logged `EDGE_FUNCTION_ERROR`). Check `withApiRating` in the JSON body; if it increases each run, progress is working.
 
