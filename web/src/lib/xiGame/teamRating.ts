@@ -2,6 +2,16 @@ import type { SquadPlayer } from './types'
 
 const WC_SQUAD_SIZE = 26
 
+/** Loose blend: FIFA rank anchor vs Top-11 squad average (Phase 1). */
+export const FIFA_TEAM_OVR_WEIGHT = 0.55
+export const TOP11_TEAM_OVR_WEIGHT = 0.45
+
+/** Nation OVR from FIFA world ranking (same curve as sync fallback). */
+export function fifaTeamOvr(globalFifaRank: number | null | undefined): number {
+  if (globalFifaRank == null || globalFifaRank <= 0) return 70
+  return Math.round(Math.min(86, Math.max(58, 86 - (globalFifaRank - 1) * 0.32)))
+}
+
 /** Rated players only; capped at a typical 26-man World Cup squad. */
 export function squadPlayersForTeamRating(players: SquadPlayer[]): SquadPlayer[] {
   return players
@@ -51,4 +61,18 @@ export function teamTop11AverageRating(players: SquadPlayer[]): number {
   if (top.length === 0) return 0
   const sum = top.reduce((total, p) => total + p.overall_rating, 0)
   return Math.round(sum / top.length)
+}
+
+/**
+ * Tournament opponent strength: 55% FIFA rank anchor + 45% Top-11 squad average.
+ * Falls back to FIFA-only when no rated players exist.
+ */
+export function teamAnchoredOvr(
+  players: SquadPlayer[],
+  globalFifaRank: number | null | undefined,
+): number {
+  const fifa = fifaTeamOvr(globalFifaRank)
+  const top11 = teamTop11AverageRating(players)
+  if (top11 <= 0) return fifa
+  return Math.round(FIFA_TEAM_OVR_WEIGHT * fifa + TOP11_TEAM_OVR_WEIGHT * top11)
 }

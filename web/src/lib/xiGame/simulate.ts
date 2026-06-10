@@ -2,6 +2,8 @@ export { exitRoundLabel } from './exitRounds'
 export { buildTournamentSchedule, buildOpponentPool } from './tournamentSchedule'
 export type { BuildTournamentScheduleInput, RatedOpponent } from './tournamentSchedule'
 export {
+  fifaTeamOvr,
+  teamAnchoredOvr,
   teamSquadAverageRating,
   teamBestXIAverageRating,
   teamTop11AverageRating,

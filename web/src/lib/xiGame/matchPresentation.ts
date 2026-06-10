@@ -5,6 +5,8 @@ export {
   determineMatchOutcome,
   simulateTournamentFull,
   squadOverall,
+  fifaTeamOvr,
+  teamAnchoredOvr,
   teamBestXIAverageRating,
   teamSquadAverageRating,
   teamTop11AverageRating,
