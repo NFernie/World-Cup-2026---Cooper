@@ -57,7 +57,9 @@ Update password managers / notes where the old key was stored.
 
 ## Manual `sync-squads` (2025 domestic baselines)
 
-Ratings refresh needs `force` + `includeRatings`. The sync is **slow** (~1 API call per player); re-run until `ratingsBudgetReached` is absent.
+Ratings refresh needs `force` + `includeRatings`. ~1 API call per **legacy** player (`api` / `fallback`); already-migrated `domestic_2025` rows are skipped so each re-run advances to new nations (e.g. Scotland / Robertson). Re-run until `ratingsBudgetReached` is absent and SQL counts stabilise.
+
+**Timeout:** default internal budget is **4 minutes** (`API_FOOTBALL_SYNC_BUDGET_MS=240000`). In Supabase Dashboard → Edge Functions → `sync-squads` → increase **wall-clock timeout** (e.g. 300s) to match, or the platform may cut the run short before the budget is used.
 
 **curl (reliable):**
 
