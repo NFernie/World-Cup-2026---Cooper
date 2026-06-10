@@ -5,7 +5,6 @@ import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { CommentaryFeed } from '@/components/xiGame/CommentaryFeed'
 import {
   buildMatchPresentation,
-  buildTournamentSchedule,
   determineMatchOutcome,
   MATCH_COMMENTARY_MS,
   simulateTournamentFull,
@@ -20,6 +19,7 @@ type SubPhase = 'preview' | 'playing' | 'match_result'
 
 type Props = {
   picks: DraftPick[]
+  schedule: TournamentMatchPreview[]
   onComplete: (result: TournamentRunResult) => void
 }
 
@@ -33,20 +33,22 @@ function groupPoints(matches: PlayedMatch[]): number {
   return points
 }
 
-function remainingSchedule(played: PlayedMatch[]): TournamentMatchPreview[] {
-  const all = buildTournamentSchedule()
+function remainingSchedule(
+  schedule: TournamentMatchPreview[],
+  played: PlayedMatch[],
+): TournamentMatchPreview[] {
   const playedIds = new Set(played.map((m) => m.id))
   const points = groupPoints(played)
   const groupDone = played.filter((m) => m.stage === 'group').length >= 3
 
-  return all.filter((m) => {
+  return schedule.filter((m) => {
     if (playedIds.has(m.id)) return false
     if (m.isKnockout && (!groupDone || points < 4)) return false
     return true
   })
 }
 
-export function TournamentRun({ picks, onComplete }: Props) {
+export function TournamentRun({ picks, schedule, onComplete }: Props) {
   const userOvr = useMemo(() => squadOverall(picks), [picks])
   const [played, setPlayed] = useState<PlayedMatch[]>([])
   const [current, setCurrent] = useState<PlayedMatch | null>(null)
@@ -54,7 +56,7 @@ export function TournamentRun({ picks, onComplete }: Props) {
   const [commentaryIndex, setCommentaryIndex] = useState(0)
   const [showFullCommentary, setShowFullCommentary] = useState(true)
 
-  const nextPreview = remainingSchedule(played)[0] ?? null
+  const nextPreview = remainingSchedule(schedule, played)[0] ?? null
 
   useEffect(() => {
     if (subPhase !== 'playing' || !current) return
@@ -89,7 +91,7 @@ export function TournamentRun({ picks, onComplete }: Props) {
   }
 
   function skipAll() {
-    onComplete(simulateTournamentFull(picks))
+    onComplete(simulateTournamentFull(picks, schedule))
   }
 
   function continueAfterMatch() {
@@ -125,7 +127,7 @@ export function TournamentRun({ picks, onComplete }: Props) {
       return
     }
 
-    const remaining = remainingSchedule(nextPlayed)
+    const remaining = remainingSchedule(schedule, nextPlayed)
     if (remaining.length === 0) {
       onComplete({
         outcome: 'won',
@@ -248,7 +250,7 @@ export function TournamentRun({ picks, onComplete }: Props) {
 
         <div className="text-center">
           <Button onClick={continueAfterMatch} className="w-full sm:w-auto">
-            {remainingSchedule([...played, current]).length === 0 &&
+            {remainingSchedule(schedule, [...played, current]).length === 0 &&
             current.isKnockout &&
             current.outcome === 'win'
               ? 'See final result'

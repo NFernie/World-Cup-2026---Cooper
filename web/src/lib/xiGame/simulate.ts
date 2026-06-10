@@ -1,19 +1,13 @@
+export { exitRoundLabel } from './exitRounds'
+export { buildTournamentSchedule, buildOpponentPool } from './tournamentSchedule'
+export type { BuildTournamentScheduleInput, RatedOpponent } from './tournamentSchedule'
+export {
+  teamSquadAverageRating,
+  teamBestXIAverageRating,
+  teamTop11AverageRating,
+} from './teamRating'
 import { effectiveRating } from './types'
-import type { DraftPick, ExitRound, SimulationResult } from './types'
-
-const EXIT_LABELS: Record<ExitRound, string> = {
-  group: 'Group stage',
-  round_of_32: 'Round of 32',
-  round_of_16: 'Round of 16',
-  quarter_final: 'Quarter-final',
-  semi_final: 'Semi-final',
-  final: 'Final',
-  champion: 'Champions',
-}
-
-export function exitRoundLabel(round: ExitRound): string {
-  return EXIT_LABELS[round]
-}
+import type { DraftPick, SimulationResult, TournamentMatchPreview } from './types'
 
 /**
  * Position-weighted squad rating using each player's effective rating
@@ -42,15 +36,7 @@ export function winProbability(squadOvr: number, opponentOvr: number): number {
 
 export type MatchOutcome = 'win' | 'draw' | 'loss'
 
-export type TournamentMatchPreview = {
-  id: string
-  stage: ExitRound
-  stageLabel: string
-  opponentName: string
-  opponentOvr: number
-  isKnockout: boolean
-  groupIndex?: number
-}
+export type { TournamentMatchPreview } from './types'
 
 export type GoalEvent = {
   minute: number
@@ -88,25 +74,6 @@ export type PlayedMatch = TournamentMatchPreview & {
   commentary: CommentaryLine[]
 }
 
-const GROUP_OPPONENTS = [
-  { name: 'Bolivia', ovr: 70 },
-  { name: 'Canada', ovr: 70 },
-  { name: 'Qatar', ovr: 70 },
-] as const
-
-const KNOCKOUT_OPPONENTS: {
-  round: ExitRound
-  next: ExitRound
-  name: string
-  opponentOvr: number
-}[] = [
-  { round: 'round_of_32', next: 'round_of_16', name: 'Mexico', opponentOvr: 74 },
-  { round: 'round_of_16', next: 'quarter_final', name: 'Germany', opponentOvr: 78 },
-  { round: 'quarter_final', next: 'semi_final', name: 'Netherlands', opponentOvr: 82 },
-  { round: 'semi_final', next: 'final', name: 'Brazil', opponentOvr: 85 },
-  { round: 'final', next: 'champion', name: 'Argentina', opponentOvr: 88 },
-]
-
 const OPPONENT_SCORERS = [
   'L. Martínez',
   'Álvarez',
@@ -118,29 +85,6 @@ const OPPONENT_SCORERS = [
   'Müller',
   'Diallo',
 ]
-
-export function buildTournamentSchedule(): TournamentMatchPreview[] {
-  const group: TournamentMatchPreview[] = GROUP_OPPONENTS.map((o, i) => ({
-    id: `group-${i + 1}`,
-    stage: 'group',
-    stageLabel: `Group stage · Match ${i + 1}`,
-    opponentName: o.name,
-    opponentOvr: o.ovr,
-    isKnockout: false,
-    groupIndex: i + 1,
-  }))
-
-  const knockouts: TournamentMatchPreview[] = KNOCKOUT_OPPONENTS.map((o) => ({
-    id: o.round,
-    stage: o.round,
-    stageLabel: exitRoundLabel(o.round),
-    opponentName: o.name,
-    opponentOvr: o.opponentOvr,
-    isKnockout: true,
-  }))
-
-  return [...group, ...knockouts]
-}
 
 export function determineMatchOutcome(
   squadOvr: number,
@@ -489,9 +433,9 @@ export type TournamentRunResult = SimulationResult & {
 
 export function simulateTournamentFull(
   picks: DraftPick[],
+  schedule: TournamentMatchPreview[],
   rng: () => number = Math.random,
 ): TournamentRunResult {
-  const schedule = buildTournamentSchedule()
   const ovr = squadOverall(picks)
   const matches: PlayedMatch[] = []
 
@@ -553,8 +497,9 @@ export function simulateTournamentFull(
 /** @deprecated Use simulateTournamentFull for match detail; kept for lightweight callers. */
 export function simulateTournament(
   picks: DraftPick[],
+  schedule: TournamentMatchPreview[],
   rng: () => number = Math.random,
 ): SimulationResult {
-  const { matches: _m, ...result } = simulateTournamentFull(picks, rng)
+  const { matches: _m, ...result } = simulateTournamentFull(picks, schedule, rng)
   return result
 }

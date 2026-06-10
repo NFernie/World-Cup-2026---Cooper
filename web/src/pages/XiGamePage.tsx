@@ -17,7 +17,8 @@ import { autoDraftWithRounds } from '@/lib/xiGame/autoDraft'
 import { isComplete, openSlots, spinTeam } from '@/lib/xiGame/draft'
 import { fetchAllSquadPlayers } from '@/lib/xiGame/squads'
 import type { TournamentRunResult } from '@/lib/xiGame/matchPresentation'
-import { exitRoundLabel } from '@/lib/xiGame/simulate'
+import { exitRoundLabel } from '@/lib/xiGame/exitRounds'
+import { buildTournamentSchedule, squadOverall } from '@/lib/xiGame/simulate'
 import { formatPositionLabel } from '@/lib/xiGame/positions'
 import {
   buildDraftPick,
@@ -114,6 +115,18 @@ export function XiGamePage() {
   const openSlotIds = new Set(open.map((s) => s.id))
   const squadsReady = (squadsQuery.data?.length ?? 0) > 0
   const provisional = settingQuery.data?.squads_provisional !== false
+
+  const tournamentSchedule = useMemo(() => {
+    if (picks.length !== TOTAL_ROUNDS) return []
+    const teams = teamsQuery.data ?? []
+    if (teams.length === 0) return []
+    return buildTournamentSchedule({
+      userSquadOvr: squadOverall(picks),
+      teams,
+      squadsByTeam,
+      excludeTeamIds: picks.map((p) => p.team.id),
+    })
+  }, [picks, teamsQuery.data, squadsByTeam])
 
   function resetSession() {
     setPicks([])
@@ -428,8 +441,12 @@ export function XiGamePage() {
         </div>
       )}
 
-      {phase === 'tournament' && picks.length === TOTAL_ROUNDS && (
-        <TournamentRun picks={picks} onComplete={finishTournament} />
+      {phase === 'tournament' && picks.length === TOTAL_ROUNDS && tournamentSchedule.length > 0 && (
+        <TournamentRun
+          picks={picks}
+          schedule={tournamentSchedule}
+          onComplete={finishTournament}
+        />
       )}
 
       {phase === 'result' && result && (

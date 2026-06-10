@@ -69,3 +69,13 @@ export type SimulationResult = {
   squadOvr: number
   groupRecord: string
 }
+
+export type TournamentMatchPreview = {
+  id: string
+  stage: ExitRound
+  stageLabel: string
+  opponentName: string
+  opponentOvr: number
+  isKnockout: boolean
+  groupIndex?: number
+}
