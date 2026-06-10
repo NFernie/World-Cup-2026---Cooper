@@ -1,6 +1,6 @@
 import { exitRoundLabel } from './exitRounds'
 import type { ExitRound, TournamentMatchPreview } from './types'
-import { teamSquadAverageRating } from './teamRating'
+import { teamTop11AverageRating } from './teamRating'
 import type { GameTeam, SquadPlayer } from './types'
 
 export type RatedOpponent = {
@@ -31,7 +31,7 @@ export function buildOpponentPool(
   for (const team of teams) {
     if (excludeTeamIds.has(team.id)) continue
     const squad = squadsByTeam.get(team.id) ?? []
-    const ovr = teamSquadAverageRating(squad)
+    const ovr = teamTop11AverageRating(squad)
     if (ovr <= 0) continue
     rated.push({
       teamId: team.id,
