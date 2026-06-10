@@ -91,7 +91,7 @@ export function XiPitch({
                     {showRatings && (
                       <span className={`font-bold tabular-nums ${share ? 'text-[10px]' : 'text-[11px]'}`}>
                         {effectiveRating(pick)}
-                        {pick.placementFit !== 'natural' && (
+                        {pick.placementFit === 'wrong_family' && (
                           <span className="text-fifa-gold">*</span>
                         )}
                       </span>
@@ -122,9 +122,9 @@ export function XiPitch({
           })}
         </div>
       ))}
-      {showRatings && picks.some((p) => p.placementFit !== 'natural') && (
+      {showRatings && picks.some((p) => p.placementFit === 'wrong_family') && (
         <p className={`text-center text-[var(--muted)] ${share ? 'text-xs' : 'text-[10px]'}`}>
-          * wrong role (−5%) or wrong area (−10%)
+          * out of position (−10%)
         </p>
       )}
     </div>

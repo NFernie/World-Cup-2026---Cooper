@@ -2,11 +2,11 @@ import type { PositionFamily } from './formations'
 import type { FormationSlot } from './formations'
 import type { SquadPlayer } from './types'
 
-/** Penalty when a player is in the right family but wrong specific role (e.g. LB at CB). */
-export const SAME_FAMILY_PENALTY = 0.05
+/** Buff when a player is in their natural role (e.g. RW in RW). */
+export const NATURAL_POSITION_BUFF = 0.05
 
-/** Penalty when a player is in the wrong position family (e.g. LB at CM). */
-export const CROSS_FAMILY_PENALTY = 0.1
+/** Debuff when a player is in the wrong position family (e.g. RW at CM). */
+export const CROSS_FAMILY_DEBUFF = 0.1
 
 const SLOT_ALIASES: Record<string, string[]> = {
   LB: ['LB', 'LWB'],
@@ -118,14 +118,15 @@ export function placementFit(
   return 'wrong_family'
 }
 
-export function placementPenalty(fit: PlacementFit): number {
-  if (fit === 'natural') return 0
-  if (fit === 'wrong_slot') return SAME_FAMILY_PENALTY
-  return CROSS_FAMILY_PENALTY
+/** Rating multiplier offset: +5% natural, 0% same family, −10% wrong family. */
+export function placementModifier(fit: PlacementFit): number {
+  if (fit === 'natural') return NATURAL_POSITION_BUFF
+  if (fit === 'wrong_slot') return 0
+  return -CROSS_FAMILY_DEBUFF
 }
 
 export function placementHint(fit: PlacementFit): string {
-  if (fit === 'natural') return 'Best fit'
-  if (fit === 'wrong_slot') return '−5%'
+  if (fit === 'natural') return '+5%'
+  if (fit === 'wrong_slot') return 'Same area'
   return '−10%'
 }

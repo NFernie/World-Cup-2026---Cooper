@@ -1,6 +1,6 @@
 import { openSlots, spinTeam } from './draft'
 import type { Formation } from './formations'
-import { placementFit, placementPenalty } from './positions'
+import { placementFit, placementModifier } from './positions'
 import { buildDraftPick, type DraftPick, type GameTeam, type SquadPlayer } from './types'
 
 const FIT_WEIGHT = 10_000
@@ -13,8 +13,9 @@ function fitPriority(fit: ReturnType<typeof placementFit>): number {
 
 function projectedRating(player: SquadPlayer, slot: Parameters<typeof placementFit>[1]): number {
   const fit = placementFit(player, slot)
-  const penalty = placementPenalty(fit)
-  return Math.round(player.overall_rating * (1 - penalty))
+  const modifier = placementModifier(fit)
+  if (modifier === 0) return player.overall_rating
+  return Math.round(player.overall_rating * (1 + modifier))
 }
 
 export type AutoDraftRound = {
@@ -25,7 +26,7 @@ export type AutoDraftRound = {
 
 /**
  * Spin 11 nations and auto-place each drafted player into the best open slot,
- * prioritising natural fit, then same-family (−5%), then cross-family (−10%).
+ * prioritising natural fit (+5%), then same-family (no change), then cross-family (−10%).
  */
 export function autoDraftTeam(
   formation: Formation,

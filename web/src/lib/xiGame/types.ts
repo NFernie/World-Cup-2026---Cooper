@@ -1,4 +1,4 @@
-import { placementFit, placementPenalty, type PlacementFit } from './positions'
+import { placementFit, placementModifier, type PlacementFit } from './positions'
 import type { PositionFamily } from './formations'
 import type { FormationSlot } from './formations'
 
@@ -47,11 +47,11 @@ export function buildDraftPick(
   }
 }
 
-/** Player rating after the out-of-position penalty is applied. */
+/** Player rating after natural-position buff or out-of-position debuff. */
 export function effectiveRating(pick: DraftPick): number {
-  const penalty = placementPenalty(pick.placementFit)
-  if (penalty === 0) return pick.player.overall_rating
-  return Math.round(pick.player.overall_rating * (1 - penalty))
+  const modifier = placementModifier(pick.placementFit)
+  if (modifier === 0) return pick.player.overall_rating
+  return Math.round(pick.player.overall_rating * (1 + modifier))
 }
 
 export type ExitRound =
