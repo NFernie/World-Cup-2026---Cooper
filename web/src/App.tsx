@@ -16,6 +16,7 @@ import { JoinPoolPage } from '@/pages/JoinPoolPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { PoolPage } from '@/pages/PoolPage'
 import { PoolShell } from '@/pages/PoolShell'
+import { WorldCupTablePage } from '@/pages/WorldCupTablePage'
 import { XiGamePage } from '@/pages/XiGamePage'
 
 const queryClient = new QueryClient({
@@ -66,6 +67,7 @@ export default function App() {
                     }
                   >
                     <Route index element={<PoolPage />} />
+                    <Route path="table" element={<WorldCupTablePage />} />
                     <Route path="fixtures" element={<FixturesPage />} />
                     <Route path="leaderboards" element={<LeaderboardsPage />} />
                     <Route path="xi-game" element={<XiGamePage />} />

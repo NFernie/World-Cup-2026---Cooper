@@ -1,7 +1,17 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BookOpen, CalendarDays, Dices, Lock, Share2, Shield, Trophy, Unlock } from 'lucide-react'
+import {
+  BookOpen,
+  CalendarDays,
+  Dices,
+  Lock,
+  Share2,
+  Shield,
+  TableProperties,
+  Trophy,
+  Unlock,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { BanterBox } from '@/components/BanterBox'
@@ -409,6 +419,22 @@ export function PoolPage() {
 
       {member && (
         <div className="space-y-4">
+          <Card className="border-[var(--border)] bg-[var(--card)] p-5 text-center">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--primary)]/10">
+              <TableProperties className="h-7 w-7 text-[var(--primary)]" aria-hidden />
+            </div>
+            <CardTitle className="text-xl">World Cup table</CardTitle>
+            <CardDescription className="mx-auto mt-2 max-w-sm">
+              Group standings with W/D/L and points, plus the knockout bracket as teams qualify.
+            </CardDescription>
+            <Button asChild size="lg" className="mx-auto mt-5 w-full max-w-xs shadow-sm">
+              <Link to="table">
+                <TableProperties className="h-5 w-5" />
+                View table
+              </Link>
+            </Button>
+          </Card>
+
           <Card className="border-[var(--primary)]/40 bg-[color-mix(in_srgb,var(--primary)_6%,var(--card))] p-5 text-center">
             <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--primary)]/15">
               <CalendarDays className="h-7 w-7 text-[var(--primary)]" aria-hidden />
