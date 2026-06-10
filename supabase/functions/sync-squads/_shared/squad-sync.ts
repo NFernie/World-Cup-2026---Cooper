@@ -319,6 +319,7 @@ export async function syncSquads(
   withPositionCode: number;
   teamsAtFullSquad: number;
   errors: number;
+  errorDetails?: string[];
   ratingsBudgetReached?: boolean;
   skipped?: boolean;
   lastSyncedAt?: string;
@@ -428,6 +429,11 @@ export async function syncSquads(
   let positionCoded = 0;
   let teamsAtFullSquad = 0;
   let errors = 0;
+  const errorDetails: string[] = [];
+  const recordError = (msg: string) => {
+    errors += 1;
+    if (errorDetails.length < 8) errorDetails.push(msg);
+  };
   let budgetReached = false;
   let ratingsBudgetReached = false;
   const now = new Date().toISOString();
@@ -446,7 +452,7 @@ export async function syncSquads(
     try {
       const { players: roster } = await fetchBestRoster(apiKey, apiTeamId, season);
       if (roster.length === 0) {
-        errors += 1;
+        recordError(`${team.fifa_code}: empty roster from API-Football`);
         continue;
       }
       if (roster.length >= 24) teamsAtFullSquad += 1;
@@ -529,15 +535,16 @@ export async function syncSquads(
           .from("squad_players")
           .upsert(rows, { onConflict: "team_id,api_football_player_id" });
         if (upsertResult.error) {
-          errors += 1;
+          recordError(`${team.fifa_code} upsert: ${upsertResult.error.message}`);
         } else {
           playersUpserted += rows.length;
           teamsDone += 1;
           rosterByTeam.set(team.id, rows);
         }
       }
-    } catch (_err) {
-      errors += 1;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      recordError(`${team.fifa_code}: ${msg}`);
     }
 
     if (ratingsBudgetReached) break;
@@ -601,9 +608,12 @@ export async function syncSquads(
         const upsertResult = await supabase
           .from("squad_players")
           .upsert(updated, { onConflict: "team_id,api_football_player_id" });
-        if (upsertResult.error) errors += 1;
-      } catch (_err) {
-        errors += 1;
+        if (upsertResult.error) {
+          recordError(`${team.fifa_code} position upsert: ${upsertResult.error.message}`);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        recordError(`${team.fifa_code} positions: ${msg}`);
       }
 
       if (budgetReached) break;
@@ -645,6 +655,7 @@ export async function syncSquads(
     withPositionCode: positionCoded,
     teamsAtFullSquad,
     errors,
+    errorDetails: errorDetails.length > 0 ? errorDetails : undefined,
     ratingsBudgetReached: ratingsBudgetReached || undefined,
     includeRatings,
     includePositions,

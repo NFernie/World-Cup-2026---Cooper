@@ -55,6 +55,47 @@ Update password managers / notes where the old key was stored.
 3. Smoke-test one sync (see **Manual `sync-squads`** below)
 4. Redeploy edge functions only if something still fails after updating/removing the manual secret
 
+## Manual `sync-squads` (2025 domestic baselines)
+
+Ratings refresh needs `force` + `includeRatings`. The sync is **slow** (~1 API call per player); re-run until `ratingsBudgetReached` is absent.
+
+**curl (reliable):**
+
+```bash
+curl -s -X POST "https://fyiegingyipqtxaiopng.supabase.co/functions/v1/sync-squads" \
+  -H "Content-Type: application/json" \
+  -d '{"force":true,"includeRatings":true,"includePositions":true}'
+```
+
+**GET query string (no JSON body — works in browser or PowerShell):**
+
+```
+https://fyiegingyipqtxaiopng.supabase.co/functions/v1/sync-squads?force=true&includeRatings=true&includePositions=true
+```
+
+**PowerShell — use a literal JSON string** (`ConvertTo-Json` + `Invoke-RestMethod` often sends an **empty body**, which triggers the 20h skip guard):
+
+```powershell
+$uri = "https://fyiegingyipqtxaiopng.supabase.co/functions/v1/sync-squads"
+$body = '{"force":true,"includeRatings":true,"includePositions":true}'
+Invoke-RestMethod -Uri $uri -Method Post -ContentType "application/json; charset=utf-8" -Body $body
+```
+
+Or open the GET URL above in a browser (may take ~50s per run). You should see JSON with `"ok": true`, `"partial": true`, and `"ratingsBudgetReached": true` — **re-run the same URL** until `ratingsBudgetReached` is gone (~8–10 runs for all ~1,200 players).
+
+Older deployments returned HTTP **500** even when ratings were syncing (Supabase logged `EDGE_FUNCTION_ERROR`). Check `withApiRating` in the JSON body; if it increases each run, progress is working.
+
+Check the response `request` object: `bodyBytes: 0` with `skipped: true` means the POST body never arrived.
+
+Verify Robertson after several runs:
+
+```sql
+select name, overall_rating, rating_source, position_code
+from squad_players where api_football_player_id = 289;
+```
+
+Expect `rating_source = domestic_2025`, `overall_rating ≈ 67`.
+
 ## Project reference
 
 - Project ref: `fyiegingyipqtxaiopng`

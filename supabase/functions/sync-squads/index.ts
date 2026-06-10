@@ -29,6 +29,27 @@ function parseBool(v: unknown): boolean {
   return false;
 }
 
+type SyncResult = {
+  skipped?: boolean;
+  errors?: number;
+  players?: number;
+  withApiRating?: number;
+  ratingsBudgetReached?: boolean;
+  budgetReached?: boolean;
+};
+
+/** HTTP 500 on partial progress made Supabase log EDGE_FUNCTION_ERROR — treat progress as 200. */
+function syncHttpStatus(result: SyncResult): { ok: boolean; status: number; partial?: boolean } {
+  if (result.skipped === true) return { ok: true, status: 200 };
+  const progress = (result.players ?? 0) > 0 || (result.withApiRating ?? 0) > 0;
+  const partial = result.ratingsBudgetReached === true ||
+    result.budgetReached === true ||
+    (result.errors ?? 0) > 0;
+  if (progress) return { ok: true, status: 200, partial: partial || undefined };
+  if ((result.errors ?? 0) > 0) return { ok: false, status: 500 };
+  return { ok: true, status: 200 };
+}
+
 function readFlag(
   source: Record<string, unknown> | URLSearchParams,
   ...names: string[]
@@ -73,9 +94,14 @@ Deno.serve(async (req) => {
         const status = await getSyncStatus(supabase);
         return jsonResponse({ ok: true, ...status, request: opts });
       }
-      const result = await syncSquads(supabase, apiKey, season, opts);
-      const ok = result.skipped === true || (result.errors ?? 0) === 0;
-      return jsonResponse({ ok, request: opts, ...result }, ok ? 200 : 500);
+      try {
+        const result = await syncSquads(supabase, apiKey, season, opts);
+        const { ok, status, partial } = syncHttpStatus(result);
+        return jsonResponse({ ok, partial, request: opts, ...result }, status);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return jsonResponse({ ok: false, error: message, request: opts }, 500);
+      }
     }
     return jsonResponse({
       ok: true,
@@ -132,8 +158,8 @@ Deno.serve(async (req) => {
       includeRatings,
       includePositions,
     });
-    const ok = result.skipped === true || (result.errors ?? 0) === 0;
-    return jsonResponse({ ok, request, ...result }, ok ? 200 : 500);
+    const { ok, status, partial } = syncHttpStatus(result);
+    return jsonResponse({ ok, partial, request, ...result }, status);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return jsonResponse({ ok: false, error: message }, 500);
