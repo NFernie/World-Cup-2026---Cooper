@@ -24,7 +24,7 @@ const RULES: readonly Rule[] = [
       'Each match can gain points based on betting odds determined 2hrs before Kick-Off.',
       'If your team wins it gains the number of points determined by odds on to Win',
       'The losing team earns no points',
-      'In the case of a draw, the lower ranked team gains points equal to the draw odds. The higher rank team gains points equal to the draw odds/2.',
+      'In the case of a draw, each team gains points equal to their win odds divided by 2 (e.g. England vs Curaçao at 2/30 — on a draw England get 1 and Curaçao get 15).',
     ],
   },
   {

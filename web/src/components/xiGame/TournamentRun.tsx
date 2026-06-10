@@ -184,7 +184,8 @@ export function TournamentRun({ picks, onComplete }: Props) {
         <CommentaryFeed
           lines={current.commentary}
           limit={commentaryIndex + 1}
-          className="max-h-64 overflow-y-auto font-mono"
+          autoScroll
+          className="max-h-64 overflow-y-auto scroll-smooth font-mono"
         />
       </Card>
     )
