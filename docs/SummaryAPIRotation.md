@@ -52,7 +52,7 @@ Update password managers / notes where the old key was stored.
 
 1. **Dashboard → Settings → API** → rotate/regenerate the **secret / service_role** key
 2. **Edge Functions → Secrets** → confirm `SUPABASE_SERVICE_ROLE_KEY` is not pinned to the old value
-3. Smoke-test one sync, e.g. `sync-squads` with `{"force": true}`
+3. Smoke-test one sync (see **Manual `sync-squads`** below)
 4. Redeploy edge functions only if something still fails after updating/removing the manual secret
 
 ## Project reference

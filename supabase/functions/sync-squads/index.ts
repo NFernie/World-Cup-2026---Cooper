@@ -19,12 +19,69 @@ function jsonResponse(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
 }
 
+/** Accept true, "true", "1", 1 — PowerShell / query strings often send strings. */
+function parseBool(v: unknown): boolean {
+  if (v === true || v === 1) return true;
+  if (typeof v === "string") {
+    const s = v.trim().toLowerCase();
+    return s === "true" || s === "1" || s === "yes";
+  }
+  return false;
+}
+
+function readFlag(
+  source: Record<string, unknown> | URLSearchParams,
+  ...names: string[]
+): boolean {
+  const wanted = new Set(names.map((n) => n.toLowerCase()));
+  if (source instanceof URLSearchParams) {
+    for (const name of names) {
+      const v = source.get(name);
+      if (v != null && parseBool(v)) return true;
+    }
+    return false;
+  }
+  for (const [key, value] of Object.entries(source)) {
+    if (wanted.has(key.toLowerCase()) && parseBool(value)) return true;
+  }
+  return false;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "GET") {
+    const url = new URL(req.url);
+    const hasQuery = ["force", "includeRatings", "includePositions", "status"].some((k) =>
+      url.searchParams.has(k)
+    );
+    if (hasQuery) {
+      // GET with ?force=true&includeRatings=true works from browser / curl without a body.
+      const apiKey = Deno.env.get("API_FOOTBALL_KEY");
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (!apiKey || !supabaseUrl || !serviceKey) {
+        return jsonResponse({ ok: false, error: "Missing env configuration" }, 500);
+      }
+      const season = Deno.env.get("API_FOOTBALL_SEASON") ?? "2026";
+      const supabase = createClient(supabaseUrl, serviceKey);
+      const opts = {
+        force: readFlag(url.searchParams, "force"),
+        includeRatings: readFlag(url.searchParams, "includeRatings", "include_ratings"),
+        includePositions: readFlag(url.searchParams, "includePositions", "include_positions"),
+        statusOnly: readFlag(url.searchParams, "status"),
+      };
+      if (opts.statusOnly) {
+        const status = await getSyncStatus(supabase);
+        return jsonResponse({ ok: true, ...status, request: opts });
+      }
+      const result = await syncSquads(supabase, apiKey, season, opts);
+      const ok = result.skipped === true || (result.errors ?? 0) === 0;
+      return jsonResponse({ ok, request: opts, ...result }, ok ? 200 : 500);
+    }
     return jsonResponse({
       ok: true,
       status: "ready",
-      hint: 'POST {} for roster sync. {"force":true,"includeRatings":true} for 2025 baselines.',
+      hint:
+        'POST {"force":true,"includeRatings":true} or GET ?force=true&includeRatings=true&includePositions=true',
     });
   }
 
@@ -36,22 +93,30 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: false, error: "Missing env configuration" }, 500);
   }
 
-  let force = false;
-  let includeRatings = false;
-  let includePositions = false;
-  let statusOnly = false;
+  const url = new URL(req.url);
+  let force = readFlag(url.searchParams, "force");
+  let includeRatings = readFlag(url.searchParams, "includeRatings", "include_ratings");
+  let includePositions = readFlag(url.searchParams, "includePositions", "include_positions");
+  let statusOnly = readFlag(url.searchParams, "status");
+  let bodyBytes = 0;
+  let bodyParseError: string | undefined;
+
   try {
     const text = await req.text();
+    bodyBytes = new TextEncoder().encode(text).length;
     if (text.trim()) {
       const body = JSON.parse(text) as Record<string, unknown>;
-      force = body.force === true;
-      includeRatings = body.includeRatings === true;
-      includePositions = body.includePositions === true;
-      statusOnly = body.status === true;
+      force = readFlag(body, "force") || force;
+      includeRatings = readFlag(body, "includeRatings", "include_ratings") || includeRatings;
+      includePositions = readFlag(body, "includePositions", "include_positions") ||
+        includePositions;
+      statusOnly = readFlag(body, "status") || statusOnly;
     }
-  } catch {
-    // Empty or invalid body — use defaults (rosters only, respect daily guard).
+  } catch (err) {
+    bodyParseError = err instanceof Error ? err.message : String(err);
   }
+
+  const request = { force, includeRatings, includePositions, statusOnly, bodyBytes, bodyParseError };
 
   const season = Deno.env.get("API_FOOTBALL_SEASON") ?? "2026";
   const supabase = createClient(supabaseUrl, serviceKey);
@@ -59,7 +124,7 @@ Deno.serve(async (req) => {
   try {
     if (statusOnly) {
       const status = await getSyncStatus(supabase);
-      return jsonResponse({ ok: true, ...status });
+      return jsonResponse({ ok: true, ...status, request });
     }
 
     const result = await syncSquads(supabase, apiKey, season, {
@@ -68,7 +133,7 @@ Deno.serve(async (req) => {
       includePositions,
     });
     const ok = result.skipped === true || (result.errors ?? 0) === 0;
-    return jsonResponse({ ok, ...result }, ok ? 200 : 500);
+    return jsonResponse({ ok, request, ...result }, ok ? 200 : 500);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return jsonResponse({ ok: false, error: message }, 500);

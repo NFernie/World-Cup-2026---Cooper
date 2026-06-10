@@ -372,7 +372,8 @@ export async function syncSquads(
         includeRatings,
         includePositions,
         baselineSeason: Deno.env.get("API_FOOTBALL_BASELINE_SEASON") ?? "2025",
-        note: `Already synced ${ageHours.toFixed(1)}h ago (min ${MIN_HOURS_BETWEEN_SYNCS}h). Pass {"force": true} to override.`,
+        note:
+          `Already synced ${ageHours.toFixed(1)}h ago (min ${MIN_HOURS_BETWEEN_SYNCS}h). Pass force=true in JSON body, or use GET ?force=true&includeRatings=true (see request.bodyBytes — 0 means PowerShell did not send the body).`,
       };
     }
   }
