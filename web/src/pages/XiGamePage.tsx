@@ -480,9 +480,10 @@ export function XiGamePage() {
                     key={m.id}
                     className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)] px-3 py-2"
                   >
-                    <span className="text-[var(--muted)]">{m.stageLabel}</span>
-                    <span>
+                    <span className="min-w-0 text-[var(--muted)]">{m.stageLabel}</span>
+                    <span className="text-right">
                       vs {m.opponentName}{' '}
+                      <span className="tabular-nums text-[var(--muted)]">({m.opponentOvr})</span>{' '}
                       <strong className="tabular-nums">
                         {m.score.user}–{m.score.opponent}
                       </strong>
