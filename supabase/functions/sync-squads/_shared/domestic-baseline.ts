@@ -229,34 +229,31 @@ function parseLineupPlayerCodes(lineup: Record<string, unknown>): Map<number, st
  * LB/ST/etc. for many squad players at once — one fixtures call + lineups per club.
  * (~5 API calls per club instead of ~7 per player.)
  */
+/** Min API: 1 fixtures + up to 2 lineup calls; returns full XI for cache storage. */
 export async function fetchClubLineupPositionCodes(
   apiKey: string,
   clubTeamId: number,
   season: string,
-  targetPlayerIds?: Set<number>,
-  maxFixtures = 4,
+  _targetPlayerIds?: Set<number>,
+  maxLineupAttempts = 2,
 ): Promise<{ codes: Map<number, string>; apiCalls: number }> {
   const codes = new Map<number, string>();
   let apiCalls = 0;
 
   const fixturesRes = await fetch(
-    `${API_BASE}/fixtures?team=${clubTeamId}&season=${season}&last=${maxFixtures}`,
+    `${API_BASE}/fixtures?team=${clubTeamId}&season=${season}&last=1`,
     { headers: { "x-apisports-key": apiKey } },
   );
   apiCalls += 1;
   if (!fixturesRes.ok) return { codes, apiCalls };
 
   const fixtureIds = extractFixtureIds(await fixturesRes.json().catch(() => null));
-
-  const allTargetsFound = () => {
-    if (!targetPlayerIds || targetPlayerIds.size === 0) return false;
-    for (const id of targetPlayerIds) {
-      if (!codes.has(id)) return false;
-    }
-    return true;
-  };
+  let attempts = 0;
 
   for (const fixtureId of fixtureIds) {
+    if (attempts >= maxLineupAttempts) break;
+    attempts += 1;
+
     const lineupsRes = await fetch(
       `${API_BASE}/fixtures/lineups?fixture=${fixtureId}&team=${clubTeamId}`,
       { headers: { "x-apisports-key": apiKey } },
@@ -272,12 +269,10 @@ export async function fetchClubLineupPositionCodes(
     if (!lineup) continue;
 
     for (const [id, code] of parseLineupPlayerCodes(lineup)) {
-      if (targetPlayerIds && !targetPlayerIds.has(id)) continue;
       if (!codes.has(id)) codes.set(id, code);
     }
 
-    if (allTargetsFound()) break;
-    await new Promise((r) => setTimeout(r, 45));
+    if (codes.size > 0) break;
   }
 
   return { codes, apiCalls };

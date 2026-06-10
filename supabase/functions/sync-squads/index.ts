@@ -7,8 +7,9 @@
  * POST body (all optional):
  *   { "force": true }           — bypass once-per-day guard
  *   { "includeRatings": true }  — 2025 domestic baselines; skips already-migrated players
- *   { "includePositions": true } — LB/ST from lineups (runs after ratings pass completes)
- * Env: API_FOOTBALL_SYNC_BUDGET_MS (default 240000) — raise if edge timeout allows
+ *   { "includePositions": true } — only players with position_code IS NULL; uses club cache
+ *   { "allowNationalPositions": true } — expensive national friendlies fallback (off by default)
+ * Env: POSITION_SYNC_MAX_API_CLUBS (default 5) — live API fetches per run
  *   { "status": true }          — return last sync metadata only (fast health check)
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
@@ -91,6 +92,7 @@ Deno.serve(async (req) => {
         force: readFlag(url.searchParams, "force"),
         includeRatings: readFlag(url.searchParams, "includeRatings", "include_ratings"),
         includePositions: readFlag(url.searchParams, "includePositions", "include_positions"),
+        allowNationalPositions: readFlag(url.searchParams, "allowNationalPositions"),
         statusOnly: readFlag(url.searchParams, "status"),
       };
       if (opts.statusOnly) {
@@ -126,6 +128,7 @@ Deno.serve(async (req) => {
   let force = readFlag(url.searchParams, "force");
   let includeRatings = readFlag(url.searchParams, "includeRatings", "include_ratings");
   let includePositions = readFlag(url.searchParams, "includePositions", "include_positions");
+  let allowNationalPositions = readFlag(url.searchParams, "allowNationalPositions");
   let statusOnly = readFlag(url.searchParams, "status");
   let bodyBytes = 0;
   let bodyParseError: string | undefined;
@@ -139,13 +142,23 @@ Deno.serve(async (req) => {
       includeRatings = readFlag(body, "includeRatings", "include_ratings") || includeRatings;
       includePositions = readFlag(body, "includePositions", "include_positions") ||
         includePositions;
+      allowNationalPositions = readFlag(body, "allowNationalPositions") ||
+        allowNationalPositions;
       statusOnly = readFlag(body, "status") || statusOnly;
     }
   } catch (err) {
     bodyParseError = err instanceof Error ? err.message : String(err);
   }
 
-  const request = { force, includeRatings, includePositions, statusOnly, bodyBytes, bodyParseError };
+  const request = {
+    force,
+    includeRatings,
+    includePositions,
+    allowNationalPositions,
+    statusOnly,
+    bodyBytes,
+    bodyParseError,
+  };
 
   const season = Deno.env.get("API_FOOTBALL_SEASON") ?? "2026";
   const supabase = createClient(supabaseUrl, serviceKey);
@@ -160,6 +173,7 @@ Deno.serve(async (req) => {
       force,
       includeRatings,
       includePositions,
+      allowNationalPositions,
     });
     const { ok, status, partial } = syncHttpStatus(result);
     return jsonResponse({ ok, partial, request, ...result }, status);

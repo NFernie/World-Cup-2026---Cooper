@@ -89,13 +89,23 @@ Run **ratings and positions separately** after deploy:
 # Ratings only (after api/fallback cleared)
 ?force=true&includeRatings=true
 
-# Positions only — do NOT combine with includeRatings (causes WORKER_RESOURCE_LIMIT)
+# Positions only — do NOT combine with includeRatings
 ?force=true&includePositions=true
 ```
 
-Position-only runs skip roster refresh, process **12 clubs per run** (~5 API calls each), and **save after each club**. Expect `withPositionCode` to increase every run. Re-run ~20–30 times until `position_code` null count stops falling.
+**API-efficient position sync (after `ce2d456` + cache update):**
 
-If you see `WORKER_RESOURCE_LIMIT`, ensure you are **not** passing `includeRatings=true` on position runs, and remove any edge secret `API_FOOTBALL_SYNC_BUDGET_MS` above `55000` for position passes (or set `POSITION_SYNC_BUDGET_MS=45000`).
+- Only queries players where `position_code IS NULL`
+- **Club lineup cache** in `app_settings` (`spin_draft_position_cache`) — re-runs cost **0 API** for cached clubs
+- **Max 5 new club API fetches per run** (~10 API calls total: 1 fixtures + 1 lineup per club)
+- National friendlies **disabled by default** (add `allowNationalPositions=true` only if needed)
+
+Run 1: ~10 API calls, codes ~50 players, caches 5 clubs.  
+Run 2+: mostly cache hits — hundreds coded with ~10 API calls for 5 new clubs.
+
+Daily cron (migration `20260618000027`) calls `includePositions` only — **0 API** once all players are positioned.
+
+Manual bulk fill: re-run the URL until `pendingPositions` in the JSON response reaches 0.
 
 Or open the GET URL in a browser (may take up to ~4 min per run).
 
