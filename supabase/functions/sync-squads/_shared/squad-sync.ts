@@ -1,18 +1,19 @@
 /**
  * Sync World Cup 2026 national-team squads from API-Football into public.squad_players.
  *
- * Ratings strategy (no FUTBIN):
- *   1. If the player has an API-Football season rating (games.rating), use it:
- *        overall = clamp(round(rating * 10), 50, 94)   source = "api"
- *   2. Otherwise derive a baseline from the nation's FIFA ranking + a small
- *      deterministic per-player offset so squads have internal spread:
- *        overall = clamp(teamBase(fifaRank) + offset(name), 52, 90)  source = "fallback"
+ * Baseline ratings (tournament-fixed until form system is added):
+ *   GET /players?id={id}&season=2025
+ *   → domestic league row with most minutes (e.g. Robertson PL 6.74 → OVR 67)
+ *   → else best club row → else national 2025
+ *   rating_source: domestic_2025 | club_2025 | national_2025 | manual
  *
- * Pre-tournament most players will only have rating 2 (fallback) because no World
- * Cup match has been played yet; this keeps the game playable from day one and
- * upgrades to real ratings automatically once matches are recorded.
+ * Position codes: recent club lineups in baseline season, else national friendlies.
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import {
+  fetchDomesticLineupPositionCode,
+  fetchPlayerBaseline2025,
+} from "./domestic-baseline.ts";
 import { gridToPositionCode } from "./position-grid.ts";
 
 const API_BASE = "https://v3.football.api-sports.io";
@@ -35,32 +36,6 @@ function normalizePosition(raw: string | null | undefined): string {
   if (p.startsWith("mid") || p === "m") return "MID";
   if (p.startsWith("att") || p.startsWith("for") || p === "f" || p === "a") return "FWD";
   return "MID";
-}
-
-function parseFloatSafe(v: unknown): number | null {
-  if (v == null) return null;
-  const n = typeof v === "number" ? v : parseFloat(String(v));
-  return Number.isFinite(n) ? n : null;
-}
-
-/** Deterministic small offset (-4..+4) from a string so squads vary internally. */
-function nameOffset(name: string): number {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
-  }
-  return (hash % 9) - 4;
-}
-
-/** Baseline rating from FIFA rank: ~86 for #1 down to ~58 for the lowest seeds. */
-function teamBaseRating(fifaRank: number | null): number {
-  const rank = fifaRank ?? 50;
-  const base = Math.round(86 - (rank - 1) * 0.32);
-  return Math.max(58, Math.min(86, base));
-}
-
-function clamp(n: number, lo: number, hi: number): number {
-  return Math.max(lo, Math.min(hi, n));
 }
 
 type RosterPlayer = {
@@ -172,47 +147,6 @@ async function fetchBestRoster(
     return { players: squads, source: "squads" };
   }
   return { players: seasonRoster, source: seasonRoster.length > 0 ? "season" : "squads" };
-}
-
-/** Average season rating per api player id from /players?team=&season= (paginated). */
-async function fetchSeasonRatings(
-  apiKey: string,
-  apiTeamId: number,
-  season: string,
-): Promise<Map<number, number>> {
-  const ratings = new Map<number, number>();
-  let page = 1;
-  let totalPages = 1;
-
-  do {
-    const res = await fetch(
-      `${API_BASE}/players?team=${apiTeamId}&season=${season}&page=${page}`,
-      { headers: apiHeaders(apiKey) },
-    );
-    if (!res.ok) break;
-    const payload = await res.json();
-    totalPages = payload?.paging?.total ?? 1;
-
-    for (const row of payload.response ?? []) {
-      const player = row.player as Record<string, unknown> | undefined;
-      const stats = (row.statistics as Record<string, unknown>[] | undefined) ?? [];
-      const id = player?.id as number | undefined;
-      if (!id) continue;
-
-      let best: number | null = null;
-      for (const s of stats) {
-        const games = s.games as Record<string, unknown> | undefined;
-        const r = parseFloatSafe(games?.rating);
-        if (r != null && (best == null || r > best)) best = r;
-      }
-      if (best != null) ratings.set(id, best);
-    }
-
-    page += 1;
-    await new Promise((r) => setTimeout(r, 80));
-  } while (page <= totalPages && page <= 3);
-
-  return ratings;
 }
 
 function extractFixtureIds(payload: Record<string, unknown> | null): number[] {
@@ -329,7 +263,15 @@ type SquadRow = {
   photo_url: string | null;
   overall_rating: number;
   rating_source: string;
+  baseline_club_api_team_id?: number | null;
   synced_at: string;
+};
+
+type ExistingPlayerRow = {
+  api_football_player_id: number | null;
+  overall_rating: number;
+  rating_source: string;
+  position_code: string | null;
 };
 
 const SYNC_META_KEY = "spin_draft_sync";
@@ -373,13 +315,16 @@ export async function syncSquads(
   teams: number;
   players: number;
   withApiRating: number;
+  withUnrated: number;
   withPositionCode: number;
   teamsAtFullSquad: number;
   errors: number;
+  ratingsBudgetReached?: boolean;
   skipped?: boolean;
   lastSyncedAt?: string;
   includeRatings?: boolean;
   includePositions?: boolean;
+  baselineSeason?: string;
   note?: string;
 }> {
   const force = opts.force === true;
@@ -399,11 +344,13 @@ export async function syncSquads(
       teams: 0,
       players: 0,
       withApiRating: 0,
+      withUnrated: 0,
       withPositionCode: 0,
       teamsAtFullSquad: 0,
       errors: 1,
       includeRatings,
       includePositions,
+      baselineSeason: Deno.env.get("API_FOOTBALL_BASELINE_SEASON") ?? "2025",
       note: `Failed to read sync metadata: ${metaResult.error.message}`,
     };
   }
@@ -416,6 +363,7 @@ export async function syncSquads(
         teams: 0,
         players: 0,
         withApiRating: 0,
+        withUnrated: 0,
         withPositionCode: 0,
         teamsAtFullSquad: 0,
         errors: 0,
@@ -423,6 +371,7 @@ export async function syncSquads(
         lastSyncedAt,
         includeRatings,
         includePositions,
+        baselineSeason: Deno.env.get("API_FOOTBALL_BASELINE_SEASON") ?? "2025",
         note: `Already synced ${ageHours.toFixed(1)}h ago (min ${MIN_HOURS_BETWEEN_SYNCS}h). Pass {"force": true} to override.`,
       };
     }
@@ -438,11 +387,13 @@ export async function syncSquads(
       teams: 0,
       players: 0,
       withApiRating: 0,
+      withUnrated: 0,
       withPositionCode: 0,
       teamsAtFullSquad: 0,
       errors: 1,
       includeRatings,
       includePositions,
+      baselineSeason: Deno.env.get("API_FOOTBALL_BASELINE_SEASON") ?? "2025",
       note: teamsResult.error.message,
     };
   }
@@ -453,29 +404,43 @@ export async function syncSquads(
       teams: 0,
       players: 0,
       withApiRating: 0,
+      withUnrated: 0,
       withPositionCode: 0,
       teamsAtFullSquad: 0,
       errors: 0,
       includeRatings,
       includePositions,
+      baselineSeason: Deno.env.get("API_FOOTBALL_BASELINE_SEASON") ?? "2025",
       note: "No teams have api_football_team_id yet — run sync-tournament-awards first.",
     };
   }
 
+  const baselineSeason = Deno.env.get("API_FOOTBALL_BASELINE_SEASON") ?? "2025";
+  const nationalApiTeamIds = new Set(
+    teams.map((t) => t.api_football_team_id).filter((id): id is number => id != null),
+  );
+
   let teamsDone = 0;
   let playersUpserted = 0;
   let apiRated = 0;
+  let unrated = 0;
   let positionCoded = 0;
   let teamsAtFullSquad = 0;
   let errors = 0;
   let budgetReached = false;
+  let ratingsBudgetReached = false;
   const now = new Date().toISOString();
   const rosterByTeam = new Map<string, SquadRow[]>();
 
-  // Phase 1 — rosters for every nation (no position calls; must complete all 48).
+  // Phase 1 — rosters for every nation.
   for (const team of teams) {
     const apiTeamId = team.api_football_team_id;
     if (!apiTeamId) continue;
+
+    if (includeRatings && Date.now() - startedAt > budgetMs) {
+      ratingsBudgetReached = true;
+      break;
+    }
 
     try {
       const { players: roster } = await fetchBestRoster(apiKey, apiTeamId, season);
@@ -485,26 +450,59 @@ export async function syncSquads(
       }
       if (roster.length >= 24) teamsAtFullSquad += 1;
 
-      const ratings = includeRatings
-        ? await fetchSeasonRatings(apiKey, apiTeamId, season)
-        : new Map<number, number>();
+      const existingByPlayer = new Map<number, ExistingPlayerRow>();
+      if (!includeRatings) {
+        const { data: existingRows } = await supabase
+          .from("squad_players")
+          .select("api_football_player_id, overall_rating, rating_source, position_code")
+          .eq("team_id", team.id);
+        for (const ex of existingRows ?? []) {
+          if (ex.api_football_player_id != null) {
+            existingByPlayer.set(ex.api_football_player_id, ex as ExistingPlayerRow);
+          }
+        }
+      }
 
-      const base = teamBaseRating(team.global_fifa_rank);
       const rows: SquadRow[] = [];
 
       for (const p of roster) {
-        const position = normalizePosition(p.positionDetail);
-        const apiRating = ratings.get(p.id);
+        let position = normalizePosition(p.positionDetail);
+        const preserved = existingByPlayer.get(p.id);
+        let overall = preserved?.overall_rating ?? 0;
+        let source = preserved?.rating_source ?? "unrated";
+        let clubTeamId: number | null = null;
+        let positionCode = preserved?.position_code ?? null;
 
-        let overall: number;
-        let source: string;
-        if (apiRating != null) {
-          overall = clamp(Math.round(apiRating * 10), 50, 94);
-          source = "api";
-          apiRated += 1;
-        } else {
-          overall = clamp(base + nameOffset(p.name), 52, 90);
-          source = "fallback";
+        if (preserved?.rating_source === "manual") {
+          overall = preserved.overall_rating;
+          source = "manual";
+        } else if (includeRatings) {
+          if (Date.now() - startedAt > budgetMs) {
+            ratingsBudgetReached = true;
+            break;
+          }
+
+          const baseline = await fetchPlayerBaseline2025(
+            apiKey,
+            p.id,
+            baselineSeason,
+            nationalApiTeamIds,
+          );
+          await new Promise((r) => setTimeout(r, 85));
+
+          if (baseline) {
+            overall = baseline.ovr;
+            source = baseline.source;
+            clubTeamId = baseline.clubTeamId;
+            apiRated += 1;
+            if (baseline.gamesPosition) {
+              position = normalizePosition(baseline.gamesPosition);
+            }
+          } else {
+            unrated += 1;
+            source = "unrated";
+            overall = preserved?.overall_rating ?? 0;
+          }
         }
 
         rows.push({
@@ -512,15 +510,18 @@ export async function syncSquads(
           api_football_player_id: p.id,
           name: p.name,
           position,
-          position_code: null,
+          position_code: positionCode,
           position_detail: p.positionDetail,
           shirt_number: p.shirtNumber,
           photo_url: p.photoUrl,
           overall_rating: overall,
           rating_source: source,
+          baseline_club_api_team_id: clubTeamId,
           synced_at: now,
         });
       }
+
+      if (ratingsBudgetReached && rows.length === 0) break;
 
       if (rows.length > 0) {
         const upsertResult = await supabase
@@ -538,10 +539,11 @@ export async function syncSquads(
       errors += 1;
     }
 
+    if (ratingsBudgetReached) break;
     await new Promise((r) => setTimeout(r, 100));
   }
 
-  // Phase 2 — position codes (optional; may truncate on time budget).
+  // Phase 2 — position codes from domestic club lineups, then national friendlies.
   if (includePositions) {
     for (const team of teams) {
       if (Date.now() - startedAt > budgetMs) {
@@ -550,19 +552,50 @@ export async function syncSquads(
       }
       const apiTeamId = team.api_football_team_id;
       if (!apiTeamId) continue;
-      const existing = rosterByTeam.get(team.id);
-      if (!existing || existing.length === 0) continue;
+      let existing = rosterByTeam.get(team.id);
+      if (!existing || existing.length === 0) {
+        const { data: dbRows } = await supabase
+          .from("squad_players")
+          .select("*")
+          .eq("team_id", team.id);
+        existing = (dbRows ?? []) as SquadRow[];
+      }
+      if (existing.length === 0) continue;
 
       try {
-        const lineupCodes = await fetchLineupPositionCodes(apiKey, apiTeamId, season);
-        if (lineupCodes.size === 0) continue;
+        const nationalCodes = await fetchLineupPositionCodes(apiKey, apiTeamId, season);
+        const updated: SquadRow[] = [];
 
-        const updated = existing.map((row) => {
-          const playerId = row.api_football_player_id ?? -1;
-          const code = lineupCodes.get(playerId) ?? row.position_code;
-          if (lineupCodes.has(playerId)) positionCoded += 1;
-          return { ...row, position_code: code, synced_at: now };
-        });
+        for (const row of existing) {
+          let code = row.position_code;
+          const playerId = row.api_football_player_id;
+          const clubId = row.baseline_club_api_team_id ?? null;
+
+          if (!code && playerId && clubId) {
+            if (Date.now() - startedAt > budgetMs) {
+              budgetReached = true;
+              break;
+            }
+            const domesticCode = await fetchDomesticLineupPositionCode(
+              apiKey,
+              playerId,
+              clubId,
+              baselineSeason,
+            );
+            await new Promise((r) => setTimeout(r, 70));
+            if (domesticCode) {
+              code = domesticCode;
+              positionCoded += 1;
+            }
+          }
+
+          if (!code && playerId && nationalCodes.has(playerId)) {
+            code = nationalCodes.get(playerId) ?? null;
+            if (code) positionCoded += 1;
+          }
+
+          updated.push({ ...row, position_code: code, synced_at: now });
+        }
 
         const upsertResult = await supabase
           .from("squad_players")
@@ -572,11 +605,12 @@ export async function syncSquads(
         errors += 1;
       }
 
+      if (budgetReached) break;
       await new Promise((r) => setTimeout(r, 100));
     }
   }
 
-  const rostersComplete = teamsDone >= teams.length;
+  const rostersComplete = teamsDone >= teams.length && !ratingsBudgetReached;
   if (rostersComplete && !budgetReached) {
     await supabase
       .from("app_settings")
@@ -588,24 +622,32 @@ export async function syncSquads(
 
   const expectedPlayers = 48 * 26;
   let note: string | undefined;
-  if (budgetReached) {
-    note = "Rosters synced; position enrichment hit time budget — will continue tomorrow.";
+  if (ratingsBudgetReached) {
+    note =
+      `Baseline ratings partial (${apiRated} set). Re-run {"force": true, "includeRatings": true} to continue — ~1 API call per player.`;
+  } else if (budgetReached) {
+    note = "Rosters synced; position enrichment hit time budget — will continue on next run.";
+  } else if (unrated > 0) {
+    note = `${unrated} players have no ${baselineSeason} club/national rating in API-Football.`;
   } else if (playersUpserted < expectedPlayers * 0.8) {
     note =
-      `Only ${playersUpserted} players (expected ~${expectedPlayers}). Run {"force": true} after checking API has 26-man squads for season ${season}.`;
+      `Only ${playersUpserted} players (expected ~${expectedPlayers}). Run {"force": true} after checking API squads for season ${season}.`;
   } else if (!includeRatings && !includePositions) {
-    note = "Roster-only sync. Pass {\"includeRatings\": true} or {\"includePositions\": true} for enrichment.";
+    note = "Roster-only sync (existing ratings preserved). Pass {\"includeRatings\": true} for 2025 domestic baselines.";
   }
 
   return {
     teams: teamsDone,
     players: playersUpserted,
     withApiRating: apiRated,
+    withUnrated: unrated,
     withPositionCode: positionCoded,
     teamsAtFullSquad,
     errors,
+    ratingsBudgetReached: ratingsBudgetReached || undefined,
     includeRatings,
     includePositions,
+    baselineSeason,
     note,
   };
 }

@@ -6,35 +6,43 @@ Reference for how player numbers are set today, how matches are decided, and a p
 
 ---
 
-## 1. How an individual player rating is determined (e.g. Salah = 78)
+## 1. How an individual player rating is determined (e.g. Robertson = 67)
 
-When you draft **Mohamed Salah** and see **78**, that number is **not** calculated in the game. It was written to `squad_players.overall_rating` by the **`sync-squads`** edge function and read from the database at draft time.
+When you draft **Andrew Robertson** and see **67**, that number is **not** calculated in the game. It was written to `squad_players.overall_rating` by the **`sync-squads`** edge function and read from the database at draft time.
 
 ### Data flow
 
 ```
-API-Football roster + stats
+API-Football GET /players?id={id}&season=2025
         ↓
-sync-squads (daily / manual)
+Pick domestic league row with most minutes (e.g. PL 6.74)
         ↓
-squad_players.overall_rating  (+ rating_source: "api" | "fallback")
+sync-squads (daily / manual with includeRatings)
         ↓
-XI game draft UI shows that number
+squad_players.overall_rating  (+ rating_source: domestic_2025 | club_2025 | national_2025 | unrated)
+        ↓
+XI game draft UI shows that number (fixed for the tournament until form is added)
         ↓
 Placement penalty applied only when you put him in a slot
 ```
 
-### Two-tier rating logic (`sync-squads/_shared/squad-sync.ts`)
+### Baseline rating logic (`sync-squads/_shared/domestic-baseline.ts`)
 
-For every player on a nation’s roster:
+For every player on a nation’s roster, when `includeRatings: true`:
 
-#### Tier 1 — API season rating (preferred)
+**API call:** `GET /players?id={playerId}&season=2025`
 
-If API-Football has a **season match rating** for that player on that national team (`games.rating`, typically 0.0–10.0 from qualifiers, friendlies, or WC matches in season **2026**):
+From `statistics[]`, pick the best row (minimum **45 minutes**):
+
+| Priority | Source | Example |
+|----------|--------|---------|
+| 1 | **Domestic league** — highest minutes | Robertson: Premier League 1188 min, rating **6.74** → OVR **67**, `domestic_2025` |
+| 2 | **Other club** (excludes cups, UCL, friendlies) | Lower-tier or non-listed leagues |
+| 3 | **National team 2025** | International friendlies / qualifiers |
+| — | **No qualifying row** | `unrated`, OVR **0** (no FIFA-rank fallback) |
 
 ```
 overall_rating = clamp(round(apiRating × 10), 50, 94)
-rating_source  = "api"
 ```
 
 Examples:
@@ -42,58 +50,34 @@ Examples:
 | API `games.rating` | Stored OVR |
 |--------------------|------------|
 | 7.8 | **78** |
-| 8.2 | **82** |
+| 6.74 | **67** |
 | 6.5 | **65** |
 
-The sync takes the **best** rating found across that player’s stat rows for the team/season.
+**Robertson at 67:** Liverpool Premier League 2025 row (`league.id` 39) has `games.rating` **6.74** and the most domestic minutes → `round(6.74 × 10) = 67`, `rating_source = domestic_2025`.
 
-#### Tier 2 — FIFA rank fallback (no API minutes yet)
+Confirm in Supabase: `select name, overall_rating, rating_source, baseline_club_api_team_id from squad_players where api_football_player_id = 289`.
 
-If the player has **no** season rating yet (common pre-tournament or for unused squad members):
+### Position codes (LB, RW, …)
 
-```
-teamBase = clamp(round(86 - (fifaRank - 1) × 0.32), 58, 86)
-nameOffset = deterministic hash of player name → integer in [-4, +4]
-overall_rating = clamp(teamBase + nameOffset, 52, 90)
-rating_source  = "fallback"
-```
+When `includePositions: true`, sync tries **club lineups** from the baseline season (`fixtures/lineups` for `baseline_club_api_team_id`), then **national friendlies** as fallback. Robertson should resolve to **LB** from Liverpool grid data when lineups are available.
 
-**Team base from nation FIFA rank** (`teams.global_fifa_rank`):
-
-| FIFA rank | Team base OVR |
-|-----------|---------------|
-| 1 | 86 |
-| 10 | 83 |
-| 31 | 76 |
-| 60 | 67 |
-| 85 | 59 |
-
-**Name offset** spreads players within the same squad so not everyone has the same number. The same name always gets the same offset (deterministic).
-
-**Salah at 78 — likely explanations:**
-
-1. **API path:** His national-team season rating was ~**7.8** → `round(7.8 × 10) = 78`.
-2. **Fallback path:** Egypt’s FIFA rank gives a team base (e.g. ~76–80) plus a small name offset (e.g. +2) → **78**.
-
-You can confirm which path was used in Supabase: `squad_players.rating_source` for that row (`api` vs `fallback`).
-
-### What the game does *not* do to that 78
+### What the game does *not* do to that 67
 
 - Does not recalculate from club form, goals, or your draft round.
 - Does not change during your tournament run (today).
 - Does not use FUTBIN or live scraping during play.
 
-Ratings refresh when **`sync-squads`** runs again (e.g. daily cron with `includeRatings: true`).
+Baselines refresh when **`sync-squads`** runs with `{"includeRatings": true}` (daily cron). Post-WC **form fluctuations** are planned separately — not in baseline sync.
 
 ### After draft: placement penalty only
 
-Once Salah is in a slot, the game uses **effective rating** for squad strength:
+Once Robertson is in a slot, the game uses **effective rating** for squad strength:
 
-| Placement | Penalty | Salah 78 becomes |
-|-----------|---------|------------------|
-| Natural (e.g. RW in RW) | 0% | **78** |
-| Wrong role, same family (RW at ST) | −5% | **74** |
-| Wrong family (RW at CM) | −10% | **70** |
+| Placement | Penalty | Robertson 67 becomes |
+|-----------|---------|------------------------|
+| Natural (e.g. LB in LB) | 0% | **67** |
+| Wrong role, same family (LB at CB) | −5% | **64** |
+| Wrong family (LB at CM) | −10% | **60** |
 
 Code: `effectiveRating()` in `web/src/lib/xiGame/types.ts`, penalties in `web/src/lib/xiGame/positions.ts`.
 
@@ -236,6 +220,6 @@ mutable PlayerState[] (base effective + form)
 
 ## 5. One-line summary
 
-**Today:** Salah’s **78** comes from **`sync-squads`** (API season rating × 10, or FIFA-rank fallback + name spread), stored in **`squad_players`**, then reduced only if you play him out of position; that feeds a **fixed squad OVR** that drives all match outcomes.
+**Today:** A player’s OVR comes from **`sync-squads`** (2025 domestic `games.rating` × 10), stored in **`squad_players`**, then reduced only if you play him out of position; that feeds a **fixed squad OVR** that drives all match outcomes until a future form system is added.
 
 **Future:** Keep that base, but let **each simulated match** produce player ratings that **nudge form** into the next game so the XI evolves through the tournament.

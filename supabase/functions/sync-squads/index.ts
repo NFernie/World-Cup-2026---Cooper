@@ -6,7 +6,7 @@
  *
  * POST body (all optional):
  *   { "force": true }           — bypass once-per-day guard
- *   { "includeRatings": true }  — also fetch season ratings (slow; cron uses this)
+ *   { "includeRatings": true }  — 2025 domestic club baselines via /players?id= (slow)
  *   { "includePositions": true } — derive LB/ST/etc. from recent lineups (slow)
  *   { "status": true }          — return last sync metadata only (fast health check)
  */
@@ -24,7 +24,7 @@ Deno.serve(async (req) => {
     return jsonResponse({
       ok: true,
       status: "ready",
-      hint: 'POST {} for roster sync, or {"status": true} for last-run info.',
+      hint: 'POST {} for roster sync. {"force":true,"includeRatings":true} for 2025 baselines.',
     });
   }
 

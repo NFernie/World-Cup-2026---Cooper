@@ -236,7 +236,7 @@ If `with_api_id = 0`, expect `updated: 0` until you backfill ids from
 
 **Schedule:** `wc26-sync-match-odds` every **15 minutes** (`*/15 * * * *`).
 
-**API usage:** Fetches **Match Winner** odds **once per match**, only when kickoff is **~2 hours away** (window: now + 1h45m → now + 2h15m) and `odds_synced_at` is null. Pre-tournament / outside that window: `"apiCalls": 0`.
+**API usage:** **One API call per match** when kickoff is **~2 hours away** (window: now + 1h45m → now + 2h15m). Sets `odds_synced_at` after the attempt (even if API returns no odds) so it never re-fetches. The `match_odds` row is the **locked snapshot** used by `recalculate_pool_member_points` for the Odds leaderboard when the match finishes.
 
 ### Invoke
 
@@ -277,8 +277,8 @@ The React app reads **Supabase only** — it never calls API-Football. All exter
 
 | Job | Cron | API calls (typical) |
 |-----|------|---------------------|
-| `sync-match-results` | `*/5 * * * *` | **0** pre-tournament; **~1 per 5 min per live match** (batched by fixture id) |
-| `sync-match-odds` | `*/15 * * * *` | **0** until ~2h before kickoff; **1 per match** (once, sets `odds_synced_at`) |
+| `sync-match-results` | `*/5 * * * *` | **0** pre-tournament; **~1 per 5 min per live match** (kickoff → 3h after) |
+| `sync-match-odds` | `*/15 * * * *` | **1 per match total** (~2h pre-kickoff); odds locked for points |
 | `sync-tournament-awards` | `0 5 * * *` (daily) | **~50** (`/teams`, `/players/topscorers`, 48× `/players?team=`) |
 | `sync-fixtures` | `0 4 * * *` (daily) | **1–2** (skips `/teams` remap when 48 teams already linked) |
 

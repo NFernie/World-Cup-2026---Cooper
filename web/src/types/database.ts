@@ -187,6 +187,7 @@ export interface Database {
           photo_url: string | null
           overall_rating: number
           rating_source: string
+          baseline_club_api_team_id: number | null
           synced_at: string
         }
       }
