@@ -2,7 +2,7 @@ import type { PositionFamily } from './formations'
 import type { FormationSlot } from './formations'
 import type { SquadPlayer } from './types'
 
-/** Buff when a player is in their natural role (e.g. RW in RW). */
+/** Buff when slot aligns with position_code (e.g. RW in RW, or CM when code is CM). */
 export const NATURAL_POSITION_BUFF = 0.05
 
 /** Debuff when a player is in the wrong position family (e.g. RW at CM). */
@@ -109,16 +109,17 @@ export function placementFit(
   if (code) {
     const aliases = SLOT_ALIASES[slotCode] ?? [slotCode]
     if (aliases.includes(code)) return 'natural'
-    const codeFamily = familyFromCode(code)
-    if (codeFamily && codeFamily === slot.family) return 'wrong_slot'
+    // position_code and position can disagree (e.g. CM + FWD). Either source
+    // satisfying the slot is neutral — only a full mismatch is debuffed.
+    if (playerFamily === slot.family) return 'wrong_slot'
     return 'wrong_family'
   }
 
-  if (playerFamily === slot.family) return 'natural'
+  if (playerFamily === slot.family) return 'wrong_slot'
   return 'wrong_family'
 }
 
-/** Rating multiplier offset: +5% natural, 0% same family, −10% wrong family. */
+/** Rating multiplier offset: +5% position_code match, 0% position family match, −10% neither. */
 export function placementModifier(fit: PlacementFit): number {
   if (fit === 'natural') return NATURAL_POSITION_BUFF
   if (fit === 'wrong_slot') return 0

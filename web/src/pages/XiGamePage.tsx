@@ -365,7 +365,7 @@ export function XiGamePage() {
             {selectedPlayer && (
               <p className="mt-3 text-center text-xs text-[var(--muted)]">
                 Tap a highlighted slot to place <strong>{selectedPlayer.name}</strong>.
-                Green = natural fit (+5%), amber = same area, gold = out of position (−10%).
+                Green = matches position code (+5%), amber = matches position area, gold = out of position (−10%).
               </p>
             )}
           </Card>
