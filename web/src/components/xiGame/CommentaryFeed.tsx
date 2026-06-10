@@ -1,16 +1,28 @@
+import { useEffect, useRef } from 'react'
 import type { CommentaryLine } from '@/lib/xiGame/matchPresentation'
 
 type Props = {
   lines: CommentaryLine[]
   limit?: number
   className?: string
+  /** Keep the latest commentary line in view as new lines appear. */
+  autoScroll?: boolean
 }
 
-export function CommentaryFeed({ lines, limit, className = '' }: Props) {
+export function CommentaryFeed({ lines, limit, className = '', autoScroll = false }: Props) {
   const visible = limit != null ? lines.slice(0, limit) : lines
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!autoScroll) return
+    const container = containerRef.current
+    if (!container) return
+    container.scrollTop = container.scrollHeight
+  }, [autoScroll, visible.length])
 
   return (
     <div
+      ref={containerRef}
       className={`space-y-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 text-xs leading-relaxed ${className}`}
     >
       {visible.map((line, i) => (
