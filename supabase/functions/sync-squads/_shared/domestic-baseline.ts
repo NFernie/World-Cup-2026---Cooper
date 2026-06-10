@@ -207,27 +207,61 @@ function extractFixtureIds(payload: Record<string, unknown> | null): number[] {
   return ids;
 }
 
-/** LB/ST/etc. from recent club domestic-season lineups. */
-export async function fetchDomesticLineupPositionCode(
+function parseLineupPlayerCodes(lineup: Record<string, unknown>): Map<number, string> {
+  const codes = new Map<number, string>();
+  const formation = String(lineup.formation ?? "");
+  const startXI = (lineup.startXI ?? []) as Record<string, unknown>[];
+  if (!formation || startXI.length === 0) return codes;
+
+  for (const entry of startXI) {
+    const player = entry.player as Record<string, unknown> | undefined;
+    const id = player?.id as number | undefined;
+    if (!id || codes.has(id)) continue;
+    const pos = String(player?.pos ?? "");
+    const grid = player?.grid as string | null | undefined;
+    const code = gridToPositionCode(formation, pos, grid);
+    if (code) codes.set(id, code);
+  }
+  return codes;
+}
+
+/**
+ * LB/ST/etc. for many squad players at once — one fixtures call + lineups per club.
+ * (~5 API calls per club instead of ~7 per player.)
+ */
+export async function fetchClubLineupPositionCodes(
   apiKey: string,
-  playerId: number,
   clubTeamId: number,
   season: string,
-  maxFixtures = 6,
-): Promise<string | null> {
+  targetPlayerIds?: Set<number>,
+  maxFixtures = 4,
+): Promise<{ codes: Map<number, string>; apiCalls: number }> {
+  const codes = new Map<number, string>();
+  let apiCalls = 0;
+
   const fixturesRes = await fetch(
     `${API_BASE}/fixtures?team=${clubTeamId}&season=${season}&last=${maxFixtures}`,
     { headers: { "x-apisports-key": apiKey } },
   );
-  if (!fixturesRes.ok) return null;
+  apiCalls += 1;
+  if (!fixturesRes.ok) return { codes, apiCalls };
 
   const fixtureIds = extractFixtureIds(await fixturesRes.json().catch(() => null));
+
+  const allTargetsFound = () => {
+    if (!targetPlayerIds || targetPlayerIds.size === 0) return false;
+    for (const id of targetPlayerIds) {
+      if (!codes.has(id)) return false;
+    }
+    return true;
+  };
 
   for (const fixtureId of fixtureIds) {
     const lineupsRes = await fetch(
       `${API_BASE}/fixtures/lineups?fixture=${fixtureId}&team=${clubTeamId}`,
       { headers: { "x-apisports-key": apiKey } },
     );
+    apiCalls += 1;
     if (!lineupsRes.ok) continue;
 
     const payload = await lineupsRes.json().catch(() => null);
@@ -237,21 +271,32 @@ export async function fetchDomesticLineupPositionCode(
     ) ?? response[0];
     if (!lineup) continue;
 
-    const formation = String(lineup.formation ?? "");
-    const startXI = (lineup.startXI ?? []) as Record<string, unknown>[];
-
-    for (const entry of startXI) {
-      const player = entry.player as Record<string, unknown> | undefined;
-      const id = player?.id as number | undefined;
-      if (id !== playerId) continue;
-      const pos = String(player?.pos ?? "");
-      const grid = player?.grid as string | null | undefined;
-      const code = gridToPositionCode(formation, pos, grid);
-      if (code) return code;
+    for (const [id, code] of parseLineupPlayerCodes(lineup)) {
+      if (targetPlayerIds && !targetPlayerIds.has(id)) continue;
+      if (!codes.has(id)) codes.set(id, code);
     }
 
-    await new Promise((r) => setTimeout(r, 60));
+    if (allTargetsFound()) break;
+    await new Promise((r) => setTimeout(r, 45));
   }
 
-  return null;
+  return { codes, apiCalls };
+}
+
+/** Single-player helper — prefer fetchClubLineupPositionCodes for batches. */
+export async function fetchDomesticLineupPositionCode(
+  apiKey: string,
+  playerId: number,
+  clubTeamId: number,
+  season: string,
+  maxFixtures = 4,
+): Promise<string | null> {
+  const { codes } = await fetchClubLineupPositionCodes(
+    apiKey,
+    clubTeamId,
+    season,
+    new Set([playerId]),
+    maxFixtures,
+  );
+  return codes.get(playerId) ?? null;
 }

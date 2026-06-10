@@ -6,8 +6,9 @@
  *
  * POST body (all optional):
  *   { "force": true }           — bypass once-per-day guard
- *   { "includeRatings": true }  — 2025 domestic club baselines via /players?id= (slow)
- *   { "includePositions": true } — derive LB/ST/etc. from recent lineups (slow)
+ *   { "includeRatings": true }  — 2025 domestic baselines; skips already-migrated players
+ *   { "includePositions": true } — LB/ST from lineups (runs after ratings pass completes)
+ * Env: API_FOOTBALL_SYNC_BUDGET_MS (default 240000) — raise if edge timeout allows
  *   { "status": true }          — return last sync metadata only (fast health check)
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
