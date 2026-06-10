@@ -89,11 +89,13 @@ Run **ratings and positions separately** after deploy:
 # Ratings only (after api/fallback cleared)
 ?force=true&includeRatings=true
 
-# Positions only — batched per club (~5 API calls/club, not per player)
+# Positions only — do NOT combine with includeRatings (causes WORKER_RESOURCE_LIMIT)
 ?force=true&includePositions=true
 ```
 
-Position runs report `clubsProcessed`, `withPositionCode`, `positionApiCalls`, and `positionsSkipped`. Re-run until `position_code` null count stops falling.
+Position-only runs skip roster refresh, process **12 clubs per run** (~5 API calls each), and **save after each club**. Expect `withPositionCode` to increase every run. Re-run ~20–30 times until `position_code` null count stops falling.
+
+If you see `WORKER_RESOURCE_LIMIT`, ensure you are **not** passing `includeRatings=true` on position runs, and remove any edge secret `API_FOOTBALL_SYNC_BUDGET_MS` above `55000` for position passes (or set `POSITION_SYNC_BUDGET_MS=45000`).
 
 Or open the GET URL in a browser (may take up to ~4 min per run).
 

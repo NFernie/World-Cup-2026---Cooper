@@ -35,6 +35,7 @@ type SyncResult = {
   errors?: number;
   players?: number;
   withApiRating?: number;
+  withPositionCode?: number;
   ratingsBudgetReached?: boolean;
   budgetReached?: boolean;
 };
@@ -42,7 +43,8 @@ type SyncResult = {
 /** HTTP 500 on partial progress made Supabase log EDGE_FUNCTION_ERROR — treat progress as 200. */
 function syncHttpStatus(result: SyncResult): { ok: boolean; status: number; partial?: boolean } {
   if (result.skipped === true) return { ok: true, status: 200 };
-  const progress = (result.players ?? 0) > 0 || (result.withApiRating ?? 0) > 0;
+  const progress = (result.players ?? 0) > 0 || (result.withApiRating ?? 0) > 0 ||
+    (result.withPositionCode ?? 0) > 0;
   const partial = result.ratingsBudgetReached === true ||
     result.budgetReached === true ||
     (result.errors ?? 0) > 0;

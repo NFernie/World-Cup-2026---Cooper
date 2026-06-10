@@ -307,11 +307,34 @@ function needsBaselineRating(source: string | null | undefined): boolean {
   return LEGACY_RATING_SOURCES.has(source) || source === "unrated";
 }
 
-function syncBudgetMs(): number {
+function syncBudgetMs(includeRatings: boolean, includePositions: boolean): number {
+  // Positions-only must stay short — long runs hit WORKER_RESOURCE_LIMIT.
+  if (includePositions && !includeRatings) {
+    const pos = Deno.env.get("POSITION_SYNC_BUDGET_MS");
+    const n = pos ? parseInt(pos, 10) : 45_000;
+    return Number.isFinite(n) && n > 5_000 ? Math.min(n, 55_000) : 45_000;
+  }
   const raw = Deno.env.get("API_FOOTBALL_SYNC_BUDGET_MS");
-  const n = raw ? parseInt(raw, 10) : 240_000;
-  return Number.isFinite(n) && n > 10_000 ? n : 240_000;
+  const n = raw ? parseInt(raw, 10) : 120_000;
+  return Number.isFinite(n) && n > 10_000 ? Math.min(n, 150_000) : 120_000;
 }
+
+function maxClubsPerPositionRun(): number {
+  const n = parseInt(Deno.env.get("POSITION_SYNC_MAX_CLUBS") ?? "12", 10);
+  return Number.isFinite(n) && n > 0 ? Math.min(n, 25) : 12;
+}
+
+function maxNationalTeamsPerRun(): number {
+  const n = parseInt(Deno.env.get("POSITION_SYNC_MAX_NATIONAL") ?? "2", 10);
+  return Number.isFinite(n) && n > 0 ? Math.min(n, 5) : 2;
+}
+
+type PositionPending = {
+  id: string;
+  api_football_player_id: number;
+  baseline_club_api_team_id: number | null;
+  team_id: string;
+};
 
 function safeOverallRating(value: number | null | undefined, fallback = 62): number {
   const n = value ?? fallback;
@@ -375,8 +398,9 @@ export async function syncSquads(
   const force = opts.force === true;
   const includeRatings = opts.includeRatings === true;
   const includePositions = opts.includePositions === true;
-  const budgetMs = opts.budgetMs ?? syncBudgetMs();
+  const budgetMs = opts.budgetMs ?? syncBudgetMs(includeRatings, includePositions);
   const startedAt = Date.now();
+  const positionsOnly = includePositions && !includeRatings;
 
   // Once-per-day guard: avoid hammering the football API. Manual runs can force.
   const metaResult = await supabase
@@ -467,7 +491,7 @@ export async function syncSquads(
   );
 
   const existingByTeam = new Map<string, Map<number, ExistingPlayerRow>>();
-  if (includeRatings || includePositions) {
+  if (includeRatings) {
     const { data: allExisting } = await supabase
       .from("squad_players")
       .select(
@@ -513,8 +537,8 @@ export async function syncSquads(
   const now = new Date().toISOString();
   const rosterByTeam = new Map<string, SquadRow[]>();
 
-  // Phase 1 — rosters for every nation.
-  for (const team of teams) {
+  // Phase 1 — rosters (skip entirely on positions-only runs).
+  if (!positionsOnly) for (const team of teams) {
     const apiTeamId = team.api_football_team_id;
     if (!apiTeamId) continue;
 
@@ -643,147 +667,126 @@ export async function syncSquads(
     await new Promise((r) => setTimeout(r, 100));
   }
 
-  // Phase 2 — position codes: batch by club globally, then national friendlies.
+  // Phase 2 — position codes: lightweight club batches with immediate DB writes.
   const ratingsPassComplete = !includeRatings || !ratingsBudgetReached;
   let positionsSkipped = 0;
   let positionApiCalls = 0;
   let clubsProcessed = 0;
 
   if (includePositions && ratingsPassComplete) {
-    type PositionRow = SquadRow & { id?: string };
-    const pendingRows: PositionRow[] = [];
-    for (const [, players] of existingByTeam) {
-      for (const p of players.values()) {
-        if (p.position_code || p.api_football_player_id == null) {
-          if (p.position_code) positionsSkipped += 1;
-          continue;
-        }
-        pendingRows.push({
-          team_id: "", // filled from team map below
-          api_football_player_id: p.api_football_player_id,
-          name: "",
-          position: "MID",
-          position_code: null,
-          position_detail: null,
-          shirt_number: null,
-          photo_url: null,
-          overall_rating: safeOverallRating(p.overall_rating),
-          rating_source: p.rating_source,
-          baseline_club_api_team_id: p.baseline_club_api_team_id,
-          synced_at: now,
-        });
-      }
-    }
+    const { count: codedCount } = await supabase
+      .from("squad_players")
+      .select("id", { count: "exact", head: true })
+      .not("position_code", "is", null);
+    positionsSkipped = codedCount ?? 0;
 
-    // Re-load full rows for pending players (need team_id + name for upsert).
-    if (pendingRows.length > 0) {
-      const { data: fullPending } = await supabase
-        .from("squad_players")
-        .select("*")
-        .is("position_code", null)
-        .not("api_football_player_id", "is", null);
+    const { data: pending } = await supabase
+      .from("squad_players")
+      .select("id, api_football_player_id, baseline_club_api_team_id, team_id")
+      .is("position_code", null)
+      .not("api_football_player_id", "is", null);
 
-      const pendingByPlayerId = new Map<number, PositionRow>();
-      for (const row of (fullPending ?? []) as PositionRow[]) {
-        if (row.api_football_player_id != null) {
-          pendingByPlayerId.set(row.api_football_player_id, row);
-        }
-      }
-
-      const updates: PositionRow[] = [];
-
-      // 2a — one fixtures+lineups pass per club (all nations share Liverpool once).
-      const byClub = new Map<number, PositionRow[]>();
-      for (const row of pendingByPlayerId.values()) {
-        const clubId = row.baseline_club_api_team_id;
+    if (pending && pending.length > 0) {
+      const byClub = new Map<number, PositionPending[]>();
+      for (const row of pending) {
+        const clubId = row.baseline_club_api_team_id as number | null;
         if (!clubId) continue;
+        const entry: PositionPending = {
+          id: row.id as string,
+          api_football_player_id: row.api_football_player_id as number,
+          baseline_club_api_team_id: clubId,
+          team_id: row.team_id as string,
+        };
         if (!byClub.has(clubId)) byClub.set(clubId, []);
-        byClub.get(clubId)!.push(row);
+        byClub.get(clubId)!.push(entry);
       }
 
-      const clubsSorted = [...byClub.entries()].sort((a, b) => b[1].length - a[1].length);
-      const clubCache = new Map<number, Map<number, string>>();
+      const clubsSorted = [...byClub.entries()]
+        .sort((a, b) => b[1].length - a[1].length)
+        .slice(0, maxClubsPerPositionRun());
 
-      for (const [clubId, clubRows] of clubsSorted) {
+      for (const [clubId, clubPlayers] of clubsSorted) {
         if (Date.now() - startedAt > budgetMs) {
           budgetReached = true;
           break;
         }
 
-        const targetIds = new Set(
-          clubRows.map((r) => r.api_football_player_id).filter((id): id is number => id != null),
-        );
+        const targetIds = new Set(clubPlayers.map((p) => p.api_football_player_id));
         const { codes, apiCalls } = await fetchClubLineupPositionCodes(
           apiKey,
           clubId,
           baselineSeason,
           targetIds,
+          2,
         );
         positionApiCalls += apiCalls;
         clubsProcessed += 1;
-        clubCache.set(clubId, codes);
 
-        for (const row of clubRows) {
-          const playerId = row.api_football_player_id;
-          if (!playerId) continue;
-          const code = codes.get(playerId);
-          if (code) {
-            updates.push({ ...row, position_code: code, synced_at: now });
-            positionCoded += 1;
-            pendingByPlayerId.delete(playerId);
-          }
+        for (const p of clubPlayers) {
+          const code = codes.get(p.api_football_player_id);
+          if (!code) continue;
+          const { error } = await supabase
+            .from("squad_players")
+            .update({ position_code: code, synced_at: now })
+            .eq("id", p.id);
+          if (!error) positionCoded += 1;
         }
 
-        await new Promise((r) => setTimeout(r, 50));
+        await new Promise((r) => setTimeout(r, 40));
       }
 
-      // 2b — national friendlies for players still missing (no club or not in club lineups).
-      if (!budgetReached && pendingByPlayerId.size > 0) {
-        const pendingByNationalTeam = new Map<string, PositionRow[]>();
-        for (const row of pendingByPlayerId.values()) {
-          if (!pendingByNationalTeam.has(row.team_id)) {
-            pendingByNationalTeam.set(row.team_id, []);
-          }
-          pendingByNationalTeam.get(row.team_id)!.push(row);
+      // National friendlies — only if time remains; cap teams per run.
+      if (!budgetReached && Date.now() - startedAt < budgetMs - 8_000) {
+        const { data: stillPending } = await supabase
+          .from("squad_players")
+          .select("id, api_football_player_id, team_id")
+          .is("position_code", null)
+          .not("api_football_player_id", "is", null)
+          .limit(150);
+
+        const byNational = new Map<string, PositionPending[]>();
+        for (const row of stillPending ?? []) {
+          const entry: PositionPending = {
+            id: row.id as string,
+            api_football_player_id: row.api_football_player_id as number,
+            baseline_club_api_team_id: null,
+            team_id: row.team_id as string,
+          };
+          if (!byNational.has(entry.team_id)) byNational.set(entry.team_id, []);
+          byNational.get(entry.team_id)!.push(entry);
         }
 
         const teamsById = new Map(teams.map((t) => [t.id, t]));
-        const nationalTeamsSorted = [...pendingByNationalTeam.entries()]
-          .sort((a, b) => b[1].length - a[1].length);
+        const nationalTeams = [...byNational.entries()]
+          .sort((a, b) => b[1].length - a[1].length)
+          .slice(0, maxNationalTeamsPerRun());
 
-        for (const [teamId, teamRows] of nationalTeamsSorted) {
+        for (const [teamId, teamPlayers] of nationalTeams) {
           if (Date.now() - startedAt > budgetMs) {
             budgetReached = true;
             break;
           }
-          const dbTeam = teamsById.get(teamId);
-          const apiTeamId = dbTeam?.api_football_team_id;
+          const apiTeamId = teamsById.get(teamId)?.api_football_team_id;
           if (!apiTeamId) continue;
 
-          const nationalCodes = await fetchLineupPositionCodes(apiKey, apiTeamId, season);
-          positionApiCalls += 12; // ~friendlies + recent fixtures + lineups (estimate)
+          const targetIds = new Set(teamPlayers.map((p) => p.api_football_player_id));
+          const { codes: nationalCodes, apiCalls } = await fetchLineupPositionCodes(
+            apiKey,
+            apiTeamId,
+            season,
+            targetIds,
+          );
+          positionApiCalls += apiCalls;
 
-          for (const row of teamRows) {
-            const playerId = row.api_football_player_id;
-            if (!playerId) continue;
-            const code = nationalCodes.get(playerId);
-            if (code) {
-              updates.push({ ...row, position_code: code, synced_at: now });
-              positionCoded += 1;
-              pendingByPlayerId.delete(playerId);
-            }
+          for (const p of teamPlayers) {
+            const code = nationalCodes.get(p.api_football_player_id);
+            if (!code) continue;
+            const { error } = await supabase
+              .from("squad_players")
+              .update({ position_code: code, synced_at: now })
+              .eq("id", p.id);
+            if (!error) positionCoded += 1;
           }
-
-          await new Promise((r) => setTimeout(r, 80));
-        }
-      }
-
-      if (updates.length > 0) {
-        const upsertResult = await supabase
-          .from("squad_players")
-          .upsert(updates, { onConflict: "team_id,api_football_player_id" });
-        if (upsertResult.error) {
-          recordError(`position batch upsert: ${upsertResult.error.message}`);
         }
       }
     }
@@ -804,9 +807,9 @@ export async function syncSquads(
   if (ratingsBudgetReached) {
     note =
       `Baseline ratings partial (${apiRated} new, ${ratingsSkipped} already done). Re-run the same URL — teams with api/fallback players are prioritised.`;
-  } else if (budgetReached) {
+  } else if (budgetReached || (positionsOnly && positionCoded > 0)) {
     note =
-      `Position sync partial (${positionCoded} coded, ${clubsProcessed} clubs, ~${positionApiCalls} API calls). Re-run ?force=true&includePositions=true — already-coded players are skipped.`;
+      `Position sync partial (${positionCoded} coded this run, ${clubsProcessed} clubs, ~${positionApiCalls} API calls). Re-run ?force=true&includePositions=true — each run saves immediately.`;
   } else if (unrated > 0) {
     note = `${unrated} players have no ${baselineSeason} club/national rating in API-Football.`;
   } else if (playersUpserted < expectedPlayers * 0.8) {
@@ -831,6 +834,7 @@ export async function syncSquads(
     errors,
     errorDetails: errorDetails.length > 0 ? errorDetails : undefined,
     ratingsBudgetReached: ratingsBudgetReached || undefined,
+    positionsOnly: positionsOnly || undefined,
     includeRatings,
     includePositions,
     baselineSeason,
