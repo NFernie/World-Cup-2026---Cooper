@@ -27,7 +27,16 @@ Use **real squad data** for relative strength and **FIFA rank** as an anchor for
 | Opponent nations | **Anchored Top-11** — blend used in tournament schedule |
 | Marquee overrides | **Trust the blend** — no manual CSV for now |
 
-### Player-level (Phase 2 — requires API re-sync)
+### Player-level read-time adjust (Phase 1b — implemented, no API)
+
+Applied in `fetchAllSquadPlayers()` via `applySquadRatingAdjustments()`:
+
+1. **League multiplier** on raw `overall_rating` (`leagueTiers.ts`) — uses `baseline_league_id` when set, else `rating_source` proxy
+2. **Nation clamp** — `[fifaTeamOvr - 8, fifaTeamOvr + 12]`
+3. **Star floor** — top 3 per nation by **raw** rating among players with `raw >= fifaTeamOvr - 8` get at least `fifaTeamOvr + 6`
+4. **`manual`** ratings are never adjusted
+
+### Player-level sync (Phase 2 — requires API re-sync)
 
 When API budget allows, improve `sync-squads` inputs:
 
@@ -78,6 +87,7 @@ Light isotonic adjustment so 48 nation OVRs stay broadly monotonic with FIFA ran
 | Phase | Scope | API needed? | Status |
 |-------|--------|-------------|--------|
 | **1** | FIFA-anchored team OVR for tournament opponents | No | **Done** |
+| **1b** | Read-time league mult + nation clamp + star floor | No | **Done** |
 | **2** | Re-prioritise player sync + FIFA player fallback | Yes (`sync-squads`) | Pending |
 | **3** | Star-weighted Top-11 | No (formula only) | Pending |
 | **4** | Rank-order guardrail | No | Optional |

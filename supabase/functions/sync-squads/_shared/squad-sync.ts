@@ -286,6 +286,7 @@ type SquadRow = {
   overall_rating: number;
   rating_source: string;
   baseline_club_api_team_id?: number | null;
+  baseline_league_id?: number | null;
   synced_at: string;
 };
 
@@ -295,6 +296,7 @@ type ExistingPlayerRow = {
   rating_source: string;
   position_code: string | null;
   baseline_club_api_team_id: number | null;
+  baseline_league_id: number | null;
 };
 
 const SYNC_META_KEY = "spin_draft_sync";
@@ -612,6 +614,7 @@ export async function syncSquads(
         let overall = safeOverallRating(preserved?.overall_rating);
         let source = preserved?.rating_source ?? "unrated";
         let clubTeamId = preserved?.baseline_club_api_team_id ?? null;
+        let leagueId = preserved?.baseline_league_id ?? null;
         let positionCode = preserved?.position_code ?? null;
 
         if (preserved?.rating_source === "manual") {
@@ -642,6 +645,7 @@ export async function syncSquads(
               overall = baseline.ovr;
               source = baseline.source;
               clubTeamId = baseline.clubTeamId;
+              leagueId = baseline.leagueId;
               apiRated += 1;
               if (baseline.gamesPosition) {
                 position = normalizePosition(baseline.gamesPosition);
@@ -666,6 +670,7 @@ export async function syncSquads(
           overall_rating: overall,
           rating_source: source,
           baseline_club_api_team_id: clubTeamId,
+          baseline_league_id: leagueId,
           synced_at: now,
         });
       }

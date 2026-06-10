@@ -73,6 +73,7 @@ export type PlayerBaseline = {
   ovr: number;
   source: "domestic_2025" | "club_2025" | "national_2025";
   clubTeamId: number | null;
+  leagueId: number | null;
   clubName: string | null;
   leagueName: string | null;
   gamesPosition: string | null;
@@ -169,6 +170,7 @@ function toBaseline(
     ovr,
     source,
     clubTeamId: source === "national_2025" ? null : stat.team.id,
+    leagueId: stat.league.id,
     clubName: stat.team.name,
     leagueName: stat.league.name,
     gamesPosition: stat.games?.position ?? null,

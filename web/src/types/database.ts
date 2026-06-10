@@ -188,6 +188,7 @@ export interface Database {
           overall_rating: number
           rating_source: string
           baseline_club_api_team_id: number | null
+          baseline_league_id: number | null
           synced_at: string
         }
       }
