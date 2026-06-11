@@ -22,6 +22,7 @@ import {
   WorldCupCountdown,
   type CountdownMatch,
 } from '@/components/CountdownCards'
+import { LiveMatchesSection } from '@/components/LiveMatchesSection'
 import { RevealNamesControl } from '@/components/RevealNamesControl'
 import { RevealNamesPoll } from '@/components/RevealNamesPoll'
 import { TeamFlag } from '@/components/TeamFlag'
@@ -336,6 +337,13 @@ export function PoolPage() {
             />
           </div>
         </Card>
+      )}
+
+      {member && (
+        <LiveMatchesSection
+          assignedTeamId={member.assigned_team_id}
+          playerLineForTeam={playerLineForTeam}
+        />
       )}
 
       {member && (

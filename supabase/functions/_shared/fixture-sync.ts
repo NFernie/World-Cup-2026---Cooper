@@ -321,36 +321,48 @@ async function resolveMatchIdByExternalId(
   return data?.id ?? null;
 }
 
-/** Goal events from embedded fixtures?ids= response — no extra API call. */
-export async function syncMatchGoalEvents(
+function isSyncableMatchEvent(e: ApiEvent): boolean {
+  if (!e.player?.name) return false;
+  if (e.type === "Goal" && e.detail !== "Missed Penalty") return true;
+  if (e.type === "Card") {
+    const detail = e.detail ?? "";
+    return detail === "Red Card" || detail === "Second Yellow";
+  }
+  return false;
+}
+
+/** Goals and red cards from embedded fixtures?ids= response — no extra API call. */
+export async function syncMatchEvents(
   supabase: SupabaseClient,
   matchId: string,
   events: ApiEvent[] | undefined,
 ): Promise<number> {
   if (!events?.length) return 0;
 
-  const goals = events.filter(
-    (e) =>
-      e.type === "Goal" &&
-      e.detail !== "Missed Penalty" &&
-      e.player?.name,
-  );
-  if (goals.length === 0) return 0;
+  const syncable = events
+    .filter(isSyncableMatchEvent)
+    .sort((a, b) => {
+      const ma = (a.time?.elapsed ?? 0) * 100 + (a.time?.extra ?? 0);
+      const mb = (b.time?.elapsed ?? 0) * 100 + (b.time?.extra ?? 0);
+      return ma - mb;
+    });
+
+  if (syncable.length === 0) return 0;
 
   await supabase.from("match_events").delete().eq("match_id", matchId);
 
   let inserted = 0;
-  for (let i = 0; i < goals.length; i++) {
-    const g = goals[i];
+  for (let i = 0; i < syncable.length; i++) {
+    const e = syncable[i];
     const { error } = await supabase.from("match_events").insert({
       match_id: matchId,
-      minute: g.time?.elapsed ?? 0,
-      extra_minute: g.time?.extra ?? null,
-      team_api_id: g.team?.id ?? null,
-      player_name: g.player!.name!,
-      assist_name: g.assist?.name ?? null,
-      event_type: "Goal",
-      detail: g.detail ?? null,
+      minute: e.time?.elapsed ?? 0,
+      extra_minute: e.time?.extra ?? null,
+      team_api_id: e.team?.id ?? null,
+      player_name: e.player!.name!,
+      assist_name: e.type === "Goal" ? e.assist?.name ?? null : null,
+      event_type: e.type === "Card" ? "Card" : "Goal",
+      detail: e.detail ?? null,
       sort_order: i,
     });
     if (!error) inserted++;
@@ -364,6 +376,15 @@ export async function syncMatchGoalEvents(
   }
 
   return inserted;
+}
+
+/** @deprecated Use syncMatchEvents */
+export async function syncMatchGoalEvents(
+  supabase: SupabaseClient,
+  matchId: string,
+  events: ApiEvent[] | undefined,
+): Promise<number> {
+  return syncMatchEvents(supabase, matchId, events);
 }
 
 /** Poll only fixtures in the active window — 1 API call per batch of ids (not whole league). */
@@ -419,7 +440,7 @@ export async function syncActiveMatchScores(
 
       const matchId = await resolveMatchIdByExternalId(supabase, String(fx.fixture.id));
       if (matchId) {
-        eventsUpdated += await syncMatchGoalEvents(supabase, matchId, fx.events);
+        eventsUpdated += await syncMatchEvents(supabase, matchId, fx.events);
       }
     }
   }

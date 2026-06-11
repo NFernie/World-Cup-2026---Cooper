@@ -38,24 +38,27 @@ export function MatchFixtureCard({
   showOdds?: boolean
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const showScore = homeScore != null && awayScore != null
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3">
         <MatchTeamCompact
           team={home}
           align="left"
           highlight={homeHighlight}
-          score={homeScore}
         />
-        {homeScore == null && awayScore == null && (
+        {showScore ? (
+          <span className="shrink-0 px-1 text-2xl font-bold tabular-nums tracking-tight text-[var(--foreground)]">
+            {homeScore} - {awayScore}
+          </span>
+        ) : (
           <span className="shrink-0 px-1 text-sm font-medium text-[var(--muted)]">vs</span>
         )}
         <MatchTeamCompact
           team={away}
           align="right"
           highlight={awayHighlight}
-          score={awayScore}
         />
       </div>
 

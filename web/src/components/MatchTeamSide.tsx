@@ -62,7 +62,7 @@ export function MatchTeamDetails({
       {team.group_letter && <p>Group {team.group_letter}</p>}
       {playerLine && <p>{playerLine}</p>}
       <p>
-        Manager: {staff.headCoach} · Captain: {staff.captain}
+        Head coach: {staff.headCoach} · Captain: {staff.captain}
       </p>
       <p>{formatFifaWorldRanking(team.global_fifa_rank)}</p>
     </div>

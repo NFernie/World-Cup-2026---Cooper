@@ -28,7 +28,7 @@ export const TEAM_STAFF: Record<string, TeamStaff> = {
   NED: { headCoach: 'Ronald Koeman', captain: 'Virgil van Dijk' },
   JPN: { headCoach: 'Hajime Moriyasu', captain: 'Wataru Endo' },
   TUN: { headCoach: 'Samuel Zauber', captain: 'Youssef Msakni' },
-  SWE: { headCoach: 'Jon Dahl Tomasson', captain: 'Victor Lindelöf' },
+  SWE: { headCoach: 'Graham Potter', captain: 'Victor Lindelöf' },
   BEL: { headCoach: 'Domenico Tedesco', captain: 'Kevin De Bruyne' },
   EGY: { headCoach: 'Hossam Hassan', captain: 'Mohamed Salah' },
   IRN: { headCoach: 'Amir Ghalenoei', captain: 'Alireza Jahanbakhsh' },
