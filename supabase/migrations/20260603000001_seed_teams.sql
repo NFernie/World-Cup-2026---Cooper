@@ -41,11 +41,11 @@ insert into public.teams (fifa_code, name, group_letter) values
   ('AUT', 'Austria', 'J'),
   ('JOR', 'Jordan', 'J'),
   ('POR', 'Portugal', 'K'),
-  ('ENG', 'England', 'K'),
-  ('CRO', 'Croatia', 'K'),
-  ('COL', 'Colombia', 'K'),
-  ('UZB', 'Uzbekistan', 'K'),
   ('COD', 'Congo DR', 'K'),
-  ('PAN', 'Panama', 'L'),
-  ('GHA', 'Ghana', 'L')
+  ('UZB', 'Uzbekistan', 'K'),
+  ('COL', 'Colombia', 'K'),
+  ('ENG', 'England', 'L'),
+  ('CRO', 'Croatia', 'L'),
+  ('GHA', 'Ghana', 'L'),
+  ('PAN', 'Panama', 'L')
 on conflict (fifa_code) do nothing;
