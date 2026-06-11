@@ -148,7 +148,7 @@ export async function syncSquadForm(
     supabase
       .from("matches")
       .select("id, external_id, home_team_id, away_team_id, kickoff_at, status")
-      .eq("status", "FT")
+      .eq("status", "finished")
       .not("external_id", "is", null)
       .gt("kickoff_at", watermark)
       .order("kickoff_at", { ascending: true }),
