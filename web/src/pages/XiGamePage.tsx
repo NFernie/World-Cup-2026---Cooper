@@ -272,8 +272,10 @@ export function XiGamePage() {
         <div className="flex items-start gap-2 rounded-lg border border-[var(--primary)]/40 bg-[var(--primary)]/8 px-3 py-2 text-xs text-[var(--foreground)]">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-[var(--primary)]" aria-hidden />
           <span>
-            <strong>Provisional squads.</strong> Players and ratings are based on current
-            data and will update when FIFA announces the final 26-man squads.
+            <strong>Live ratings.</strong> Baseline OVR comes from 2025 club and international
+            stats. During the World Cup, players earn small temporary boosts or dips (up to ±2%)
+            from real match performances — updated daily after each round of games. Squads remain
+            provisional until FIFA confirms final 26-man lists.
           </span>
         </div>
       )}
