@@ -301,8 +301,8 @@ export function isInLivePollWindow(
   // From kickoff until ~3h after (scheduled past kickoff until API marks live/finished).
   if (nowMs >= kickoff && nowMs <= matchEnd && status !== "finished") return true;
 
-  // One final sync after FT if goal events not yet stored (same fixtures?ids= call).
-  if (status === "finished" && !eventsSyncedAt && nowMs <= matchEnd + 30 * 60 * 1000) {
+  // Backfill goals/cards for finished matches that never received an events sync.
+  if (status === "finished" && !eventsSyncedAt) {
     return true;
   }
 
@@ -326,18 +326,18 @@ function isSyncableMatchEvent(e: ApiEvent): boolean {
   if (e.type === "Goal" && e.detail !== "Missed Penalty") return true;
   if (e.type === "Card") {
     const detail = e.detail ?? "";
-    return detail === "Red Card" || detail === "Second Yellow";
+    return detail === "Yellow Card" || detail === "Red Card" || detail === "Second Yellow";
   }
   return false;
 }
 
-/** Goals and red cards from embedded fixtures?ids= response — no extra API call. */
+/** Goals and cards from embedded fixtures?ids= response — no extra API call. */
 export async function syncMatchEvents(
   supabase: SupabaseClient,
   matchId: string,
   events: ApiEvent[] | undefined,
 ): Promise<number> {
-  if (!events?.length) return 0;
+  if (events === undefined) return 0;
 
   const syncable = events
     .filter(isSyncableMatchEvent)
@@ -346,8 +346,6 @@ export async function syncMatchEvents(
       const mb = (b.time?.elapsed ?? 0) * 100 + (b.time?.extra ?? 0);
       return ma - mb;
     });
-
-  if (syncable.length === 0) return 0;
 
   await supabase.from("match_events").delete().eq("match_id", matchId);
 
@@ -368,12 +366,10 @@ export async function syncMatchEvents(
     if (!error) inserted++;
   }
 
-  if (inserted > 0) {
-    await supabase
-      .from("matches")
-      .update({ events_synced_at: new Date().toISOString() })
-      .eq("id", matchId);
-  }
+  await supabase
+    .from("matches")
+    .update({ events_synced_at: new Date().toISOString() })
+    .eq("id", matchId);
 
   return inserted;
 }
@@ -403,9 +399,16 @@ export async function syncActiveMatchScores(
     .select("external_id, kickoff_at, status, events_synced_at")
     .not("external_id", "is", null);
 
-  const active = (matches ?? []).filter((m) =>
-    isInLivePollWindow(m.kickoff_at, m.status, Date.now(), m.events_synced_at)
-  );
+  const active = (matches ?? [])
+    .filter((m) =>
+      isInLivePollWindow(m.kickoff_at, m.status, Date.now(), m.events_synced_at)
+    )
+    .sort((a, b) => {
+      // Prioritise live, then recent kickoffs (backfill finished matches newest first).
+      if (a.status === "live" && b.status !== "live") return -1;
+      if (b.status === "live" && a.status !== "live") return 1;
+      return new Date(b.kickoff_at).getTime() - new Date(a.kickoff_at).getTime();
+    });
 
   if (active.length === 0) {
     return {

@@ -34,11 +34,14 @@ export function MatchEventsList({
   away: TeamSide
 }) {
   const goals = events.filter((e) => e.event_type === 'Goal')
+  const yellowCards = events.filter(
+    (e) => e.event_type === 'Card' && e.detail === 'Yellow Card',
+  )
   const redCards = events.filter(
     (e) => e.event_type === 'Card' && (e.detail === 'Red Card' || e.detail === 'Second Yellow'),
   )
 
-  if (goals.length === 0 && redCards.length === 0) return null
+  if (goals.length === 0 && yellowCards.length === 0 && redCards.length === 0) return null
 
   function sideForEvent(ev: MatchEventRow) {
     const isHome = ev.team_api_id != null ? ev.team_api_id === homeApiId : false
@@ -68,6 +71,30 @@ export function MatchEventsList({
                   {ev.detail && ev.detail !== 'Normal Goal' && (
                     <span className="text-xs text-[var(--muted)]">· {ev.detail}</span>
                   )}
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
+
+      {yellowCards.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
+            Yellow cards
+          </p>
+          <ul className="space-y-1 text-sm">
+            {yellowCards.map((ev) => {
+              const side = sideForEvent(ev)
+              return (
+                <li key={ev.id} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <span className="font-mono text-xs text-[var(--muted)]">
+                    {formatGoalMinute(ev.minute, ev.extra_minute)}
+                  </span>
+                  <TeamFlag fifaCode={side.fifa_code} size={20} className="!h-3 !w-[18px]" />
+                  <span className="font-medium text-amber-600 dark:text-amber-400">
+                    {ev.player_name}
+                  </span>
                 </li>
               )
             })}
