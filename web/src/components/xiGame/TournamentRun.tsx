@@ -13,6 +13,7 @@ import {
   type TournamentMatchPreview,
   type TournamentRunResult,
 } from '@/lib/xiGame/matchPresentation'
+import { formatGroupRecordFromMatches } from '@/lib/xiGame/simulate'
 import type { DraftPick } from '@/lib/xiGame/types'
 
 type SubPhase = 'preview' | 'playing' | 'match_result'
@@ -20,6 +21,7 @@ type SubPhase = 'preview' | 'playing' | 'match_result'
 type Props = {
   picks: DraftPick[]
   schedule: TournamentMatchPreview[]
+  userTeamName: string
   onComplete: (result: TournamentRunResult) => void
 }
 
@@ -48,7 +50,7 @@ function remainingSchedule(
   })
 }
 
-export function TournamentRun({ picks, schedule, onComplete }: Props) {
+export function TournamentRun({ picks, schedule, userTeamName, onComplete }: Props) {
   const userOvr = useMemo(() => squadOverall(picks), [picks])
   const [played, setPlayed] = useState<PlayedMatch[]>([])
   const [current, setCurrent] = useState<PlayedMatch | null>(null)
@@ -84,14 +86,14 @@ export function TournamentRun({ picks, schedule, onComplete }: Props) {
       nextPreview.isKnockout,
       Math.random,
     )
-    const match = buildMatchPresentation(nextPreview, picks, outcome, Math.random)
+    const match = buildMatchPresentation(nextPreview, picks, outcome, Math.random, userTeamName)
     setCurrent(match)
     setSubPhase('playing')
     setShowFullCommentary(true)
   }
 
   function skipAll() {
-    onComplete(simulateTournamentFull(picks, schedule))
+    onComplete(simulateTournamentFull(picks, schedule, Math.random, played, userTeamName))
   }
 
   function continueAfterMatch() {
@@ -109,7 +111,7 @@ export function TournamentRun({ picks, schedule, onComplete }: Props) {
           outcome: 'knocked_out',
           exitRound: 'group',
           squadOvr: ovr,
-          groupRecord: formatGroupRecord(nextPlayed),
+          groupRecord: formatGroupRecordFromMatches(nextPlayed),
           matches: nextPlayed,
         })
         return
@@ -121,7 +123,7 @@ export function TournamentRun({ picks, schedule, onComplete }: Props) {
         outcome: 'knocked_out',
         exitRound: current.stage,
         squadOvr: userOvr,
-        groupRecord: formatGroupRecord(nextPlayed),
+        groupRecord: formatGroupRecordFromMatches(nextPlayed),
         matches: nextPlayed,
       })
       return
@@ -133,7 +135,7 @@ export function TournamentRun({ picks, schedule, onComplete }: Props) {
         outcome: 'won',
         exitRound: 'champion',
         squadOvr: userOvr,
-        groupRecord: formatGroupRecord(nextPlayed),
+        groupRecord: formatGroupRecordFromMatches(nextPlayed),
         matches: nextPlayed,
       })
     }
@@ -151,7 +153,9 @@ export function TournamentRun({ picks, schedule, onComplete }: Props) {
             <p className="text-xs font-semibold uppercase tracking-wide text-[var(--primary)]">
               {nextPreview.stageLabel}
             </p>
-            <CardTitle className="mt-1 text-xl">Your XI vs {nextPreview.opponentName}</CardTitle>
+            <CardTitle className="mt-1 text-xl">
+              {userTeamName} vs {nextPreview.opponentName}
+            </CardTitle>
             <CardDescription className="mt-2">
               Squad rating <strong>{userOvr}</strong> vs opponent{' '}
               <strong>{nextPreview.opponentOvr}</strong>
@@ -164,7 +168,7 @@ export function TournamentRun({ picks, schedule, onComplete }: Props) {
         </div>
         {played.length > 0 && (
           <p className="text-xs text-[var(--muted)]">
-            Group so far: {formatGroupRecord(played)}
+            Group so far: {formatGroupRecordFromMatches(played)}
           </p>
         )}
         <Button onClick={kickOff} className="w-full sm:w-auto">
@@ -178,7 +182,7 @@ export function TournamentRun({ picks, schedule, onComplete }: Props) {
     return (
       <Card className="space-y-3 p-5">
         <CardTitle className="text-lg">
-          {current.stageLabel} — Your XI vs {current.opponentName}
+          {current.stageLabel} — {userTeamName} vs {current.opponentName}
         </CardTitle>
         <p className="text-sm text-[var(--muted)]">
           Rating {current.userOvr} vs {current.opponentOvr}
@@ -206,7 +210,7 @@ export function TournamentRun({ picks, schedule, onComplete }: Props) {
             {current.score.user} – {current.score.opponent}
           </p>
           <p className="text-sm text-[var(--muted)]">
-            Your XI vs {current.opponentName}
+            {userTeamName} vs {current.opponentName}
           </p>
         </div>
 
@@ -221,7 +225,7 @@ export function TournamentRun({ picks, schedule, onComplete }: Props) {
                   {g.minute}&apos; GOOOOAL!
                 </p>
                 <p className="text-sm font-semibold text-fifa-gold">
-                  {g.scorer} ({g.team === 'user' ? 'Your XI' : current.opponentName})
+                  {g.scorer} ({g.team === 'user' ? userTeamName : current.opponentName})
                 </p>
               </li>
             ))}
@@ -265,15 +269,3 @@ export function TournamentRun({ picks, schedule, onComplete }: Props) {
   return null
 }
 
-function formatGroupRecord(matches: PlayedMatch[]): string {
-  let w = 0
-  let d = 0
-  let l = 0
-  for (const m of matches) {
-    if (m.stage !== 'group') continue
-    if (m.outcome === 'win') w++
-    else if (m.outcome === 'draw') d++
-    else l++
-  }
-  return `${w}W-${d}D-${l}L`
-}

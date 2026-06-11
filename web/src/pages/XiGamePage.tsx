@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Dices, Info, RotateCcw, Sparkles, Trophy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { TeamFlag } from '@/components/TeamFlag'
 import { supabase } from '@/lib/supabase'
@@ -48,6 +49,9 @@ export function XiGamePage() {
   const [posting, setPosting] = useState(false)
   const [autoDraftRounds, setAutoDraftRounds] = useState<ReturnType<typeof autoDraftWithRounds>>([])
   const [autoDraftIndex, setAutoDraftIndex] = useState(0)
+  const [customTeamName, setCustomTeamName] = useState('')
+
+  const userTeamName = customTeamName.trim() || 'Your XI'
 
   const settingQuery = useQuery({
     queryKey: ['app-setting', 'spin_draft'],
@@ -285,6 +289,21 @@ export function XiGamePage() {
           </div>
 
           <div className="space-y-1.5">
+            <Label htmlFor="team-name">Your team name</Label>
+            <Input
+              id="team-name"
+              type="text"
+              maxLength={32}
+              placeholder="Your XI (optional)"
+              value={customTeamName}
+              onChange={(e) => setCustomTeamName(e.target.value)}
+            />
+            <p className="text-xs text-[var(--muted)]">
+              Shown in match commentary and results. Leave blank for &quot;Your XI&quot;.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
             <Label htmlFor="formation">Formation</Label>
             <select
               id="formation"
@@ -445,6 +464,7 @@ export function XiGamePage() {
         <TournamentRun
           picks={picks}
           schedule={tournamentSchedule}
+          userTeamName={userTeamName}
           onComplete={finishTournament}
         />
       )}
@@ -495,7 +515,7 @@ export function XiGamePage() {
           )}
 
           <Card className="p-4">
-            <p className="mb-3 text-sm font-semibold">Your XI</p>
+            <p className="mb-3 text-sm font-semibold">{userTeamName}</p>
             <XiPitch formation={formation} picks={picks} size="share" showRatings />
           </Card>
 

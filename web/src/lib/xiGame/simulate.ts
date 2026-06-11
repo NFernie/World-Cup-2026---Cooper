@@ -170,6 +170,18 @@ const COMMENTARY_CHANCE = [
   '{opponent} hit the woodwork! Still level.',
   'Keeper spills it — cleared off the line!',
   '{user} string passes together in the final third.',
+  '{opponent} break at pace — last-ditch tackle!',
+  '{user} work it wide — cross cut out at the near post.',
+  'Deflected shot loops over the bar.',
+  '{opponent} crowd the keeper from a long throw.',
+  '{user} ping it around the edge of the box.',
+  'Ambitious effort from {opponent} — nowhere near.',
+  '{user} almost thread the needle through the middle.',
+  'Scramble in the six-yard box — somehow still level.',
+  '{opponent} switch play beautifully to the left wing.',
+  'Clinical defending from {user} under pressure.',
+  'The assistant\'s flag stays down — play continues.',
+  '{opponent} win it high — header straight at the keeper.',
 ]
 
 const COMMENTARY_FOUL = [
@@ -177,22 +189,34 @@ const COMMENTARY_FOUL = [
   'Referee blows for a foul on {team}.',
   'Scrappy midfield battle — play stopped.',
   '{team} win a soft free kick wide.',
+  'Clumsy tackle — {team} get the decision.',
+  'No advantage played — foul on {team}.',
+  '{team} brought down after a clever turn.',
+  'Heated exchange — play pulled back for {team}.',
 ]
 
 const COMMENTARY_FREE_KICK = [
   'Dangerous free kick for {team}… whipped in and cleared.',
   '{team} line up a set piece — headed away.',
   'Free kick floated in — the defence deals with it.',
+  '{team} stand one over — curled just wide.',
+  'Wall jumps — {team} free kick deflected for a corner.',
+  '{team} drill it low — blocked by the wall.',
 ]
 
 const COMMENTARY_CORNER = [
   'Corner for {team} — headed clear at the near post.',
   '{team} swing one in from the corner flag.',
+  '{team} short corner routine — cross blocked.',
+  'In-swinging corner from {team} — punched clear.',
+  '{team} crowd the keeper — flick-on goes wide.',
 ]
 
 const COMMENTARY_YELLOW = [
   'Yellow card shown — {team} need to calm down.',
   'Booking for a cynical foul by {team}.',
+  '{team} go into the book for dissent.',
+  'Tactical foul — {team} midfielder cautioned.',
 ]
 
 const COMMENTARY_PENALTY_AWARDED = [
@@ -223,12 +247,19 @@ const COMMENTARY_HALFTIME = [
 const COMMENTARY_SECOND_HALF = [
   'Second half underway.',
   'We\'re back for the second 45.',
+  'The teams return — no changes at the break.',
+  'Second half kicks off — still all to play for.',
 ]
 
 const COMMENTARY_LATE = [
   'Tense final ten minutes.',
   'Stoppage time approaching — everything on the line.',
   'The crowd are on their feet.',
+  'Cramp setting in — both sides digging deep.',
+  'Substitution for {opponent} — fresh legs on.',
+  '{user} push everyone forward — desperate times.',
+  'The fourth official holds up the board.',
+  'Nerves everywhere — one moment could decide it.',
 ]
 
 function pickTemplate(templates: string[], rng: () => number): string {
@@ -336,11 +367,25 @@ function buildFillerEvent(
   }
 }
 
+export function formatGroupRecordFromMatches(matches: PlayedMatch[]): string {
+  let w = 0
+  let d = 0
+  let l = 0
+  for (const m of matches) {
+    if (m.stage !== 'group') continue
+    if (m.outcome === 'win') w++
+    else if (m.outcome === 'draw') d++
+    else l++
+  }
+  return `${w}W-${d}D-${l}L`
+}
+
 export function buildMatchPresentation(
   preview: TournamentMatchPreview,
   picks: DraftPick[],
   outcome: MatchOutcome,
   rng: () => number = Math.random,
+  userTeamName = 'Your XI',
 ): PlayedMatch {
   const userOvr = squadOverall(picks)
   const score = generateScore(outcome, rng)
@@ -349,7 +394,7 @@ export function buildMatchPresentation(
   const goals = [...userGoals, ...oppGoals].sort((a, b) => a.minute - b.minute)
 
   const commentary: CommentaryLine[] = []
-  const userLabel = 'Your XI'
+  const userLabel = userTeamName.trim() || 'Your XI'
   const oppLabel = preview.opponentName
 
   commentary.push({
@@ -397,7 +442,7 @@ export function buildMatchPresentation(
       commentary.push({
         minute: 85,
         type: 'chance',
-        text: pickTemplate(COMMENTARY_LATE, rng),
+        text: fillLabels(pickTemplate(COMMENTARY_LATE, rng), userLabel, oppLabel),
       })
       continue
     }
@@ -433,35 +478,45 @@ export type TournamentRunResult = SimulationResult & {
   matches: PlayedMatch[]
 }
 
+function groupPointsFromMatches(matches: PlayedMatch[]): number {
+  let points = 0
+  for (const m of matches) {
+    if (m.stage !== 'group') continue
+    if (m.outcome === 'win') points += 3
+    else if (m.outcome === 'draw') points += 1
+  }
+  return points
+}
+
+function orderMatchesBySchedule(
+  played: PlayedMatch[],
+  schedule: TournamentMatchPreview[],
+): PlayedMatch[] {
+  const byId = new Map(played.map((m) => [m.id, m]))
+  return schedule.map((s) => byId.get(s.id)).filter((m): m is PlayedMatch => m != null)
+}
+
 export function simulateTournamentFull(
   picks: DraftPick[],
   schedule: TournamentMatchPreview[],
   rng: () => number = Math.random,
+  alreadyPlayed: PlayedMatch[] = [],
+  userTeamName = 'Your XI',
 ): TournamentRunResult {
   const ovr = squadOverall(picks)
-  const matches: PlayedMatch[] = []
-
-  let points = 0
-  let wins = 0
-  let draws = 0
-  let losses = 0
+  const playedIds = new Set(alreadyPlayed.map((m) => m.id))
+  const matches: PlayedMatch[] = [...alreadyPlayed]
 
   for (const preview of schedule) {
     if (preview.stage !== 'group') break
+    if (playedIds.has(preview.id)) continue
     const outcome = determineMatchOutcome(ovr, preview.opponentOvr, false, rng)
-    matches.push(buildMatchPresentation(preview, picks, outcome, rng))
-    if (outcome === 'win') {
-      wins++
-      points += 3
-    } else if (outcome === 'draw') {
-      draws++
-      points += 1
-    } else {
-      losses++
-    }
+    matches.push(buildMatchPresentation(preview, picks, outcome, rng, userTeamName))
   }
 
-  const groupRecord = `${wins}W-${draws}D-${losses}L`
+  const groupMatches = matches.filter((m) => m.stage === 'group')
+  const groupRecord = formatGroupRecordFromMatches(groupMatches)
+  const points = groupPointsFromMatches(groupMatches)
 
   if (points < 4) {
     return {
@@ -469,20 +524,33 @@ export function simulateTournamentFull(
       exitRound: 'group',
       squadOvr: ovr,
       groupRecord,
-      matches,
+      matches: orderMatchesBySchedule(matches, schedule),
     }
   }
 
   for (const preview of schedule.filter((m) => m.isKnockout)) {
+    if (playedIds.has(preview.id)) {
+      const existing = alreadyPlayed.find((m) => m.id === preview.id)!
+      if (existing.outcome !== 'win') {
+        return {
+          outcome: 'knocked_out',
+          exitRound: preview.stage,
+          squadOvr: ovr,
+          groupRecord,
+          matches: orderMatchesBySchedule(matches, schedule),
+        }
+      }
+      continue
+    }
     const outcome = determineMatchOutcome(ovr, preview.opponentOvr, true, rng)
-    matches.push(buildMatchPresentation(preview, picks, outcome, rng))
+    matches.push(buildMatchPresentation(preview, picks, outcome, rng, userTeamName))
     if (outcome !== 'win') {
       return {
         outcome: 'knocked_out',
         exitRound: preview.stage,
         squadOvr: ovr,
         groupRecord,
-        matches,
+        matches: orderMatchesBySchedule(matches, schedule),
       }
     }
   }
@@ -492,7 +560,7 @@ export function simulateTournamentFull(
     exitRound: 'champion',
     squadOvr: ovr,
     groupRecord,
-    matches,
+    matches: orderMatchesBySchedule(matches, schedule),
   }
 }
 
