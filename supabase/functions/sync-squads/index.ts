@@ -9,6 +9,7 @@
  *   { "includeRatings": true }  — 2025 baselines (best-of-tier: national/UCL/domestic/club)
  *   { "rebaseline": true }      — re-fetch all non-manual players (use with includeRatings)
  *   { "topTeamsByFifaRank": 10 } — phased rebaseline for top N FIFA nations only
+ *   { "fifaRankMin": 11, "fifaRankMax": 20 } — rebaseline FIFA rank range only (no top-10 re-hit)
  *   { "includePositions": true } — only players with position_code IS NULL
  *   { "useWorldCupLineups": true } — national WC lineups only; zero club API (during tournament)
  *   { "allowNationalPositions": true } — legacy friendlies fallback when not using WC mode
@@ -112,6 +113,8 @@ Deno.serve(async (req) => {
       "includePositions",
       "rebaseline",
       "topTeamsByFifaRank",
+      "fifaRankMin",
+      "fifaRankMax",
       "useWorldCupLineups",
       "status",
     ].some((k) => url.searchParams.has(k));
@@ -132,6 +135,8 @@ Deno.serve(async (req) => {
         allowNationalPositions: readFlag(url.searchParams, "allowNationalPositions"),
         rebaseline: readFlag(url.searchParams, "rebaseline", "rebaseline_ratings"),
         topTeamsByFifaRank: readPositiveInt(url.searchParams, "topTeamsByFifaRank", "top_teams_by_fifa_rank"),
+        fifaRankMin: readPositiveInt(url.searchParams, "fifaRankMin", "fifa_rank_min"),
+        fifaRankMax: readPositiveInt(url.searchParams, "fifaRankMax", "fifa_rank_max"),
         useWorldCupLineups: readFlag(url.searchParams, "useWorldCupLineups", "use_world_cup_lineups"),
         statusOnly: readFlag(url.searchParams, "status"),
       };
@@ -171,6 +176,8 @@ Deno.serve(async (req) => {
   let allowNationalPositions = readFlag(url.searchParams, "allowNationalPositions");
   let rebaseline = readFlag(url.searchParams, "rebaseline");
   let topTeamsByFifaRank = readPositiveInt(url.searchParams, "topTeamsByFifaRank", "top_teams_by_fifa_rank");
+  let fifaRankMin = readPositiveInt(url.searchParams, "fifaRankMin", "fifa_rank_min");
+  let fifaRankMax = readPositiveInt(url.searchParams, "fifaRankMax", "fifa_rank_max");
   let useWorldCupLineups = readFlag(url.searchParams, "useWorldCupLineups", "use_world_cup_lineups");
   let statusOnly = readFlag(url.searchParams, "status");
   let bodyBytes = 0;
@@ -190,6 +197,8 @@ Deno.serve(async (req) => {
       rebaseline = readFlag(body, "rebaseline", "rebaseline_ratings") || rebaseline;
       topTeamsByFifaRank = readPositiveInt(body, "topTeamsByFifaRank", "top_teams_by_fifa_rank") ??
         topTeamsByFifaRank;
+      fifaRankMin = readPositiveInt(body, "fifaRankMin", "fifa_rank_min") ?? fifaRankMin;
+      fifaRankMax = readPositiveInt(body, "fifaRankMax", "fifa_rank_max") ?? fifaRankMax;
       useWorldCupLineups = readFlag(body, "useWorldCupLineups", "use_world_cup_lineups") ||
         useWorldCupLineups;
       statusOnly = readFlag(body, "status") || statusOnly;
@@ -205,6 +214,8 @@ Deno.serve(async (req) => {
     allowNationalPositions,
     rebaseline,
     topTeamsByFifaRank,
+    fifaRankMin,
+    fifaRankMax,
     useWorldCupLineups,
     statusOnly,
     bodyBytes,
@@ -227,6 +238,8 @@ Deno.serve(async (req) => {
       allowNationalPositions,
       rebaseline,
       topTeamsByFifaRank,
+      fifaRankMin,
+      fifaRankMax,
       useWorldCupLineups,
     });
     const { ok, status, partial } = syncHttpStatus(result);

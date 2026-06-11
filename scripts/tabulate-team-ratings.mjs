@@ -55,19 +55,28 @@ function fifaTeamOvr(rank) {
   return Math.round(Math.min(86, Math.max(58, 86 - (rank - 1) * 0.32)))
 }
 
-function teamTop11AverageRating(players) {
+const STAR_WEIGHTS = [1.0, 0.965, 0.93, 0.895, 0.86, 0.825, 0.79, 0.755, 0.72, 0.685, 0.65]
+
+function teamStarWeightedTop11(players) {
   const rated = players
     .filter((p) => p.overall_rating > 0)
     .sort((a, b) => b.overall_rating - a.overall_rating)
     .slice(0, WC_SQUAD_SIZE)
     .slice(0, 11)
   if (rated.length === 0) return 0
-  return Math.round(rated.reduce((s, p) => s + p.overall_rating, 0) / rated.length)
+  let weightedSum = 0
+  let weightTotal = 0
+  for (let i = 0; i < rated.length; i++) {
+    const w = STAR_WEIGHTS[i] ?? STAR_WEIGHTS[STAR_WEIGHTS.length - 1]
+    weightedSum += rated[i].overall_rating * w
+    weightTotal += w
+  }
+  return Math.round(weightedSum / weightTotal)
 }
 
 function teamAnchoredOvr(players, rank) {
   const fifa = fifaTeamOvr(rank)
-  const top11 = teamTop11AverageRating(players)
+  const top11 = teamStarWeightedTop11(players)
   if (top11 <= 0) return fifa
   return Math.round(FIFA_WEIGHT * fifa + TOP11_WEIGHT * top11)
 }
@@ -91,7 +100,7 @@ for (const p of players) {
 
 const rows = teams.map((t) => {
   const squad = byTeam.get(t.id) ?? []
-  const top11 = teamTop11AverageRating(squad)
+  const top11 = teamStarWeightedTop11(squad)
   const fifa = fifaTeamOvr(t.global_fifa_rank)
   const blended = teamAnchoredOvr(squad, t.global_fifa_rank)
   return {
@@ -106,9 +115,9 @@ const rows = teams.map((t) => {
 
 rows.sort((a, b) => b.blended - a.blended || (a.rank ?? 999) - (b.rank ?? 999))
 
-console.log('\nWorld Cup 2026 nation OVR (Phase 1: 55% FIFA + 45% Top-11)\n')
+console.log('\nWorld Cup 2026 nation OVR (55% FIFA + 45% star-weighted Top-11)\n')
 console.log(
-  ['#', 'Team', 'Code', 'FIFA', 'Top-11', 'FIFA OVR', 'Blended'].join('\t'),
+  ['#', 'Team', 'Code', 'FIFA', 'Top-11*', 'FIFA OVR', 'Blended'].join('\t'),
 )
 rows.forEach((r, i) => {
   console.log(

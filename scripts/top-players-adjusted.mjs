@@ -1,15 +1,14 @@
 #!/usr/bin/env node
 /**
- * Top N players after read-time rating adjustments (league mult + nation clamp + star floor).
+ * Top N players after read-time adjustments (form + league mult + nation clamp + star floor).
  * No API-Football — reads teams + squad_players from Supabase only.
  */
-const FIFA_WEIGHT = 0.55
-const TOP11_WEIGHT = 0.45
 const NATION_CLAMP_BELOW = 8
 const NATION_CLAMP_ABOVE = 12
 const STAR_TOP_N = 3
 const STAR_FLOOR_ABOVE_FIFA = 6
 const STAR_FLOOR_BLEND = 0.5
+const FORM_BOOST_CAP_PCT = 2
 const PLAYER_OVR_MIN = 50
 const PLAYER_OVR_MAX = 94
 
@@ -35,6 +34,11 @@ function clamp(n, min, max) {
 function fifaTeamOvr(rank) {
   if (rank == null || rank <= 0) return 70
   return Math.round(Math.min(86, Math.max(58, 86 - (rank - 1) * 0.32)))
+}
+
+function applyFormBoostToRaw(storedRaw, boostPct) {
+  if (!storedRaw || !boostPct) return storedRaw
+  return Math.round(storedRaw * (1 + boostPct / 100))
 }
 
 function leagueMult(leagueId, source) {
@@ -81,12 +85,14 @@ function adjustSquad(players, fifaRank) {
   )
 
   const withLeague = players.map((p) => {
-    let ovr = p.overall_rating
+    const storedRaw = p.overall_rating
+    const effectiveRaw = applyFormBoostToRaw(storedRaw, p.form_boost_pct ?? 0)
+    let ovr = effectiveRaw
     if (p.rating_source !== 'manual' && ovr > 0) {
       ovr = Math.round(ovr * leagueMult(p.baseline_league_id, p.rating_source))
       ovr = clamp(ovr, Math.max(PLAYER_OVR_MIN, min), Math.min(PLAYER_OVR_MAX, max))
     }
-    return { ...p, adjusted: ovr }
+    return { ...p, storedRaw, effectiveRaw, adjusted: ovr }
   })
 
   return withLeague.map((p) => {
@@ -137,7 +143,7 @@ const teams = await fetchAll('teams?select=id,name,fifa_code,global_fifa_rank', 
 let players
 try {
   players = await fetchAll(
-    'squad_players?select=id,team_id,name,overall_rating,rating_source,baseline_league_id,has_continental_rating,position,position_code',
+    'squad_players?select=id,team_id,name,overall_rating,rating_source,baseline_league_id,has_continental_rating,form_boost_pct,form_match_rating,position,position_code',
     token,
   )
 } catch {
@@ -162,7 +168,8 @@ for (const [teamId, squad] of byTeam) {
   for (const r of rows) {
     adjusted.push({
       name: r.name,
-      raw: r.overall_rating,
+      raw: r.storedRaw ?? r.overall_rating,
+      form: r.form_boost_pct ?? 0,
       ovr: r.adjusted,
       team: team?.name ?? '?',
       code: team?.fifa_code ?? '?',
@@ -175,8 +182,9 @@ for (const [teamId, squad] of byTeam) {
 adjusted.sort((a, b) => b.ovr - a.ovr || b.raw - a.raw)
 const top = adjusted.filter((p) => p.ovr > 0).slice(0, LIMIT)
 
-console.log(`\nTop ${LIMIT} players (after league mult + nation clamp + star floor)\n`)
-console.log(['#', 'Player', 'OVR', 'Raw', 'Nation', 'Pos', 'Source'].join('\t'))
+console.log(`\nTop ${LIMIT} players (form + league mult + nation clamp + star floor)\n`)
+console.log(['#', 'Player', 'OVR', 'Raw', 'Form%', 'Nation', 'Pos', 'Source'].join('\t'))
 top.forEach((p, i) => {
-  console.log([i + 1, p.name, p.ovr, p.raw, `${p.team} (${p.code})`, p.position, p.source].join('\t'))
+  const form = p.form === 0 ? '—' : `${p.form > 0 ? '+' : ''}${p.form}`
+  console.log([i + 1, p.name, p.ovr, p.raw, form, `${p.team} (${p.code})`, p.position, p.source].join('\t'))
 })

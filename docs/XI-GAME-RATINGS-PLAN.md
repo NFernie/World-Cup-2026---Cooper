@@ -46,19 +46,22 @@ Applied in `fetchAllSquadPlayers()` via `applySquadRatingAdjustments()`:
 4. **Other club** (`club_2025`)
 5. **FIFA-rank fallback** (`fallback_2025`) — `teamBaseRating ± name offset`
 
-Re-sync all non-manual players:
+Phased rebaseline (budget-friendly):
 
 ```bash
-curl "https://<project>.supabase.co/functions/v1/sync-squads?force=true&includeRatings=true&rebaseline=true"
+# Top 10 done — next band without re-hitting ranks 1–10:
+curl "https://<project>.supabase.co/functions/v1/sync-squads?force=true&includeRatings=true&fifaRankMin=11&fifaRankMax=20"
 ```
 
-Re-run until `ratingsBudgetReached` is false (daily API budget applies per run).
+Full rebaseline: `rebaseline=true` (all ~1,248 players). Re-run until `ratingsBudgetReached` is false.
+
+Daily match form (separate function): see [XI-GAME-FORM-SYNC-PLAN.md](./XI-GAME-FORM-SYNC-PLAN.md).
 
 ### Team-level (Phase 1 — implemented, no API)
 
 ```
 fifaOvr  = clamp(round(86 - (rank - 1) × 0.32), 58, 86)
-top11Ovr = mean(highest 11 rated squad_players.overall_rating)
+top11Ovr = star-weighted mean(top 11 squad_players.overall_rating)  # decay weights
 teamOvr  = round(0.55 × fifaOvr + 0.45 × top11Ovr)
 ```
 
@@ -95,10 +98,12 @@ Light isotonic adjustment so 48 nation OVRs stay broadly monotonic with FIFA ran
 |-------|--------|-------------|--------|
 | **1** | FIFA-anchored team OVR for tournament opponents | No | **Done** |
 | **1b** | Read-time league mult + nation clamp + star floor | No | **Done** |
-| **2** | Re-prioritise player sync + FIFA player fallback | Yes (`sync-squads`) | **Done** |
-| **3** | Star-weighted Top-11 | No (formula only) | Pending |
+| **2** | Best-of-tier player sync + phased rebaseline | Yes (`sync-squads`) | **Done** (top 10) |
+| **2b** | Phased rebaseline ranks 11–48 (`fifaRankMin`/`Max`) | Yes | Ready |
+| **3** | Star-weighted Top-11 for nation OVR | No | **Done** |
 | **4** | Rank-order guardrail | No | Optional |
-| **5** | WC 2026 live match ratings + in-game form | Yes (later) | Future |
+| **5** | Daily WC match form (`sync-squad-form`) | Yes (`sync-squad-form`) | **Done** |
+| **6** | In-run simulated form (mini-game sessions) | No | Future |
 
 ---
 

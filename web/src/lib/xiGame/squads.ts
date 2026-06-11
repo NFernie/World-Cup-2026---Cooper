@@ -23,8 +23,9 @@ export async function fetchAllSquadPlayers(): Promise<SquadPlayer[]> {
 }
 
 async function fetchRawSquadPlayers(): Promise<SquadPlayerRow[]> {
-  const selectFull = `${SQUAD_SELECT_BASE}, baseline_league_id, has_continental_rating`
-  const selectWithLeague = `${SQUAD_SELECT_BASE}, baseline_league_id`
+  const selectFull =
+    `${SQUAD_SELECT_BASE}, baseline_league_id, has_continental_rating, form_boost_pct, form_match_rating`
+  const selectWithLeague = `${SQUAD_SELECT_BASE}, baseline_league_id, form_boost_pct, form_match_rating`
   let select = selectFull
   let from = 0
   const all: SquadPlayerRow[] = []

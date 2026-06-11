@@ -306,11 +306,22 @@ type ExistingPlayerRow = {
   has_continental_rating: boolean | null;
 };
 
-function topTeamsByFifaRank(teams: DbTeam[], limit: number): DbTeam[] {
-  return [...teams]
-    .filter((t) => t.global_fifa_rank != null && t.global_fifa_rank > 0)
-    .sort((a, b) => a.global_fifa_rank! - b.global_fifa_rank!)
-    .slice(0, limit);
+function filterTeamsByFifaRank(
+  teams: DbTeam[],
+  opts: { topLimit?: number; rankMin?: number; rankMax?: number },
+): DbTeam[] {
+  let filtered = teams.filter((t) => t.global_fifa_rank != null && t.global_fifa_rank > 0);
+  if (opts.rankMin != null && opts.rankMin > 0) {
+    filtered = filtered.filter((t) => t.global_fifa_rank! >= opts.rankMin!);
+  }
+  if (opts.rankMax != null && opts.rankMax > 0) {
+    filtered = filtered.filter((t) => t.global_fifa_rank! <= opts.rankMax!);
+  }
+  filtered.sort((a, b) => a.global_fifa_rank! - b.global_fifa_rank!);
+  if (opts.topLimit != null && opts.topLimit > 0) {
+    filtered = filtered.slice(0, opts.topLimit);
+  }
+  return filtered;
 }
 
 const SYNC_META_KEY = "spin_draft_sync";
@@ -430,6 +441,9 @@ export async function syncSquads(
     useWorldCupLineups?: boolean;
     /** Limit ratings rebaseline to the top N nations by FIFA rank (phased API use). */
     topTeamsByFifaRank?: number;
+    /** Inclusive FIFA rank range for phased rebaseline (e.g. 11–20 without re-hitting top 10). */
+    fifaRankMin?: number;
+    fifaRankMax?: number;
     budgetMs?: number;
   } = {},
 ): Promise<{
@@ -469,6 +483,12 @@ export async function syncSquads(
   const useWorldCupLineups = opts.useWorldCupLineups === true;
   const topTeamsLimit = opts.topTeamsByFifaRank && opts.topTeamsByFifaRank > 0
     ? Math.floor(opts.topTeamsByFifaRank)
+    : 0;
+  const fifaRankMin = opts.fifaRankMin && opts.fifaRankMin > 0
+    ? Math.floor(opts.fifaRankMin)
+    : 0;
+  const fifaRankMax = opts.fifaRankMax && opts.fifaRankMax > 0
+    ? Math.floor(opts.fifaRankMax)
     : 0;
   const budgetMs = opts.budgetMs ?? syncBudgetMs(includeRatings, includePositions);
   const startedAt = Date.now();
@@ -541,8 +561,12 @@ export async function syncSquads(
   }
 
   let teams = (teamsResult.data ?? []) as DbTeam[];
-  if (topTeamsLimit > 0 && includeRatings) {
-    teams = topTeamsByFifaRank(teams, topTeamsLimit);
+  if (includeRatings && (topTeamsLimit > 0 || fifaRankMin > 0 || fifaRankMax > 0)) {
+    teams = filterTeamsByFifaRank(teams, {
+      topLimit: topTeamsLimit > 0 ? topTeamsLimit : undefined,
+      rankMin: fifaRankMin > 0 ? fifaRankMin : undefined,
+      rankMax: fifaRankMax > 0 ? fifaRankMax : undefined,
+    });
   }
   if (teams.length === 0) {
     return {
@@ -645,7 +669,8 @@ export async function syncSquads(
         }
       }
 
-      const forceTeamRebaseline = rebaseline || topTeamsLimit > 0;
+      const forceTeamRebaseline = rebaseline || topTeamsLimit > 0 || fifaRankMin > 0 ||
+        fifaRankMax > 0;
       if (includeRatings && !includePositions && !forceTeamRebaseline && existingByPlayer.size > 0) {
         let pending = 0;
         for (const p of existingByPlayer.values()) {

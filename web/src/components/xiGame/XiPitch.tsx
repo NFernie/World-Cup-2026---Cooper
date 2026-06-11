@@ -1,6 +1,7 @@
 import { TeamFlag } from '@/components/TeamFlag'
 import { pitchRows, type Formation, type FormationSlot } from '@/lib/xiGame/formations'
 import { placementFit, placementHint } from '@/lib/xiGame/positions'
+import { PlayerRatingBadge } from '@/components/xiGame/PlayerRatingBadge'
 import { effectiveRating, type DraftPick, type SquadPlayer } from '@/lib/xiGame/types'
 
 export type XiPitchSize = 'compact' | 'share'
@@ -89,8 +90,14 @@ export function XiPitch({
                       {pick.player.name}
                     </span>
                     {showRatings && (
-                      <span className={`font-bold tabular-nums ${share ? 'text-[10px]' : 'text-[11px]'}`}>
-                        {effectiveRating(pick)}
+                      <span className={`${share ? 'text-[10px]' : 'text-[11px]'}`}>
+                        <PlayerRatingBadge
+                          player={{
+                            ...pick.player,
+                            overall_rating: effectiveRating(pick),
+                          }}
+                          className="justify-center"
+                        />
                         {pick.placementFit === 'wrong_family' && (
                           <span className="text-fifa-gold">*</span>
                         )}

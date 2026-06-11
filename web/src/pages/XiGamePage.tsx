@@ -11,6 +11,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import type { PoolOutletContext } from '@/pages/PoolShell'
 import { FORMATIONS, getFormation, type FormationSlot } from '@/lib/xiGame/formations'
+import { PlayerRatingBadge } from '@/components/xiGame/PlayerRatingBadge'
 import { XiPitch } from '@/components/xiGame/XiPitch'
 import { TournamentRun } from '@/components/xiGame/TournamentRun'
 import { buildXiGameBanterMetadata, banterSummaryText } from '@/lib/xiGame/banterShare'
@@ -447,8 +448,8 @@ export function XiGamePage() {
                             {formatPositionLabel(player)}
                           </span>
                         </span>
-                        <span className="shrink-0 rounded-md bg-[var(--background)] px-2 py-1 text-xs font-bold tabular-nums">
-                          {player.overall_rating}
+                        <span className="shrink-0 rounded-md bg-[var(--background)] px-2 py-1 text-xs">
+                          <PlayerRatingBadge player={player} />
                         </span>
                       </button>
                     )

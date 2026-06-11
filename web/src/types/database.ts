@@ -190,6 +190,24 @@ export interface Database {
           baseline_club_api_team_id: number | null
           baseline_league_id: number | null
           has_continental_rating: boolean
+          form_boost_pct: number
+          form_match_rating: number | null
+          form_fixture_ids: Json | null
+          form_synced_at: string | null
+          synced_at: string
+        }
+      }
+      squad_player_form_log: {
+        Row: {
+          id: string
+          squad_player_id: string
+          api_football_player_id: number | null
+          fixture_external_id: string | null
+          match_rating: number | null
+          minutes: number | null
+          old_boost_pct: number | null
+          new_boost_pct: number
+          reason: string
           synced_at: string
         }
       }

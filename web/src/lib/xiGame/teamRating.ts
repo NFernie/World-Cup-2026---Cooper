@@ -6,6 +6,11 @@ const WC_SQUAD_SIZE = 26
 export const FIFA_TEAM_OVR_WEIGHT = 0.55
 export const TOP11_TEAM_OVR_WEIGHT = 0.45
 
+/** Decay weights for star-weighted Top-11 (rank 1 heaviest). Phase 3. */
+export const STAR_TOP11_WEIGHTS = [
+  1.0, 0.965, 0.93, 0.895, 0.86, 0.825, 0.79, 0.755, 0.72, 0.685, 0.65,
+] as const
+
 /** Nation OVR from FIFA world ranking (same curve as sync fallback). */
 export function fifaTeamOvr(globalFifaRank: number | null | undefined): number {
   if (globalFifaRank == null || globalFifaRank <= 0) return 70
@@ -22,7 +27,6 @@ export function squadPlayersForTeamRating(players: SquadPlayer[]): SquadPlayer[]
 
 /**
  * Team strength from the mean overall_rating of up to 26 rated squad players.
- * This is the default opponent (and can be used for nation) team rating.
  */
 export function teamSquadAverageRating(players: SquadPlayer[]): number {
   const squad = squadPlayersForTeamRating(players)
@@ -31,7 +35,7 @@ export function teamSquadAverageRating(players: SquadPlayer[]): number {
   return Math.round(sum / squad.length)
 }
 
-/** Best XI by position families (1 GK, 4 DEF, 3 MID, 3 FWD) — alternative team rating. */
+/** Best XI by position families (1 GK, 4 DEF, 3 MID, 3 FWD). */
 export function teamBestXIAverageRating(players: SquadPlayer[]): number {
   const squad = squadPlayersForTeamRating(players)
   if (squad.length === 0) return 0
@@ -54,7 +58,7 @@ export function teamBestXIAverageRating(players: SquadPlayer[]): number {
   return Math.round(sum / xi.length)
 }
 
-/** Top 11 rated outfield+GK players — alternative when positions are thin. */
+/** Flat mean of top 11 rated players. */
 export function teamTop11AverageRating(players: SquadPlayer[]): number {
   const squad = squadPlayersForTeamRating(players)
   const top = squad.slice(0, 11)
@@ -64,7 +68,25 @@ export function teamTop11AverageRating(players: SquadPlayer[]): number {
 }
 
 /**
- * Tournament opponent strength: 55% FIFA rank anchor + 45% Top-11 squad average.
+ * Star-weighted Top-11 — top players count more than depth (Phase 3).
+ */
+export function teamStarWeightedTop11Rating(players: SquadPlayer[]): number {
+  const squad = squadPlayersForTeamRating(players)
+  const top = squad.slice(0, 11)
+  if (top.length === 0) return 0
+
+  let weightedSum = 0
+  let weightTotal = 0
+  for (let i = 0; i < top.length; i++) {
+    const w = STAR_TOP11_WEIGHTS[i] ?? STAR_TOP11_WEIGHTS[STAR_TOP11_WEIGHTS.length - 1]
+    weightedSum += top[i].overall_rating * w
+    weightTotal += w
+  }
+  return Math.round(weightedSum / weightTotal)
+}
+
+/**
+ * Tournament opponent strength: 55% FIFA rank anchor + 45% star-weighted Top-11.
  * Falls back to FIFA-only when no rated players exist.
  */
 export function teamAnchoredOvr(
@@ -72,7 +94,7 @@ export function teamAnchoredOvr(
   globalFifaRank: number | null | undefined,
 ): number {
   const fifa = fifaTeamOvr(globalFifaRank)
-  const top11 = teamTop11AverageRating(players)
+  const top11 = teamStarWeightedTop11Rating(players)
   if (top11 <= 0) return fifa
   return Math.round(FIFA_TEAM_OVR_WEIGHT * fifa + TOP11_TEAM_OVR_WEIGHT * top11)
 }

@@ -45,6 +45,7 @@ jobs:
           supabase functions deploy sync-match-odds --no-verify-jwt
           supabase functions deploy sync-tournament-awards --no-verify-jwt
           supabase functions deploy sync-squads --no-verify-jwt
+          supabase functions deploy sync-squad-form --no-verify-jwt
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 

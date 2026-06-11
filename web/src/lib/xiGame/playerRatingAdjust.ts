@@ -1,3 +1,4 @@
+import { applyFormBoostToRaw } from './formBoost'
 import { leagueRatingMultiplier } from './leagueTiers'
 import { fifaTeamOvr } from './teamRating'
 import type { SquadPlayer } from './types'
@@ -12,9 +13,13 @@ const PLAYER_OVR_MIN = 50
 const PLAYER_OVR_MAX = 94
 
 export type SquadPlayerRow = SquadPlayer & {
+  /** DB baseline raw — same as overall_rating column before read-time adjust. */
+  overall_rating: number
   rating_source?: string | null
   baseline_league_id?: number | null
   has_continental_rating?: boolean | null
+  form_boost_pct?: number | null
+  form_match_rating?: number | null
 }
 
 function clamp(n: number, min: number, max: number): number {
@@ -45,10 +50,11 @@ function applyLeagueAndNationClamp(
   return clamp(scaled, Math.max(PLAYER_OVR_MIN, min), Math.min(PLAYER_OVR_MAX, max))
 }
 
-function qualifiesForStarPool(player: SquadPlayerRow, fifaOvr: number): boolean {
+/** Star pool uses stored DB raw — not form-boosted effective raw. */
+function qualifiesForStarPool(player: SquadPlayerRow, storedRaw: number, fifaOvr: number): boolean {
   if (player.rating_source === 'continental_2025') return true
   if (player.has_continental_rating) return true
-  return player.overall_rating >= fifaOvr - NATION_CLAMP_BELOW
+  return storedRaw >= fifaOvr - NATION_CLAMP_BELOW
 }
 
 function applyStarFloor(leagued: number, starFloor: number): number {
@@ -57,8 +63,8 @@ function applyStarFloor(leagued: number, starFloor: number): number {
 }
 
 /**
- * League multiplier → nation clamp → top-3 star floor (half blend) per nation.
- * UCL players qualify for the star pool even when raw rating is below fifa−8.
+ * Form boost on raw → league multiplier → nation clamp → top-3 star floor (half blend).
+ * Star pool eligibility uses stored baseline raw only.
  */
 export function applySquadRatingAdjustments(
   players: SquadPlayerRow[],
@@ -80,21 +86,26 @@ export function applySquadRatingAdjustments(
 
     const starIds = new Set(
       [...squad]
-        .filter((p) => qualifiesForStarPool(p, fifaOvr))
+        .filter((p) => qualifiesForStarPool(p, p.overall_rating, fifaOvr))
         .sort((a, b) => b.overall_rating - a.overall_rating)
         .slice(0, STAR_TOP_N)
         .map((p) => p.id),
     )
 
-    const withLeague = squad.map((p) => ({
-      player: p,
-      leagued: applyLeagueAndNationClamp(
-        p.overall_rating,
-        fifaOvr,
-        p.baseline_league_id,
-        p.rating_source,
-      ),
-    }))
+    const withLeague = squad.map((p) => {
+      const storedRaw = p.overall_rating
+      const effectiveRaw = applyFormBoostToRaw(storedRaw, p.form_boost_pct ?? 0)
+      return {
+        player: p,
+        storedRaw,
+        leagued: applyLeagueAndNationClamp(
+          effectiveRaw,
+          fifaOvr,
+          p.baseline_league_id,
+          p.rating_source,
+        ),
+      }
+    })
 
     for (const { player, leagued } of withLeague) {
       let ovr = leagued
@@ -108,6 +119,7 @@ export function applySquadRatingAdjustments(
 
   return players.map((p) => ({
     ...p,
+    stored_rating: p.overall_rating,
     overall_rating: adjustedById.get(p.id) ?? p.overall_rating,
   }))
 }

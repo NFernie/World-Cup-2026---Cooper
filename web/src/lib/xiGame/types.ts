@@ -12,7 +12,13 @@ export type SquadPlayer = {
   position_detail: string | null
   shirt_number: number | null
   photo_url: string | null
+  /** Final adjusted OVR shown in game (includes form + league/clamp/star floor). */
   overall_rating: number
+  /** DB baseline raw before form boost (for tooltips). */
+  stored_rating?: number
+  rating_source?: string | null
+  form_boost_pct?: number | null
+  form_match_rating?: number | null
 }
 
 export type GameTeam = {
