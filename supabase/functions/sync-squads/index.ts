@@ -6,7 +6,8 @@
  *
  * POST body (all optional):
  *   { "force": true }           — bypass once-per-day guard
- *   { "includeRatings": true }  — 2025 domestic baselines; skips already-migrated players
+ *   { "includeRatings": true }  — 2025 baselines (national → UCL → domestic → club)
+ *   { "rebaseline": true }      — re-fetch all non-manual players (use with includeRatings)
  *   { "includePositions": true } — only players with position_code IS NULL; uses club cache
  *   { "allowNationalPositions": true } — expensive national friendlies fallback (off by default)
  * Env: POSITION_SYNC_MAX_API_CLUBS (default 5) — live API fetches per run
@@ -75,7 +76,7 @@ function readFlag(
 Deno.serve(async (req) => {
   if (req.method === "GET") {
     const url = new URL(req.url);
-    const hasQuery = ["force", "includeRatings", "includePositions", "status"].some((k) =>
+    const hasQuery = ["force", "includeRatings", "includePositions", "rebaseline", "status"].some((k) =>
       url.searchParams.has(k)
     );
     if (hasQuery) {
@@ -93,6 +94,7 @@ Deno.serve(async (req) => {
         includeRatings: readFlag(url.searchParams, "includeRatings", "include_ratings"),
         includePositions: readFlag(url.searchParams, "includePositions", "include_positions"),
         allowNationalPositions: readFlag(url.searchParams, "allowNationalPositions"),
+        rebaseline: readFlag(url.searchParams, "rebaseline", "rebaseline_ratings"),
         statusOnly: readFlag(url.searchParams, "status"),
       };
       if (opts.statusOnly) {
@@ -129,6 +131,7 @@ Deno.serve(async (req) => {
   let includeRatings = readFlag(url.searchParams, "includeRatings", "include_ratings");
   let includePositions = readFlag(url.searchParams, "includePositions", "include_positions");
   let allowNationalPositions = readFlag(url.searchParams, "allowNationalPositions");
+  let rebaseline = readFlag(url.searchParams, "rebaseline");
   let statusOnly = readFlag(url.searchParams, "status");
   let bodyBytes = 0;
   let bodyParseError: string | undefined;
@@ -144,6 +147,7 @@ Deno.serve(async (req) => {
         includePositions;
       allowNationalPositions = readFlag(body, "allowNationalPositions") ||
         allowNationalPositions;
+      rebaseline = readFlag(body, "rebaseline", "rebaseline_ratings") || rebaseline;
       statusOnly = readFlag(body, "status") || statusOnly;
     }
   } catch (err) {
@@ -155,6 +159,7 @@ Deno.serve(async (req) => {
     includeRatings,
     includePositions,
     allowNationalPositions,
+    rebaseline,
     statusOnly,
     bodyBytes,
     bodyParseError,
@@ -174,6 +179,7 @@ Deno.serve(async (req) => {
       includeRatings,
       includePositions,
       allowNationalPositions,
+      rebaseline,
     });
     const { ok, status, partial } = syncHttpStatus(result);
     return jsonResponse({ ok, partial, request, ...result }, status);

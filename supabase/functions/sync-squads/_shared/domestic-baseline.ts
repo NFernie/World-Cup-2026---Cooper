@@ -1,11 +1,18 @@
 /**
  * Baseline player ratings from API-Football GET /players?id=&season=2025.
- * Prefers the domestic league row with the most minutes (e.g. Robertson PL 6.74).
+ * Priority (Phase 2): national → UCL/UEL → top domestic → other club.
  * Position codes (LB, ST, …) from recent club fixture lineups in that season.
  */
 import { gridToPositionCode } from "./position-grid.ts";
 
 const API_BASE = "https://v3.football.api-sports.io";
+
+/** UEFA continental club competitions — preferred over domestic for star presence. */
+export const CONTINENTAL_LEAGUE_IDS = new Set([
+  2, // UEFA Champions League
+  3, // UEFA Europa League
+  848, // UEFA Europa Conference League
+]);
 
 /** Top-tier domestic leagues (API-Football league ids). */
 export const DOMESTIC_LEAGUE_IDS = new Set([
@@ -53,10 +60,8 @@ export const DOMESTIC_LEAGUE_IDS = new Set([
   301, // UAE Pro League
 ]);
 
-/** Cups, super cups, continental club — not domestic league baseline. */
-const NON_DOMESTIC_LEAGUE_IDS = new Set([
-  2, // UEFA Champions League
-  3, // UEFA Europa League
+/** Cups, friendlies, international tournaments — excluded from generic club tier. */
+const EXCLUDED_LEAGUE_IDS = new Set([
   45, // FA Cup
   48, // League Cup
   528, // Community Shield
@@ -68,10 +73,16 @@ const NON_DOMESTIC_LEAGUE_IDS = new Set([
   5, // UEFA Nations League
 ]);
 
+export type BaselineRatingSource =
+  | "national_2025"
+  | "continental_2025"
+  | "domestic_2025"
+  | "club_2025";
+
 export type PlayerBaseline = {
   rating: number;
   ovr: number;
-  source: "domestic_2025" | "club_2025" | "national_2025";
+  source: BaselineRatingSource;
   clubTeamId: number | null;
   leagueId: number | null;
   clubName: string | null;
@@ -107,11 +118,19 @@ function isNationalTeamStat(stat: ApiStat, nationalApiTeamIds: Set<number>): boo
     stat.league.id === 1;
 }
 
+function pickBestByMinutes(
+  entries: { stat: ApiStat; rating: number; minutes: number }[],
+): { stat: ApiStat; rating: number; minutes: number } | null {
+  if (entries.length === 0) return null;
+  return entries.sort((a, b) => b.minutes - a.minutes)[0];
+}
+
 /**
  * Pick baseline from statistics[] on GET /players?id=&season=2025.
- * 1) Domestic league — highest minutes row
- * 2) Other club competitions (exclude cups/friendlies) — highest minutes
- * 3) National team appearances in 2025
+ * 1) National team — highest minutes
+ * 2) UEFA continental club — highest minutes
+ * 3) Top domestic league — highest minutes
+ * 4) Other club competitions — highest minutes
  */
 export function pickBaselineFromStatistics(
   stats: ApiStat[],
@@ -123,36 +142,50 @@ export function pickBaselineFromStatistics(
       const minutes = parseMinutes(s.games?.minutes);
       const rating = parseRating(s.games?.rating);
       if (!rating || minutes < minMinutes) return null;
+      const leagueId = s.league.id;
+      const isNational = isNationalTeamStat(s, nationalApiTeamIds);
       return {
         stat: s,
         minutes,
         rating,
-        leagueId: s.league.id,
-        isDomestic: DOMESTIC_LEAGUE_IDS.has(s.league.id),
-        isExcluded: NON_DOMESTIC_LEAGUE_IDS.has(s.league.id),
-        isNational: isNationalTeamStat(s, nationalApiTeamIds),
+        leagueId,
+        isNational,
+        isContinental: CONTINENTAL_LEAGUE_IDS.has(leagueId),
+        isDomestic: DOMESTIC_LEAGUE_IDS.has(leagueId),
+        isExcluded: EXCLUDED_LEAGUE_IDS.has(leagueId),
       };
     })
     .filter((x): x is NonNullable<typeof x> => x != null);
 
   if (eligible.length === 0) return null;
 
-  const domestic = eligible.filter((e) => e.isDomestic && !e.isNational);
-  if (domestic.length > 0) {
-    const best = domestic.sort((a, b) => b.minutes - a.minutes)[0];
-    return toBaseline(best.stat, best.rating, best.minutes, "domestic_2025");
-  }
-
-  const club = eligible.filter((e) => !e.isNational && !e.isExcluded);
-  if (club.length > 0) {
-    const best = club.sort((a, b) => b.minutes - a.minutes)[0];
-    return toBaseline(best.stat, best.rating, best.minutes, "club_2025");
-  }
-
   const national = eligible.filter((e) => e.isNational);
-  if (national.length > 0) {
-    const best = national.sort((a, b) => b.minutes - a.minutes)[0];
-    return toBaseline(best.stat, best.rating, best.minutes, "national_2025");
+  const nationalBest = pickBestByMinutes(national);
+  if (nationalBest) {
+    return toBaseline(nationalBest.stat, nationalBest.rating, nationalBest.minutes, "national_2025");
+  }
+
+  const continental = eligible.filter((e) => e.isContinental && !e.isNational);
+  const continentalBest = pickBestByMinutes(continental);
+  if (continentalBest) {
+    return toBaseline(
+      continentalBest.stat,
+      continentalBest.rating,
+      continentalBest.minutes,
+      "continental_2025",
+    );
+  }
+
+  const domestic = eligible.filter((e) => e.isDomestic && !e.isNational && !e.isContinental);
+  const domesticBest = pickBestByMinutes(domestic);
+  if (domesticBest) {
+    return toBaseline(domesticBest.stat, domesticBest.rating, domesticBest.minutes, "domestic_2025");
+  }
+
+  const club = eligible.filter((e) => !e.isNational && !e.isExcluded && !e.isContinental);
+  const clubBest = pickBestByMinutes(club);
+  if (clubBest) {
+    return toBaseline(clubBest.stat, clubBest.rating, clubBest.minutes, "club_2025");
   }
 
   return null;
@@ -162,7 +195,7 @@ function toBaseline(
   stat: ApiStat,
   rating: number,
   minutes: number,
-  source: PlayerBaseline["source"],
+  source: BaselineRatingSource,
 ): PlayerBaseline {
   const ovr = Math.max(50, Math.min(94, Math.round(rating * 10)));
   return {

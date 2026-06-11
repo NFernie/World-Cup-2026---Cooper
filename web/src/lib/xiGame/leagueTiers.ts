@@ -19,7 +19,8 @@ export function leagueRatingMultiplier(
   const source = ratingSource ?? ''
 
   if (source === 'manual') return 1
-  if (source === 'national_2025') return 1
+  if (source === 'national_2025' || source === 'continental_2025') return 1
+  if (source === 'fallback_2025') return 1
 
   if (leagueId != null) {
     if (TIER_1_LEAGUE_IDS.has(leagueId)) return 1
@@ -34,6 +35,8 @@ export function leagueRatingMultiplier(
     case 'club_2025':
       return 0.94
     case 'national_2025':
+    case 'continental_2025':
+    case 'fallback_2025':
       return 1
     case 'api':
       return 0.9

@@ -36,16 +36,23 @@ Applied in `fetchAllSquadPlayers()` via `applySquadRatingAdjustments()`:
 3. **Star floor** — top 3 per nation by **raw** rating among players with `raw >= fifaTeamOvr - 8` get at least `fifaTeamOvr + 6`
 4. **`manual`** ratings are never adjusted
 
-### Player-level sync (Phase 2 — requires API re-sync)
+### Player-level sync (Phase 2 — implemented)
 
-When API budget allows, improve `sync-squads` inputs:
+`pickBaselineFromStatistics()` in `domestic-baseline.ts` now prioritises:
 
-1. **National team 2025/26** rows (qualifiers/friendlies)
-2. **UCL / Europa 2025** rows (star presence)
-3. **Top-tier domestic 2025** (current logic)
-4. **FIFA-rank fallback** for unrated players (`teamBase ± deterministic spread`)
+1. **National team 2025** (`national_2025`)
+2. **UCL / Europa / Conference** (`continental_2025`)
+3. **Top domestic 2025** (`domestic_2025`)
+4. **Other club** (`club_2025`)
+5. **FIFA-rank fallback** (`fallback_2025`) — `teamBaseRating ± name offset`
 
-Optional: clamp each player OVR to `[fifaTeamBase - 8, fifaTeamBase + 6]`.
+Re-sync all non-manual players:
+
+```bash
+curl "https://<project>.supabase.co/functions/v1/sync-squads?force=true&includeRatings=true&rebaseline=true"
+```
+
+Re-run until `ratingsBudgetReached` is false (daily API budget applies per run).
 
 ### Team-level (Phase 1 — implemented, no API)
 
@@ -88,7 +95,7 @@ Light isotonic adjustment so 48 nation OVRs stay broadly monotonic with FIFA ran
 |-------|--------|-------------|--------|
 | **1** | FIFA-anchored team OVR for tournament opponents | No | **Done** |
 | **1b** | Read-time league mult + nation clamp + star floor | No | **Done** |
-| **2** | Re-prioritise player sync + FIFA player fallback | Yes (`sync-squads`) | Pending |
+| **2** | Re-prioritise player sync + FIFA player fallback | Yes (`sync-squads`) | **Done** |
 | **3** | Star-weighted Top-11 | No (formula only) | Pending |
 | **4** | Rank-order guardrail | No | Optional |
 | **5** | WC 2026 live match ratings + in-game form | Yes (later) | Future |

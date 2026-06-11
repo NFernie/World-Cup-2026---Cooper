@@ -38,7 +38,7 @@ function fifaTeamOvr(rank) {
 
 function leagueMult(leagueId, source) {
   if (source === 'manual') return 1
-  if (source === 'national_2025') return 1
+  if (source === 'national_2025' || source === 'continental_2025' || source === 'fallback_2025') return 1
   if (leagueId != null) {
     if (TIER_1.has(leagueId)) return 1
     if (TIER_2.has(leagueId)) return 0.97

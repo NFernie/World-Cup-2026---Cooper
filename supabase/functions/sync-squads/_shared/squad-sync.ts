@@ -14,6 +14,7 @@ import {
   fetchClubLineupPositionCodes,
   fetchPlayerBaseline2025,
 } from "./domestic-baseline.ts";
+import { playerFallbackRating } from "./rating-fallback.ts";
 import {
   getCachedClubCodes,
   isClubCacheExhausted,
@@ -308,12 +309,24 @@ const BASELINE_RATING_SOURCES = new Set([
   "domestic_2025",
   "club_2025",
   "national_2025",
+  "continental_2025",
+  "fallback_2025",
   "manual",
 ]);
 
 function needsBaselineRating(source: string | null | undefined): boolean {
   if (!source) return true;
   return LEGACY_RATING_SOURCES.has(source) || source === "unrated";
+}
+
+function shouldFetchPlayerBaseline(
+  source: string | null | undefined,
+  rebaseline: boolean,
+): boolean {
+  if (source === "manual") return false;
+  if (rebaseline) return true;
+  if (!source || needsBaselineRating(source)) return true;
+  return !BASELINE_RATING_SOURCES.has(source);
 }
 
 function syncBudgetMs(includeRatings: boolean, includePositions: boolean): number {
@@ -395,6 +408,7 @@ export async function syncSquads(
     includeRatings?: boolean;
     includePositions?: boolean;
     allowNationalPositions?: boolean;
+    rebaseline?: boolean;
     budgetMs?: number;
   } = {},
 ): Promise<{
@@ -426,6 +440,7 @@ export async function syncSquads(
   const includeRatings = opts.includeRatings === true;
   const includePositions = opts.includePositions === true;
   const allowNationalPositions = opts.allowNationalPositions === true;
+  const rebaseline = opts.rebaseline === true;
   const budgetMs = opts.budgetMs ?? syncBudgetMs(includeRatings, includePositions);
   const startedAt = Date.now();
   const positionsOnly = includePositions && !includeRatings;
@@ -598,10 +613,10 @@ export async function syncSquads(
         }
       }
 
-      if (includeRatings && !includePositions && existingByPlayer.size > 0) {
+      if (includeRatings && !includePositions && !rebaseline && existingByPlayer.size > 0) {
         let pending = 0;
         for (const p of existingByPlayer.values()) {
-          if (needsBaselineRating(p.rating_source)) pending += 1;
+          if (shouldFetchPlayerBaseline(p.rating_source, false)) pending += 1;
         }
         if (pending === 0) continue;
       }
@@ -621,11 +636,7 @@ export async function syncSquads(
           overall = safeOverallRating(preserved.overall_rating);
           source = "manual";
         } else if (includeRatings) {
-          if (
-            preserved &&
-            BASELINE_RATING_SOURCES.has(preserved.rating_source) &&
-            !needsBaselineRating(preserved.rating_source)
-          ) {
+          if (preserved && !shouldFetchPlayerBaseline(preserved.rating_source, rebaseline)) {
             ratingsSkipped += 1;
           } else {
             if (Date.now() - startedAt > budgetMs) {
@@ -651,9 +662,11 @@ export async function syncSquads(
                 position = normalizePosition(baseline.gamesPosition);
               }
             } else {
+              overall = playerFallbackRating(team.global_fifa_rank, p.name);
+              source = "fallback_2025";
+              clubTeamId = null;
+              leagueId = null;
               unrated += 1;
-              source = "unrated";
-              overall = safeOverallRating(preserved?.overall_rating);
             }
           }
         }
