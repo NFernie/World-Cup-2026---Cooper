@@ -89,11 +89,24 @@ Run **ratings and positions separately** after deploy:
 # Ratings only (after api/fallback cleared)
 ?force=true&includeRatings=true
 
-# Positions only — do NOT combine with includeRatings
+# World Cup positions (recommended during tournament — no club API)
+?force=true&includePositions=true&useWorldCupLineups=true
+
+# Legacy club positions (pre-tournament only)
 ?force=true&includePositions=true
 ```
 
-**API-efficient position sync (after `ce2d456` + cache update):**
+**WC position sync (`useWorldCupLineups=true`):**
+
+- **Zero club API** — national team WC / season lineups only
+- Only `position_code IS NULL` players
+- **~4 API calls per nation** (fixtures + lineups), max **10 nations/run**
+- National cache — re-runs cost 0 API for nations already fetched
+- Daily cron (migration `20260618000028`) uses this mode automatically
+
+**Theoretical API for ~650 null players:** ~48 nations × ~4 calls ≈ **~190 calls total** (~5–6 URL refreshes), vs **~650+** with club path.
+
+**Legacy club position sync (pre-tournament):**
 
 - Only queries players where `position_code IS NULL`
 - **Club lineup cache** in `app_settings` (`spin_draft_position_cache`) — re-runs cost **0 API** for cached clubs

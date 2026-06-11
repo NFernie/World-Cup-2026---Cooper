@@ -1,12 +1,12 @@
 /**
- * Persist club lineup grids in app_settings so we never re-fetch the same club.
+ * Persist club + national lineup grids in app_settings (no repeat API fetches).
  * Key: spin_draft_position_cache
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 export const POSITION_CACHE_KEY = "spin_draft_position_cache";
 
-export type ClubCacheEntry = {
+export type LineupCacheEntry = {
   fetchedAt: string;
   codes: Record<string, string>;
   /** API returned fixtures/lineups but no usable grid — skip re-fetch for this season. */
@@ -15,8 +15,13 @@ export type ClubCacheEntry = {
 
 export type PositionCache = {
   season: string;
-  clubs: Record<string, ClubCacheEntry>;
+  clubs: Record<string, LineupCacheEntry>;
+  nations: Record<string, LineupCacheEntry>;
 };
+
+function emptyCache(season: string): PositionCache {
+  return { season, clubs: {}, nations: {} };
+}
 
 export async function loadPositionCache(
   supabase: SupabaseClient,
@@ -28,11 +33,15 @@ export async function loadPositionCache(
     .eq("key", POSITION_CACHE_KEY)
     .maybeSingle();
 
-  const raw = (data?.value ?? {}) as PositionCache;
-  if (raw.season === season && raw.clubs && typeof raw.clubs === "object") {
-    return { season, clubs: { ...raw.clubs } };
+  const raw = (data?.value ?? {}) as Partial<PositionCache>;
+  if (raw.season === season) {
+    return {
+      season,
+      clubs: { ...(raw.clubs ?? {}) },
+      nations: { ...(raw.nations ?? {}) },
+    };
   }
-  return { season, clubs: {} };
+  return emptyCache(season);
 }
 
 export async function savePositionCache(
@@ -48,22 +57,54 @@ export async function savePositionCache(
     );
 }
 
-export function getCachedClubCodes(
-  cache: PositionCache,
-  clubTeamId: number,
-): Map<number, string> | null {
-  const entry = cache.clubs[String(clubTeamId)];
+function entryToMap(entry: LineupCacheEntry | undefined): Map<number, string> | null {
   if (!entry?.codes) return null;
   const codes = new Map<number, string>();
   for (const [id, code] of Object.entries(entry.codes)) {
     const n = parseInt(id, 10);
     if (Number.isFinite(n) && code) codes.set(n, code);
   }
-  return codes;
+  return codes.size > 0 ? codes : null;
+}
+
+export function getCachedClubCodes(
+  cache: PositionCache,
+  clubTeamId: number,
+): Map<number, string> | null {
+  return entryToMap(cache.clubs[String(clubTeamId)]);
+}
+
+export function getCachedNationCodes(
+  cache: PositionCache,
+  apiTeamId: number,
+): Map<number, string> | null {
+  return entryToMap(cache.nations[String(apiTeamId)]);
 }
 
 export function isClubCacheExhausted(cache: PositionCache, clubTeamId: number): boolean {
   return cache.clubs[String(clubTeamId)]?.exhausted === true;
+}
+
+export function isNationCacheExhausted(cache: PositionCache, apiTeamId: number): boolean {
+  return cache.nations[String(apiTeamId)]?.exhausted === true;
+}
+
+function mergeIntoBucket(
+  bucket: Record<string, LineupCacheEntry>,
+  key: string,
+  newCodes: Map<number, string>,
+  exhausted: boolean,
+): void {
+  const prev = bucket[key];
+  const merged: Record<string, string> = { ...(prev?.codes ?? {}) };
+  for (const [id, code] of newCodes) {
+    merged[String(id)] = code;
+  }
+  bucket[key] = {
+    fetchedAt: new Date().toISOString(),
+    codes: merged,
+    exhausted: exhausted && Object.keys(merged).length === 0,
+  };
 }
 
 export function mergeClubIntoCache(
@@ -72,15 +113,14 @@ export function mergeClubIntoCache(
   newCodes: Map<number, string>,
   exhausted: boolean,
 ): void {
-  const key = String(clubTeamId);
-  const prev = cache.clubs[key];
-  const merged: Record<string, string> = { ...(prev?.codes ?? {}) };
-  for (const [id, code] of newCodes) {
-    merged[String(id)] = code;
-  }
-  cache.clubs[key] = {
-    fetchedAt: new Date().toISOString(),
-    codes: merged,
-    exhausted: exhausted && Object.keys(merged).length === 0,
-  };
+  mergeIntoBucket(cache.clubs, String(clubTeamId), newCodes, exhausted);
+}
+
+export function mergeNationIntoCache(
+  cache: PositionCache,
+  apiTeamId: number,
+  newCodes: Map<number, string>,
+  exhausted: boolean,
+): void {
+  mergeIntoBucket(cache.nations, String(apiTeamId), newCodes, exhausted);
 }

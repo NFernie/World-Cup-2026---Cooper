@@ -8,9 +8,10 @@
  *   { "force": true }           — bypass once-per-day guard
  *   { "includeRatings": true }  — 2025 baselines (national → UCL → domestic → club)
  *   { "rebaseline": true }      — re-fetch all non-manual players (use with includeRatings)
- *   { "includePositions": true } — only players with position_code IS NULL; uses club cache
- *   { "allowNationalPositions": true } — expensive national friendlies fallback (off by default)
- * Env: POSITION_SYNC_MAX_API_CLUBS (default 5) — live API fetches per run
+ *   { "includePositions": true } — only players with position_code IS NULL
+ *   { "useWorldCupLineups": true } — national WC lineups only; zero club API (during tournament)
+ *   { "allowNationalPositions": true } — legacy friendlies fallback when not using WC mode
+ * Env: WC_POSITION_MAX_NATIONS_PER_RUN (default 10), API_FOOTBALL_WC_LEAGUE_ID (default 1)
  *   { "status": true }          — return last sync metadata only (fast health check)
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
@@ -76,9 +77,14 @@ function readFlag(
 Deno.serve(async (req) => {
   if (req.method === "GET") {
     const url = new URL(req.url);
+<<<<<<< HEAD
     const hasQuery = ["force", "includeRatings", "includePositions", "rebaseline", "status"].some((k) =>
       url.searchParams.has(k)
     );
+=======
+    const hasQuery = ["force", "includeRatings", "includePositions", "useWorldCupLineups", "status"]
+      .some((k) => url.searchParams.has(k));
+>>>>>>> 62725be (Add useWorldCupLineups mode: national WC lineups, no club API)
     if (hasQuery) {
       // GET with ?force=true&includeRatings=true works from browser / curl without a body.
       const apiKey = Deno.env.get("API_FOOTBALL_KEY");
@@ -94,7 +100,11 @@ Deno.serve(async (req) => {
         includeRatings: readFlag(url.searchParams, "includeRatings", "include_ratings"),
         includePositions: readFlag(url.searchParams, "includePositions", "include_positions"),
         allowNationalPositions: readFlag(url.searchParams, "allowNationalPositions"),
+<<<<<<< HEAD
         rebaseline: readFlag(url.searchParams, "rebaseline", "rebaseline_ratings"),
+=======
+        useWorldCupLineups: readFlag(url.searchParams, "useWorldCupLineups", "use_world_cup_lineups"),
+>>>>>>> 62725be (Add useWorldCupLineups mode: national WC lineups, no club API)
         statusOnly: readFlag(url.searchParams, "status"),
       };
       if (opts.statusOnly) {
@@ -131,7 +141,11 @@ Deno.serve(async (req) => {
   let includeRatings = readFlag(url.searchParams, "includeRatings", "include_ratings");
   let includePositions = readFlag(url.searchParams, "includePositions", "include_positions");
   let allowNationalPositions = readFlag(url.searchParams, "allowNationalPositions");
+<<<<<<< HEAD
   let rebaseline = readFlag(url.searchParams, "rebaseline");
+=======
+  let useWorldCupLineups = readFlag(url.searchParams, "useWorldCupLineups", "use_world_cup_lineups");
+>>>>>>> 62725be (Add useWorldCupLineups mode: national WC lineups, no club API)
   let statusOnly = readFlag(url.searchParams, "status");
   let bodyBytes = 0;
   let bodyParseError: string | undefined;
@@ -147,7 +161,12 @@ Deno.serve(async (req) => {
         includePositions;
       allowNationalPositions = readFlag(body, "allowNationalPositions") ||
         allowNationalPositions;
+<<<<<<< HEAD
       rebaseline = readFlag(body, "rebaseline", "rebaseline_ratings") || rebaseline;
+=======
+      useWorldCupLineups = readFlag(body, "useWorldCupLineups", "use_world_cup_lineups") ||
+        useWorldCupLineups;
+>>>>>>> 62725be (Add useWorldCupLineups mode: national WC lineups, no club API)
       statusOnly = readFlag(body, "status") || statusOnly;
     }
   } catch (err) {
@@ -159,7 +178,11 @@ Deno.serve(async (req) => {
     includeRatings,
     includePositions,
     allowNationalPositions,
+<<<<<<< HEAD
     rebaseline,
+=======
+    useWorldCupLineups,
+>>>>>>> 62725be (Add useWorldCupLineups mode: national WC lineups, no club API)
     statusOnly,
     bodyBytes,
     bodyParseError,
@@ -179,7 +202,11 @@ Deno.serve(async (req) => {
       includeRatings,
       includePositions,
       allowNationalPositions,
+<<<<<<< HEAD
       rebaseline,
+=======
+      useWorldCupLineups,
+>>>>>>> 62725be (Add useWorldCupLineups mode: national WC lineups, no club API)
     });
     const { ok, status, partial } = syncHttpStatus(result);
     return jsonResponse({ ok, partial, request, ...result }, status);

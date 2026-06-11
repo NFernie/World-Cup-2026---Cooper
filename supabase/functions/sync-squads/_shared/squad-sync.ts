@@ -17,11 +17,15 @@ import {
 import { playerFallbackRating } from "./rating-fallback.ts";
 import {
   getCachedClubCodes,
+  getCachedNationCodes,
   isClubCacheExhausted,
+  isNationCacheExhausted,
   loadPositionCache,
   mergeClubIntoCache,
+  mergeNationIntoCache,
   savePositionCache,
 } from "./position-lineup-cache.ts";
+import { fetchWorldCupNationalLineupCodes } from "./world-cup-positions.ts";
 import { gridToPositionCode } from "./position-grid.ts";
 
 const API_BASE = "https://v3.football.api-sports.io";
@@ -351,6 +355,11 @@ function maxNationalTeamsPerRun(): number {
   return Number.isFinite(n) && n >= 0 ? Math.min(n, 3) : 0;
 }
 
+function maxNationsPerWcRun(): number {
+  const n = parseInt(Deno.env.get("WC_POSITION_MAX_NATIONS_PER_RUN") ?? "10", 10);
+  return Number.isFinite(n) && n > 0 ? Math.min(n, 20) : 10;
+}
+
 async function applyPositionCode(
   supabase: SupabaseClient,
   playerDbId: string,
@@ -409,6 +418,7 @@ export async function syncSquads(
     includePositions?: boolean;
     allowNationalPositions?: boolean;
     rebaseline?: boolean;
+    useWorldCupLineups?: boolean;
     budgetMs?: number;
   } = {},
 ): Promise<{
@@ -423,6 +433,10 @@ export async function syncSquads(
   clubsProcessed?: number;
   clubsFromCache?: number;
   clubsFetched?: number;
+  nationsProcessed?: number;
+  nationsFromCache?: number;
+  nationsFetched?: number;
+  useWorldCupLineups?: boolean;
   pendingPositions?: number;
   budgetMs?: number;
   teamsAtFullSquad: number;
@@ -440,7 +454,11 @@ export async function syncSquads(
   const includeRatings = opts.includeRatings === true;
   const includePositions = opts.includePositions === true;
   const allowNationalPositions = opts.allowNationalPositions === true;
+<<<<<<< HEAD
   const rebaseline = opts.rebaseline === true;
+=======
+  const useWorldCupLineups = opts.useWorldCupLineups === true;
+>>>>>>> 62725be (Add useWorldCupLineups mode: national WC lineups, no club API)
   const budgetMs = opts.budgetMs ?? syncBudgetMs(includeRatings, includePositions);
   const startedAt = Date.now();
   const positionsOnly = includePositions && !includeRatings;
@@ -718,6 +736,9 @@ export async function syncSquads(
   let clubsProcessed = 0;
   let clubsFromCache = 0;
   let clubsFetched = 0;
+  let nationsProcessed = 0;
+  let nationsFromCache = 0;
+  let nationsFetched = 0;
   let pendingPositions = 0;
 
   if (includePositions && ratingsPassComplete) {
@@ -750,6 +771,7 @@ export async function syncSquads(
         errorDetails: errorDetails.length > 0 ? errorDetails : undefined,
         ratingsBudgetReached: ratingsBudgetReached || undefined,
         positionsOnly: positionsOnly || undefined,
+        useWorldCupLineups: useWorldCupLineups || undefined,
         includeRatings,
         includePositions,
         baselineSeason,
@@ -764,83 +786,152 @@ export async function syncSquads(
       .not("api_football_player_id", "is", null);
 
     if (pending && pending.length > 0) {
-      const positionCache = await loadPositionCache(supabase, baselineSeason);
-      const byClub = new Map<number, PositionPending[]>();
-
-      for (const row of pending) {
-        const clubId = row.baseline_club_api_team_id as number | null;
-        if (!clubId) continue;
-        const entry: PositionPending = {
-          id: row.id as string,
-          api_football_player_id: row.api_football_player_id as number,
-          baseline_club_api_team_id: clubId,
-          team_id: row.team_id as string,
-        };
-        if (!byClub.has(clubId)) byClub.set(clubId, []);
-        byClub.get(clubId)!.push(entry);
-      }
-
       const applyCodesToPlayers = async (
-        clubPlayers: PositionPending[],
+        players: PositionPending[],
         codes: Map<number, string>,
       ) => {
-        for (const p of clubPlayers) {
+        for (const p of players) {
           const code = codes.get(p.api_football_player_id);
           if (!code) continue;
           if (await applyPositionCode(supabase, p.id, code, now)) positionCoded += 1;
         }
       };
 
-      const clubsSorted = [...byClub.entries()].sort((a, b) => b[1].length - a[1].length);
-      const needsApiFetch: Array<[number, PositionPending[]]> = [];
+      if (useWorldCupLineups) {
+        const positionCache = await loadPositionCache(supabase, season);
+        const teamsById = new Map(teams.map((t) => [t.id, t]));
+        const byNational = new Map<string, PositionPending[]>();
 
-      for (const [clubId, clubPlayers] of clubsSorted) {
-        if (isClubCacheExhausted(positionCache, clubId)) {
+        for (const row of pending) {
+          const entry: PositionPending = {
+            id: row.id as string,
+            api_football_player_id: row.api_football_player_id as number,
+            baseline_club_api_team_id: row.baseline_club_api_team_id as number | null,
+            team_id: row.team_id as string,
+          };
+          if (!byNational.has(entry.team_id)) byNational.set(entry.team_id, []);
+          byNational.get(entry.team_id)!.push(entry);
+        }
+
+        const nationsSorted = [...byNational.entries()].sort((a, b) => b[1].length - a[1].length);
+        const needsApiFetch: Array<[number, string, PositionPending[]]> = [];
+
+        for (const [teamId, nationPlayers] of nationsSorted) {
+          const apiTeamId = teamsById.get(teamId)?.api_football_team_id;
+          if (!apiTeamId) continue;
+
+          if (isNationCacheExhausted(positionCache, apiTeamId)) {
+            nationsProcessed += 1;
+            continue;
+          }
+
+          const cached = getCachedNationCodes(positionCache, apiTeamId);
+          if (cached && cached.size > 0) {
+            nationsFromCache += 1;
+            nationsProcessed += 1;
+            await applyCodesToPlayers(nationPlayers, cached);
+            continue;
+          }
+
+          needsApiFetch.push([apiTeamId, teamId, nationPlayers]);
+        }
+
+        let apiNationBudget = maxNationsPerWcRun();
+        for (const [apiTeamId, _teamId, nationPlayers] of needsApiFetch) {
+          if (apiNationBudget <= 0 || Date.now() - startedAt > budgetMs) {
+            budgetReached = true;
+            break;
+          }
+          apiNationBudget -= 1;
+
+          const targetIds = new Set(nationPlayers.map((p) => p.api_football_player_id));
+          const { codes, apiCalls } = await fetchWorldCupNationalLineupCodes(
+            apiKey,
+            apiTeamId,
+            season,
+            targetIds,
+          );
+          positionApiCalls += apiCalls;
+          nationsFetched += 1;
+          nationsProcessed += 1;
+
+          mergeNationIntoCache(positionCache, apiTeamId, codes, codes.size === 0);
+
+          if (codes.size > 0) {
+            await applyCodesToPlayers(nationPlayers, codes);
+          }
+
+          await new Promise((r) => setTimeout(r, 30));
+        }
+
+        await savePositionCache(supabase, positionCache);
+      } else {
+        const positionCache = await loadPositionCache(supabase, baselineSeason);
+        const byClub = new Map<number, PositionPending[]>();
+
+        for (const row of pending) {
+          const clubId = row.baseline_club_api_team_id as number | null;
+          if (!clubId) continue;
+          const entry: PositionPending = {
+            id: row.id as string,
+            api_football_player_id: row.api_football_player_id as number,
+            baseline_club_api_team_id: clubId,
+            team_id: row.team_id as string,
+          };
+          if (!byClub.has(clubId)) byClub.set(clubId, []);
+          byClub.get(clubId)!.push(entry);
+        }
+
+        const clubsSorted = [...byClub.entries()].sort((a, b) => b[1].length - a[1].length);
+        const needsApiFetch: Array<[number, PositionPending[]]> = [];
+
+        for (const [clubId, clubPlayers] of clubsSorted) {
+          if (isClubCacheExhausted(positionCache, clubId)) {
+            clubsProcessed += 1;
+            continue;
+          }
+
+          const cached = getCachedClubCodes(positionCache, clubId);
+          if (cached && cached.size > 0) {
+            clubsFromCache += 1;
+            clubsProcessed += 1;
+            await applyCodesToPlayers(clubPlayers, cached);
+            continue;
+          }
+
+          needsApiFetch.push([clubId, clubPlayers]);
+        }
+
+        let apiClubBudget = maxApiClubsPerRun();
+        for (const [clubId, clubPlayers] of needsApiFetch) {
+          if (apiClubBudget <= 0 || Date.now() - startedAt > budgetMs) {
+            budgetReached = true;
+            break;
+          }
+          apiClubBudget -= 1;
+
+          const { codes, apiCalls } = await fetchClubLineupPositionCodes(
+            apiKey,
+            clubId,
+            baselineSeason,
+          );
+          positionApiCalls += apiCalls;
+          clubsFetched += 1;
           clubsProcessed += 1;
-          continue;
+
+          mergeClubIntoCache(positionCache, clubId, codes, codes.size === 0);
+
+          if (codes.size > 0) {
+            await applyCodesToPlayers(clubPlayers, codes);
+          }
+
+          await new Promise((r) => setTimeout(r, 30));
         }
 
-        const cached = getCachedClubCodes(positionCache, clubId);
-        if (cached && cached.size > 0) {
-          clubsFromCache += 1;
-          clubsProcessed += 1;
-          await applyCodesToPlayers(clubPlayers, cached);
-          continue;
-        }
+        await savePositionCache(supabase, positionCache);
 
-        needsApiFetch.push([clubId, clubPlayers]);
-      }
-
-      let apiClubBudget = maxApiClubsPerRun();
-      for (const [clubId, clubPlayers] of needsApiFetch) {
-        if (apiClubBudget <= 0 || Date.now() - startedAt > budgetMs) {
-          budgetReached = true;
-          break;
-        }
-        apiClubBudget -= 1;
-
-        const { codes, apiCalls } = await fetchClubLineupPositionCodes(
-          apiKey,
-          clubId,
-          baselineSeason,
-        );
-        positionApiCalls += apiCalls;
-        clubsFetched += 1;
-        clubsProcessed += 1;
-
-        mergeClubIntoCache(positionCache, clubId, codes, codes.size === 0);
-
-        if (codes.size > 0) {
-          await applyCodesToPlayers(clubPlayers, codes);
-        }
-
-        await new Promise((r) => setTimeout(r, 30));
-      }
-
-      await savePositionCache(supabase, positionCache);
-
-      const nationalCap = allowNationalPositions ? maxNationalTeamsPerRun() : 0;
-      if (nationalCap > 0 && !budgetReached && Date.now() - startedAt < budgetMs - 6_000) {
+        const nationalCap = allowNationalPositions ? maxNationalTeamsPerRun() : 0;
+        if (nationalCap > 0 && !budgetReached && Date.now() - startedAt < budgetMs - 6_000) {
         const { data: stillPending } = await supabase
           .from("squad_players")
           .select("id, api_football_player_id, team_id")
@@ -888,6 +979,7 @@ export async function syncSquads(
             if (await applyPositionCode(supabase, p.id, code, now)) positionCoded += 1;
           }
         }
+        }
       }
     }
   }
@@ -907,6 +999,9 @@ export async function syncSquads(
   if (ratingsBudgetReached) {
     note =
       `Baseline ratings partial (${apiRated} new, ${ratingsSkipped} already done). Re-run the same URL — teams with api/fallback players are prioritised.`;
+  } else if (useWorldCupLineups && (budgetReached || positionCoded > 0)) {
+    note =
+      `WC position sync: ${positionCoded} coded (${nationsFromCache} nations from cache, ${nationsFetched} new API fetches, ~${positionApiCalls} API calls). Re-run ?force=true&includePositions=true&useWorldCupLineups=true — no club API.`;
   } else if (budgetReached || (positionsOnly && positionCoded > 0)) {
     note =
       `Position sync: ${positionCoded} coded (${clubsFromCache} clubs from cache, ${clubsFetched} new API fetches, ~${positionApiCalls} API calls). Re-run ?force=true&includePositions=true — cached clubs cost 0 API.`;
@@ -932,6 +1027,10 @@ export async function syncSquads(
     clubsProcessed: clubsProcessed > 0 ? clubsProcessed : undefined,
     clubsFromCache: clubsFromCache > 0 ? clubsFromCache : undefined,
     clubsFetched: clubsFetched > 0 ? clubsFetched : undefined,
+    nationsProcessed: nationsProcessed > 0 ? nationsProcessed : undefined,
+    nationsFromCache: nationsFromCache > 0 ? nationsFromCache : undefined,
+    nationsFetched: nationsFetched > 0 ? nationsFetched : undefined,
+    useWorldCupLineups: useWorldCupLineups || undefined,
     pendingPositions: includePositions ? pendingPositions : undefined,
     teamsAtFullSquad,
     errors,
