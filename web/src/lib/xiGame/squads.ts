@@ -23,8 +23,9 @@ export async function fetchAllSquadPlayers(): Promise<SquadPlayer[]> {
 }
 
 async function fetchRawSquadPlayers(): Promise<SquadPlayerRow[]> {
+  const selectFull = `${SQUAD_SELECT_BASE}, baseline_league_id, has_continental_rating`
   const selectWithLeague = `${SQUAD_SELECT_BASE}, baseline_league_id`
-  let select = selectWithLeague
+  let select = selectFull
   let from = 0
   const all: SquadPlayerRow[] = []
 
@@ -35,6 +36,12 @@ async function fetchRawSquadPlayers(): Promise<SquadPlayerRow[]> {
       .order('overall_rating', { ascending: false })
       .range(from, from + PAGE_SIZE - 1)
 
+    if (error && select === selectFull) {
+      select = selectWithLeague
+      from = 0
+      all.length = 0
+      continue
+    }
     if (error && select === selectWithLeague) {
       select = SQUAD_SELECT_BASE
       from = 0

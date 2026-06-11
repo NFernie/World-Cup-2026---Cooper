@@ -12,7 +12,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import {
   fetchClubLineupPositionCodes,
-  fetchPlayerBaseline2025,
+  fetchPlayerBaselineWithMeta2025,
 } from "./domestic-baseline.ts";
 import { playerFallbackRating } from "./rating-fallback.ts";
 import {
@@ -292,6 +292,7 @@ type SquadRow = {
   rating_source: string;
   baseline_club_api_team_id?: number | null;
   baseline_league_id?: number | null;
+  has_continental_rating?: boolean;
   synced_at: string;
 };
 
@@ -302,7 +303,15 @@ type ExistingPlayerRow = {
   position_code: string | null;
   baseline_club_api_team_id: number | null;
   baseline_league_id: number | null;
+  has_continental_rating: boolean | null;
 };
+
+function topTeamsByFifaRank(teams: DbTeam[], limit: number): DbTeam[] {
+  return [...teams]
+    .filter((t) => t.global_fifa_rank != null && t.global_fifa_rank > 0)
+    .sort((a, b) => a.global_fifa_rank! - b.global_fifa_rank!)
+    .slice(0, limit);
+}
 
 const SYNC_META_KEY = "spin_draft_sync";
 const MIN_HOURS_BETWEEN_SYNCS = 20;
@@ -419,6 +428,8 @@ export async function syncSquads(
     allowNationalPositions?: boolean;
     rebaseline?: boolean;
     useWorldCupLineups?: boolean;
+    /** Limit ratings rebaseline to the top N nations by FIFA rank (phased API use). */
+    topTeamsByFifaRank?: number;
     budgetMs?: number;
   } = {},
 ): Promise<{
@@ -454,11 +465,11 @@ export async function syncSquads(
   const includeRatings = opts.includeRatings === true;
   const includePositions = opts.includePositions === true;
   const allowNationalPositions = opts.allowNationalPositions === true;
-<<<<<<< HEAD
   const rebaseline = opts.rebaseline === true;
-=======
   const useWorldCupLineups = opts.useWorldCupLineups === true;
->>>>>>> 62725be (Add useWorldCupLineups mode: national WC lineups, no club API)
+  const topTeamsLimit = opts.topTeamsByFifaRank && opts.topTeamsByFifaRank > 0
+    ? Math.floor(opts.topTeamsByFifaRank)
+    : 0;
   const budgetMs = opts.budgetMs ?? syncBudgetMs(includeRatings, includePositions);
   const startedAt = Date.now();
   const positionsOnly = includePositions && !includeRatings;
@@ -530,6 +541,9 @@ export async function syncSquads(
   }
 
   let teams = (teamsResult.data ?? []) as DbTeam[];
+  if (topTeamsLimit > 0 && includeRatings) {
+    teams = topTeamsByFifaRank(teams, topTeamsLimit);
+  }
   if (teams.length === 0) {
     return {
       teams: 0,
@@ -556,7 +570,7 @@ export async function syncSquads(
     const { data: allExisting } = await supabase
       .from("squad_players")
       .select(
-        "team_id, api_football_player_id, overall_rating, rating_source, position_code, baseline_club_api_team_id",
+        "team_id, api_football_player_id, overall_rating, rating_source, position_code, baseline_club_api_team_id, baseline_league_id, has_continental_rating",
       );
     for (const row of allExisting ?? []) {
       const teamId = row.team_id as string;
@@ -648,13 +662,15 @@ export async function syncSquads(
         let source = preserved?.rating_source ?? "unrated";
         let clubTeamId = preserved?.baseline_club_api_team_id ?? null;
         let leagueId = preserved?.baseline_league_id ?? null;
+        let hasContinentalRating = preserved?.has_continental_rating ?? false;
         let positionCode = preserved?.position_code ?? null;
 
         if (preserved?.rating_source === "manual") {
           overall = safeOverallRating(preserved.overall_rating);
           source = "manual";
         } else if (includeRatings) {
-          if (preserved && !shouldFetchPlayerBaseline(preserved.rating_source, rebaseline)) {
+          const forceRebaseline = rebaseline || topTeamsLimit > 0;
+          if (preserved && !shouldFetchPlayerBaseline(preserved.rating_source, forceRebaseline)) {
             ratingsSkipped += 1;
           } else {
             if (Date.now() - startedAt > budgetMs) {
@@ -662,7 +678,7 @@ export async function syncSquads(
               break;
             }
 
-            const baseline = await fetchPlayerBaseline2025(
+            const result = await fetchPlayerBaselineWithMeta2025(
               apiKey,
               p.id,
               baselineSeason,
@@ -670,14 +686,15 @@ export async function syncSquads(
             );
             await new Promise((r) => setTimeout(r, 85));
 
-            if (baseline) {
-              overall = baseline.ovr;
-              source = baseline.source;
-              clubTeamId = baseline.clubTeamId;
-              leagueId = baseline.leagueId;
+            hasContinentalRating = result.hasContinentalRating;
+            if (result.baseline) {
+              overall = result.baseline.ovr;
+              source = result.baseline.source;
+              clubTeamId = result.baseline.clubTeamId;
+              leagueId = result.baseline.leagueId;
               apiRated += 1;
-              if (baseline.gamesPosition) {
-                position = normalizePosition(baseline.gamesPosition);
+              if (result.baseline.gamesPosition) {
+                position = normalizePosition(result.baseline.gamesPosition);
               }
             } else {
               overall = playerFallbackRating(team.global_fifa_rank, p.name);
@@ -702,6 +719,7 @@ export async function syncSquads(
           rating_source: source,
           baseline_club_api_team_id: clubTeamId,
           baseline_league_id: leagueId,
+          has_continental_rating: hasContinentalRating,
           synced_at: now,
         });
       }

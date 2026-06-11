@@ -6,12 +6,14 @@
  *
  * POST body (all optional):
  *   { "force": true }           — bypass once-per-day guard
- *   { "includeRatings": true }  — 2025 baselines (national → UCL → domestic → club)
+ *   { "includeRatings": true }  — 2025 baselines (best-of-tier: national/UCL/domestic/club)
  *   { "rebaseline": true }      — re-fetch all non-manual players (use with includeRatings)
+ *   { "topTeamsByFifaRank": 10 } — phased rebaseline for top N FIFA nations only
  *   { "includePositions": true } — only players with position_code IS NULL
  *   { "useWorldCupLineups": true } — national WC lineups only; zero club API (during tournament)
  *   { "allowNationalPositions": true } — legacy friendlies fallback when not using WC mode
  * Env: WC_POSITION_MAX_NATIONS_PER_RUN (default 10), API_FOOTBALL_WC_LEAGUE_ID (default 1)
+ * Env: POSITION_SYNC_MAX_API_CLUBS (default 5) — live API fetches per run
  *   { "status": true }          — return last sync metadata only (fast health check)
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
@@ -56,6 +58,33 @@ function syncHttpStatus(result: SyncResult): { ok: boolean; status: number; part
   return { ok: true, status: 200 };
 }
 
+function parsePositiveInt(v: unknown): number | undefined {
+  if (v == null || v === "") return undefined;
+  const n = typeof v === "number" ? v : parseInt(String(v), 10);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+function readPositiveInt(
+  source: Record<string, unknown> | URLSearchParams,
+  ...names: string[]
+): number | undefined {
+  if (source instanceof URLSearchParams) {
+    for (const name of names) {
+      const v = source.get(name);
+      const n = parsePositiveInt(v);
+      if (n != null) return n;
+    }
+    return undefined;
+  }
+  for (const [key, value] of Object.entries(source)) {
+    if (names.some((n) => n.toLowerCase() === key.toLowerCase())) {
+      const parsed = parsePositiveInt(value);
+      if (parsed != null) return parsed;
+    }
+  }
+  return undefined;
+}
+
 function readFlag(
   source: Record<string, unknown> | URLSearchParams,
   ...names: string[]
@@ -77,14 +106,15 @@ function readFlag(
 Deno.serve(async (req) => {
   if (req.method === "GET") {
     const url = new URL(req.url);
-<<<<<<< HEAD
-    const hasQuery = ["force", "includeRatings", "includePositions", "rebaseline", "status"].some((k) =>
-      url.searchParams.has(k)
-    );
-=======
-    const hasQuery = ["force", "includeRatings", "includePositions", "useWorldCupLineups", "status"]
-      .some((k) => url.searchParams.has(k));
->>>>>>> 62725be (Add useWorldCupLineups mode: national WC lineups, no club API)
+    const hasQuery = [
+      "force",
+      "includeRatings",
+      "includePositions",
+      "rebaseline",
+      "topTeamsByFifaRank",
+      "useWorldCupLineups",
+      "status",
+    ].some((k) => url.searchParams.has(k));
     if (hasQuery) {
       // GET with ?force=true&includeRatings=true works from browser / curl without a body.
       const apiKey = Deno.env.get("API_FOOTBALL_KEY");
@@ -100,11 +130,9 @@ Deno.serve(async (req) => {
         includeRatings: readFlag(url.searchParams, "includeRatings", "include_ratings"),
         includePositions: readFlag(url.searchParams, "includePositions", "include_positions"),
         allowNationalPositions: readFlag(url.searchParams, "allowNationalPositions"),
-<<<<<<< HEAD
         rebaseline: readFlag(url.searchParams, "rebaseline", "rebaseline_ratings"),
-=======
+        topTeamsByFifaRank: readPositiveInt(url.searchParams, "topTeamsByFifaRank", "top_teams_by_fifa_rank"),
         useWorldCupLineups: readFlag(url.searchParams, "useWorldCupLineups", "use_world_cup_lineups"),
->>>>>>> 62725be (Add useWorldCupLineups mode: national WC lineups, no club API)
         statusOnly: readFlag(url.searchParams, "status"),
       };
       if (opts.statusOnly) {
@@ -141,11 +169,9 @@ Deno.serve(async (req) => {
   let includeRatings = readFlag(url.searchParams, "includeRatings", "include_ratings");
   let includePositions = readFlag(url.searchParams, "includePositions", "include_positions");
   let allowNationalPositions = readFlag(url.searchParams, "allowNationalPositions");
-<<<<<<< HEAD
   let rebaseline = readFlag(url.searchParams, "rebaseline");
-=======
+  let topTeamsByFifaRank = readPositiveInt(url.searchParams, "topTeamsByFifaRank", "top_teams_by_fifa_rank");
   let useWorldCupLineups = readFlag(url.searchParams, "useWorldCupLineups", "use_world_cup_lineups");
->>>>>>> 62725be (Add useWorldCupLineups mode: national WC lineups, no club API)
   let statusOnly = readFlag(url.searchParams, "status");
   let bodyBytes = 0;
   let bodyParseError: string | undefined;
@@ -161,12 +187,11 @@ Deno.serve(async (req) => {
         includePositions;
       allowNationalPositions = readFlag(body, "allowNationalPositions") ||
         allowNationalPositions;
-<<<<<<< HEAD
       rebaseline = readFlag(body, "rebaseline", "rebaseline_ratings") || rebaseline;
-=======
+      topTeamsByFifaRank = readPositiveInt(body, "topTeamsByFifaRank", "top_teams_by_fifa_rank") ??
+        topTeamsByFifaRank;
       useWorldCupLineups = readFlag(body, "useWorldCupLineups", "use_world_cup_lineups") ||
         useWorldCupLineups;
->>>>>>> 62725be (Add useWorldCupLineups mode: national WC lineups, no club API)
       statusOnly = readFlag(body, "status") || statusOnly;
     }
   } catch (err) {
@@ -178,11 +203,9 @@ Deno.serve(async (req) => {
     includeRatings,
     includePositions,
     allowNationalPositions,
-<<<<<<< HEAD
     rebaseline,
-=======
+    topTeamsByFifaRank,
     useWorldCupLineups,
->>>>>>> 62725be (Add useWorldCupLineups mode: national WC lineups, no club API)
     statusOnly,
     bodyBytes,
     bodyParseError,
@@ -202,11 +225,9 @@ Deno.serve(async (req) => {
       includeRatings,
       includePositions,
       allowNationalPositions,
-<<<<<<< HEAD
       rebaseline,
-=======
+      topTeamsByFifaRank,
       useWorldCupLineups,
->>>>>>> 62725be (Add useWorldCupLineups mode: national WC lineups, no club API)
     });
     const { ok, status, partial } = syncHttpStatus(result);
     return jsonResponse({ ok, partial, request, ...result }, status);

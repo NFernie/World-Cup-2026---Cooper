@@ -189,6 +189,7 @@ export interface Database {
           rating_source: string
           baseline_club_api_team_id: number | null
           baseline_league_id: number | null
+          has_continental_rating: boolean
           synced_at: string
         }
       }

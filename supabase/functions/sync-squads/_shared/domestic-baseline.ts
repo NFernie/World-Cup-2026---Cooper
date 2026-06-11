@@ -125,19 +125,23 @@ function pickBestByMinutes(
   return entries.sort((a, b) => b.minutes - a.minutes)[0];
 }
 
-/**
- * Pick baseline from statistics[] on GET /players?id=&season=2025.
- * 1) National team — highest minutes
- * 2) UEFA continental club — highest minutes
- * 3) Top domestic league — highest minutes
- * 4) Other club competitions — highest minutes
- */
-export function pickBaselineFromStatistics(
+type EligibleStat = {
+  stat: ApiStat;
+  minutes: number;
+  rating: number;
+  leagueId: number;
+  isNational: boolean;
+  isContinental: boolean;
+  isDomestic: boolean;
+  isExcluded: boolean;
+};
+
+function buildEligibleStats(
   stats: ApiStat[],
   nationalApiTeamIds: Set<number>,
-  minMinutes = 45,
-): PlayerBaseline | null {
-  const eligible = stats
+  minMinutes: number,
+): EligibleStat[] {
+  return stats
     .map((s) => {
       const minutes = parseMinutes(s.games?.minutes);
       const rating = parseRating(s.games?.rating);
@@ -155,40 +159,86 @@ export function pickBaselineFromStatistics(
         isExcluded: EXCLUDED_LEAGUE_IDS.has(leagueId),
       };
     })
-    .filter((x): x is NonNullable<typeof x> => x != null);
+    .filter((x): x is EligibleStat => x != null);
+}
 
+export function hasContinentalRatingInStatistics(
+  stats: ApiStat[],
+  nationalApiTeamIds: Set<number>,
+  minMinutes = 45,
+): boolean {
+  return buildEligibleStats(stats, nationalApiTeamIds, minMinutes).some(
+    (e) => e.isContinental && !e.isNational,
+  );
+}
+
+/**
+ * Pick baseline from statistics[] — highest API rating across national, continental,
+ * domestic, and other club tiers (best-of-tier).
+ */
+export function pickBaselineFromStatistics(
+  stats: ApiStat[],
+  nationalApiTeamIds: Set<number>,
+  minMinutes = 45,
+): PlayerBaseline | null {
+  const eligible = buildEligibleStats(stats, nationalApiTeamIds, minMinutes);
   if (eligible.length === 0) return null;
 
-  const national = eligible.filter((e) => e.isNational);
-  const nationalBest = pickBestByMinutes(national);
-  if (nationalBest) {
-    return toBaseline(nationalBest.stat, nationalBest.rating, nationalBest.minutes, "national_2025");
+  const tiers: { entries: EligibleStat[]; source: BaselineRatingSource }[] = [
+    {
+      entries: eligible.filter((e) => e.isNational),
+      source: "national_2025",
+    },
+    {
+      entries: eligible.filter((e) => e.isContinental && !e.isNational),
+      source: "continental_2025",
+    },
+    {
+      entries: eligible.filter((e) => e.isDomestic && !e.isNational && !e.isContinental),
+      source: "domestic_2025",
+    },
+    {
+      entries: eligible.filter((e) => !e.isNational && !e.isExcluded && !e.isContinental),
+      source: "club_2025",
+    },
+  ];
+
+  let best: { entry: EligibleStat; source: BaselineRatingSource } | null = null;
+  for (const tier of tiers) {
+    const pick = pickBestByMinutes(tier.entries);
+    if (!pick) continue;
+    if (!best || pick.rating > best.entry.rating) {
+      best = { entry: pick, source: tier.source };
+    }
   }
 
-  const continental = eligible.filter((e) => e.isContinental && !e.isNational);
-  const continentalBest = pickBestByMinutes(continental);
-  if (continentalBest) {
-    return toBaseline(
-      continentalBest.stat,
-      continentalBest.rating,
-      continentalBest.minutes,
-      "continental_2025",
-    );
-  }
+  if (!best) return null;
+  return toBaseline(
+    best.entry.stat,
+    best.entry.rating,
+    best.entry.minutes,
+    best.source,
+  );
+}
 
-  const domestic = eligible.filter((e) => e.isDomestic && !e.isNational && !e.isContinental);
-  const domesticBest = pickBestByMinutes(domestic);
-  if (domesticBest) {
-    return toBaseline(domesticBest.stat, domesticBest.rating, domesticBest.minutes, "domestic_2025");
-  }
+export type PlayerBaselineResult = {
+  baseline: PlayerBaseline | null;
+  hasContinentalRating: boolean;
+};
 
-  const club = eligible.filter((e) => !e.isNational && !e.isExcluded && !e.isContinental);
-  const clubBest = pickBestByMinutes(club);
-  if (clubBest) {
-    return toBaseline(clubBest.stat, clubBest.rating, clubBest.minutes, "club_2025");
-  }
-
-  return null;
+export function pickPlayerBaselineFromStatistics(
+  stats: ApiStat[],
+  nationalApiTeamIds: Set<number>,
+  minMinutes = 45,
+): PlayerBaselineResult {
+  return {
+    baseline: pickBaselineFromStatistics(stats, nationalApiTeamIds, minMinutes),
+    hasContinentalRating: hasContinentalRatingInStatistics(
+      stats,
+      nationalApiTeamIds,
+      minMinutes,
+    ),
+  };
 }
 
 function toBaseline(
@@ -211,12 +261,11 @@ function toBaseline(
   };
 }
 
-export async function fetchPlayerBaseline2025(
+async function fetchPlayerStatistics2025(
   apiKey: string,
   playerId: number,
   baselineSeason: string,
-  nationalApiTeamIds: Set<number>,
-): Promise<PlayerBaseline | null> {
+): Promise<ApiStat[] | null> {
   const res = await fetch(
     `${API_BASE}/players?id=${playerId}&season=${baselineSeason}`,
     { headers: { "x-apisports-key": apiKey } },
@@ -227,8 +276,31 @@ export async function fetchPlayerBaseline2025(
   const row = (payload?.response ?? [])[0] as Record<string, unknown> | undefined;
   if (!row) return null;
 
-  const stats = (row.statistics ?? []) as ApiStat[];
+  return (row.statistics ?? []) as ApiStat[];
+}
+
+export async function fetchPlayerBaseline2025(
+  apiKey: string,
+  playerId: number,
+  baselineSeason: string,
+  nationalApiTeamIds: Set<number>,
+): Promise<PlayerBaseline | null> {
+  const stats = await fetchPlayerStatistics2025(apiKey, playerId, baselineSeason);
+  if (!stats) return null;
   return pickBaselineFromStatistics(stats, nationalApiTeamIds);
+}
+
+export async function fetchPlayerBaselineWithMeta2025(
+  apiKey: string,
+  playerId: number,
+  baselineSeason: string,
+  nationalApiTeamIds: Set<number>,
+): Promise<PlayerBaselineResult> {
+  const stats = await fetchPlayerStatistics2025(apiKey, playerId, baselineSeason);
+  if (!stats) {
+    return { baseline: null, hasContinentalRating: false };
+  }
+  return pickPlayerBaselineFromStatistics(stats, nationalApiTeamIds);
 }
 
 function extractFixtureIds(payload: Record<string, unknown> | null): number[] {

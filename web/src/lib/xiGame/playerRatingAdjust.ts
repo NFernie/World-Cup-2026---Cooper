@@ -6,12 +6,15 @@ export const NATION_CLAMP_BELOW = 8
 export const NATION_CLAMP_ABOVE = 12
 export const STAR_TOP_N = 3
 export const STAR_FLOOR_ABOVE_FIFA = 6
+/** Pull star-floor boost halfway toward fifa+6 (e.g. 81 → 87 not 92). */
+export const STAR_FLOOR_BLEND = 0.5
 const PLAYER_OVR_MIN = 50
 const PLAYER_OVR_MAX = 94
 
 export type SquadPlayerRow = SquadPlayer & {
   rating_source?: string | null
   baseline_league_id?: number | null
+  has_continental_rating?: boolean | null
 }
 
 function clamp(n: number, min: number, max: number): number {
@@ -42,9 +45,20 @@ function applyLeagueAndNationClamp(
   return clamp(scaled, Math.max(PLAYER_OVR_MIN, min), Math.min(PLAYER_OVR_MAX, max))
 }
 
+function qualifiesForStarPool(player: SquadPlayerRow, fifaOvr: number): boolean {
+  if (player.rating_source === 'continental_2025') return true
+  if (player.has_continental_rating) return true
+  return player.overall_rating >= fifaOvr - NATION_CLAMP_BELOW
+}
+
+function applyStarFloor(leagued: number, starFloor: number): number {
+  if (leagued >= starFloor) return leagued
+  return Math.round(leagued + (starFloor - leagued) * STAR_FLOOR_BLEND)
+}
+
 /**
- * League multiplier → nation clamp → top-3 star floor per nation.
- * Applied at read time; no API calls.
+ * League multiplier → nation clamp → top-3 star floor (half blend) per nation.
+ * UCL players qualify for the star pool even when raw rating is below fifa−8.
  */
 export function applySquadRatingAdjustments(
   players: SquadPlayerRow[],
@@ -66,7 +80,7 @@ export function applySquadRatingAdjustments(
 
     const starIds = new Set(
       [...squad]
-        .filter((p) => p.overall_rating >= fifaOvr - NATION_CLAMP_BELOW)
+        .filter((p) => qualifiesForStarPool(p, fifaOvr))
         .sort((a, b) => b.overall_rating - a.overall_rating)
         .slice(0, STAR_TOP_N)
         .map((p) => p.id),
@@ -85,7 +99,7 @@ export function applySquadRatingAdjustments(
     for (const { player, leagued } of withLeague) {
       let ovr = leagued
       if (starIds.has(player.id) && player.rating_source !== 'manual') {
-        ovr = Math.max(ovr, starFloor)
+        ovr = applyStarFloor(leagued, starFloor)
       }
       ovr = clamp(ovr, Math.max(PLAYER_OVR_MIN, min), Math.min(PLAYER_OVR_MAX, max))
       adjustedById.set(player.id, ovr)

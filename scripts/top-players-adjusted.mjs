@@ -9,6 +9,7 @@ const NATION_CLAMP_BELOW = 8
 const NATION_CLAMP_ABOVE = 12
 const STAR_TOP_N = 3
 const STAR_FLOOR_ABOVE_FIFA = 6
+const STAR_FLOOR_BLEND = 0.5
 const PLAYER_OVR_MIN = 50
 const PLAYER_OVR_MAX = 94
 
@@ -68,7 +69,12 @@ function adjustSquad(players, fifaRank) {
 
   const starIds = new Set(
     [...players]
-      .filter((p) => p.overall_rating >= fifaOvr - NATION_CLAMP_BELOW)
+      .filter(
+        (p) =>
+          p.rating_source === 'continental_2025' ||
+          p.has_continental_rating ||
+          p.overall_rating >= fifaOvr - NATION_CLAMP_BELOW,
+      )
       .sort((a, b) => b.overall_rating - a.overall_rating)
       .slice(0, STAR_TOP_N)
       .map((p) => p.id),
@@ -86,7 +92,9 @@ function adjustSquad(players, fifaRank) {
   return withLeague.map((p) => {
     let ovr = p.adjusted
     if (starIds.has(p.id) && p.rating_source !== 'manual') {
-      ovr = Math.max(ovr, starFloor)
+      if (ovr < starFloor) {
+        ovr = Math.round(ovr + (starFloor - ovr) * STAR_FLOOR_BLEND)
+      }
     }
     ovr = clamp(ovr, Math.max(PLAYER_OVR_MIN, min), Math.min(PLAYER_OVR_MAX, max))
     return { ...p, adjusted: ovr }
@@ -129,12 +137,12 @@ const teams = await fetchAll('teams?select=id,name,fifa_code,global_fifa_rank', 
 let players
 try {
   players = await fetchAll(
-    'squad_players?select=id,team_id,name,overall_rating,rating_source,baseline_league_id,position,position_code',
+    'squad_players?select=id,team_id,name,overall_rating,rating_source,baseline_league_id,has_continental_rating,position,position_code',
     token,
   )
 } catch {
   players = await fetchAll(
-    'squad_players?select=id,team_id,name,overall_rating,rating_source,position,position_code',
+    'squad_players?select=id,team_id,name,overall_rating,rating_source,baseline_league_id,position,position_code',
     token,
   )
 }
