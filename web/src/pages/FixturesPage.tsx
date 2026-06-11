@@ -5,8 +5,8 @@ import { ArrowLeft, Filter, Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
+import { MatchEventsList } from '@/components/MatchEventsList'
 import { MatchFixtureCard } from '@/components/MatchFixtureCard'
-import { TeamFlag } from '@/components/TeamFlag'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import {
@@ -38,6 +38,7 @@ type MatchEventRow = {
   extra_minute: number | null
   player_name: string
   assist_name: string | null
+  event_type: string
   detail: string | null
   team_api_id: number | null
   sort_order: number
@@ -80,59 +81,10 @@ function formatKickoffLocal(iso: string) {
   })
 }
 
-function formatGoalMinute(minute: number, extra: number | null) {
-  if (extra != null && extra > 0) return `${minute}+${extra}'`
-  return `${minute}'`
-}
-
 function filterSelectClass() {
   return (
     'h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm ' +
     'text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]'
-  )
-}
-
-function GoalScorersList({
-  events,
-  homeApiId,
-  home,
-  away,
-}: {
-  events: MatchEventRow[]
-  homeApiId: number | null
-  home: TeamRow
-  away: TeamRow
-}) {
-  if (events.length === 0) return null
-
-  return (
-    <div className="mt-3 space-y-1.5 border-t border-[var(--border)] pt-3">
-      <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">Goal scorers</p>
-      <ul className="space-y-1 text-sm">
-        {events.map((ev) => {
-          const isHome =
-            ev.team_api_id != null
-              ? ev.team_api_id === homeApiId
-              : false
-          const side = isHome ? home : away
-          return (
-            <li key={ev.id} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-              <span className="font-mono text-xs text-[var(--muted)]">
-                {formatGoalMinute(ev.minute, ev.extra_minute)}
-              </span>
-              <TeamFlag fifaCode={side.fifa_code} size={20} className="!h-3 !w-[18px]" />
-              <span className="font-medium">{ev.player_name}</span>
-              {ev.assist_name && (
-                <span className="text-[var(--muted)]">({ev.assist_name})</span>
-              )}
-              {ev.detail && ev.detail !== 'Normal Goal' && (
-                <span className="text-xs text-[var(--muted)]">· {ev.detail}</span>
-              )}
-            </li>
-          )
-        })}
-      </ul>
-    </div>
   )
 }
 
@@ -504,7 +456,7 @@ export function FixturesPage() {
               </div>
 
               {showEvents && (
-                <GoalScorersList
+                <MatchEventsList
                   events={m.events}
                   homeApiId={m.home.api_football_team_id}
                   home={m.home}

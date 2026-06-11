@@ -61,11 +61,11 @@ export function formatPlayerLine(
   viewerMemberId: string | undefined,
 ): string {
   if (visibility.revealNames) {
-    return `Player: ${playerLabels.join(', ')}`
+    return `Manager${playerLabels.length === 1 ? '' : 's'}: ${playerLabels.join(', ')}`
   }
   const youIdx = viewerMemberId ? memberIds.findIndex((id) => id === viewerMemberId) : -1
   if (youIdx >= 0) {
-    return `Player: ${playerLabels[youIdx]} (you)`
+    return `Manager: ${playerLabels[youIdx]} (you)`
   }
-  return `Players assigned ${playerCount}`
+  return `Managers assigned: ${playerCount}`
 }

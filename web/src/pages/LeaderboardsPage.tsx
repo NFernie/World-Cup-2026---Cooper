@@ -302,7 +302,7 @@ export function LeaderboardsPage() {
                         )}
                       </p>
                       <p className="text-xs text-[var(--muted)]">
-                        Manager: {staff.headCoach} · Captain: {staff.captain}
+                        Head coach: {staff.headCoach} · Captain: {staff.captain}
                       </p>
                       <p className="text-xs text-[var(--muted)]">
                         {formatFifaWorldRanking(row.global_fifa_rank)}
@@ -350,12 +350,12 @@ export function LeaderboardsPage() {
                         )}
                       </span>
                       <p className="mt-0.5 text-xs text-[var(--muted)]">
-                        {showName ? `Player: ${playerLabel}` : 'Player: Hidden player'}
+                        {showName ? `Manager: ${playerLabel}` : 'Manager: Hidden player'}
                       </p>
                       {staff && (
                         <>
                           <p className="text-xs text-[var(--muted)]">
-                            Manager: {staff.headCoach} · Captain: {staff.captain}
+                            Head coach: {staff.headCoach} · Captain: {staff.captain}
                           </p>
                           <p className="text-xs text-[var(--muted)]">
                             {formatFifaWorldRanking(row.global_fifa_rank)}
