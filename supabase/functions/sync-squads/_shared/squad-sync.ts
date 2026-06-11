@@ -645,7 +645,8 @@ export async function syncSquads(
         }
       }
 
-      if (includeRatings && !includePositions && !rebaseline && existingByPlayer.size > 0) {
+      const forceTeamRebaseline = rebaseline || topTeamsLimit > 0;
+      if (includeRatings && !includePositions && !forceTeamRebaseline && existingByPlayer.size > 0) {
         let pending = 0;
         for (const p of existingByPlayer.values()) {
           if (shouldFetchPlayerBaseline(p.rating_source, false)) pending += 1;
@@ -669,8 +670,7 @@ export async function syncSquads(
           overall = safeOverallRating(preserved.overall_rating);
           source = "manual";
         } else if (includeRatings) {
-          const forceRebaseline = rebaseline || topTeamsLimit > 0;
-          if (preserved && !shouldFetchPlayerBaseline(preserved.rating_source, forceRebaseline)) {
+          if (preserved && !shouldFetchPlayerBaseline(preserved.rating_source, forceTeamRebaseline)) {
             ratingsSkipped += 1;
           } else {
             if (Date.now() - startedAt > budgetMs) {
