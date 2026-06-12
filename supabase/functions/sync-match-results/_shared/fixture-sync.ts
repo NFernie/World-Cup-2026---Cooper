@@ -343,6 +343,24 @@ export function isInLivePollWindow(
   return false;
 }
 
+/** Live / imminently-kicking-off matches only — no finished backfill (fast poll cron). */
+export function isInFastLivePollWindow(
+  kickoffAt: string,
+  status: string,
+  nowMs = Date.now(),
+): boolean {
+  if (status === "cancelled" || status === "postponed" || status === "finished") {
+    return false;
+  }
+
+  const kickoff = new Date(kickoffAt).getTime();
+  const preKickoff = kickoff - 15 * 60 * 1000;
+  const matchEnd = kickoff + 180 * 60 * 1000;
+
+  if (status === "live") return true;
+  return nowMs >= preKickoff && nowMs <= matchEnd;
+}
+
 async function resolveMatchIdByExternalId(
   supabase: SupabaseClient,
   externalId: string,
@@ -356,22 +374,51 @@ async function resolveMatchIdByExternalId(
 }
 
 function isSyncableMatchEvent(e: ApiEvent): boolean {
-  if (!e.player?.name) return false;
-  if (e.type === "Goal" && e.detail !== "Missed Penalty") return true;
+  if (e.type === "Goal" && e.detail !== "Missed Penalty") {
+    return Boolean(e.player?.name);
+  }
   if (e.type === "Card") {
+    if (!e.player?.name) return false;
     const detail = e.detail ?? "";
     return detail === "Yellow Card" || detail === "Red Card" || detail === "Second Yellow";
+  }
+  if (e.type === "Var") {
+    const detail = (e.detail ?? "").toLowerCase();
+    return detail.includes("penalty");
   }
   return false;
 }
 
-/** Goals and cards from embedded fixtures?ids= response — no extra API call. */
+type StoredEventRow = {
+  minute: number;
+  extra_minute: number | null;
+  player_name: string;
+  event_type: string;
+  detail: string | null;
+  sort_order: number;
+};
+
+function eventRowsSignature(rows: StoredEventRow[]): string {
+  return rows
+    .map((r) =>
+      `${r.minute}:${r.extra_minute ?? ""}:${r.player_name}:${r.event_type}:${r.detail ?? ""}`
+    )
+    .join("|");
+}
+
+/** Goals, cards, and penalty VAR events from embedded fixtures?ids= response. */
 export async function syncMatchEvents(
   supabase: SupabaseClient,
   matchId: string,
   events: ApiEvent[] | undefined,
-): Promise<number> {
-  if (events === undefined) return 0;
+): Promise<{ inserted: number; changed: boolean }> {
+  if (events === undefined) return { inserted: 0, changed: false };
+
+  const { data: existingRows } = await supabase
+    .from("match_events")
+    .select("minute, extra_minute, player_name, event_type, detail, sort_order")
+    .eq("match_id", matchId)
+    .order("sort_order", { ascending: true });
 
   const syncable = events
     .filter(isSyncableMatchEvent)
@@ -381,21 +428,32 @@ export async function syncMatchEvents(
       return ma - mb;
     });
 
+  const nextRows: StoredEventRow[] = syncable.map((e, i) => ({
+    minute: e.time?.elapsed ?? 0,
+    extra_minute: e.time?.extra ?? null,
+    player_name: e.player?.name ?? (e.type === "Var" ? "VAR" : "Unknown"),
+    event_type: e.type === "Card" ? "Card" : e.type === "Var" ? "Var" : "Goal",
+    detail: e.detail ?? null,
+    sort_order: i,
+  }));
+
+  const changed = eventRowsSignature(existingRows ?? []) !== eventRowsSignature(nextRows);
+
   await supabase.from("match_events").delete().eq("match_id", matchId);
 
   let inserted = 0;
-  for (let i = 0; i < syncable.length; i++) {
-    const e = syncable[i];
+  for (const row of nextRows) {
+    const e = syncable[row.sort_order];
     const { error } = await supabase.from("match_events").insert({
       match_id: matchId,
-      minute: e.time?.elapsed ?? 0,
-      extra_minute: e.time?.extra ?? null,
+      minute: row.minute,
+      extra_minute: row.extra_minute,
       team_api_id: e.team?.id ?? null,
-      player_name: e.player!.name!,
+      player_name: row.player_name,
       assist_name: e.type === "Goal" ? e.assist?.name ?? null : null,
-      event_type: e.type === "Card" ? "Card" : "Goal",
-      detail: e.detail ?? null,
-      sort_order: i,
+      event_type: row.event_type,
+      detail: row.detail,
+      sort_order: row.sort_order,
     });
     if (!error) inserted++;
   }
@@ -405,7 +463,7 @@ export async function syncMatchEvents(
     .update({ events_synced_at: new Date().toISOString() })
     .eq("id", matchId);
 
-  return inserted;
+  return { inserted, changed };
 }
 
 /** @deprecated Use syncMatchEvents */
@@ -414,20 +472,33 @@ export async function syncMatchGoalEvents(
   matchId: string,
   events: ApiEvent[] | undefined,
 ): Promise<number> {
-  return syncMatchEvents(supabase, matchId, events);
+  const result = await syncMatchEvents(supabase, matchId, events);
+  return result.inserted;
 }
+
+export type SyncActiveMatchOptions = {
+  /** full = backfill + live window; live = in-play / pre-kickoff only (fast cron). */
+  mode?: "full" | "live";
+};
 
 /** Poll only fixtures in the active window — 1 API call per batch of ids (not whole league). */
 export async function syncActiveMatchScores(
   supabase: SupabaseClient,
   apiKey: string,
+  options: SyncActiveMatchOptions = {},
 ): Promise<{
   updated: number;
   eventsUpdated: number;
+  scoreChanges: number;
+  eventsChanged: number;
+  materialChanges: number;
   apiCalls: number;
   activeCount: number;
   skipped: string | null;
 }> {
+  const mode = options.mode ?? "full";
+  const nowMs = Date.now();
+
   const { data: matches } = await supabase
     .from("matches")
     .select("external_id, kickoff_at, status, events_synced_at")
@@ -435,10 +506,11 @@ export async function syncActiveMatchScores(
 
   const active = (matches ?? [])
     .filter((m) =>
-      isInLivePollWindow(m.kickoff_at, m.status, Date.now(), m.events_synced_at)
+      mode === "live"
+        ? isInFastLivePollWindow(m.kickoff_at, m.status, nowMs)
+        : isInLivePollWindow(m.kickoff_at, m.status, nowMs, m.events_synced_at)
     )
     .sort((a, b) => {
-      // Prioritise live, then recent kickoffs (backfill finished matches newest first).
       if (a.status === "live" && b.status !== "live") return -1;
       if (b.status === "live" && a.status !== "live") return 1;
       return new Date(b.kickoff_at).getTime() - new Date(a.kickoff_at).getTime();
@@ -448,15 +520,22 @@ export async function syncActiveMatchScores(
     return {
       updated: 0,
       eventsUpdated: 0,
+      scoreChanges: 0,
+      eventsChanged: 0,
+      materialChanges: 0,
       apiCalls: 0,
       activeCount: 0,
-      skipped: "no matches in live poll window (kickoff → 3h after, or brief post-FT for scorers)",
+      skipped: mode === "live"
+        ? "no matches in fast live window (15m pre-kickoff → 3h after)"
+        : "no matches in live poll window (kickoff → 3h after, or brief post-FT for scorers)",
     };
   }
 
   const ids = active.map((m) => m.external_id as string);
   let updated = 0;
   let eventsUpdated = 0;
+  let scoreChanges = 0;
+  let eventsChanged = 0;
   let apiCalls = 0;
 
   const chunkSize = 20;
@@ -472,15 +551,52 @@ export async function syncActiveMatchScores(
     if (hasApiErrors(payload.errors)) continue;
 
     for (const fx of (payload.response as FixtureRow[]) ?? []) {
+      const externalId = String(fx.fixture.id);
+      const matchId = await resolveMatchIdByExternalId(supabase, externalId);
+
+      let beforeScores: { home_score: number | null; away_score: number | null } | null = null;
+      if (matchId) {
+        const { data } = await supabase
+          .from("matches")
+          .select("home_score, away_score")
+          .eq("id", matchId)
+          .maybeSingle();
+        beforeScores = data;
+      }
+
       const result = await upsertFixture(supabase, fx, true);
       if (result === "finished" || result === "upserted") updated++;
 
-      const matchId = await resolveMatchIdByExternalId(supabase, String(fx.fixture.id));
       if (matchId) {
-        eventsUpdated += await syncMatchEvents(supabase, matchId, fx.events);
+        if (beforeScores) {
+          const homeScore = fx.goals.home;
+          const awayScore = fx.goals.away;
+          if (
+            homeScore != null &&
+            awayScore != null &&
+            (beforeScores.home_score !== homeScore || beforeScores.away_score !== awayScore)
+          ) {
+            scoreChanges++;
+          }
+        }
+
+        const eventResult = await syncMatchEvents(supabase, matchId, fx.events);
+        eventsUpdated += eventResult.inserted;
+        if (eventResult.changed) eventsChanged++;
       }
     }
   }
 
-  return { updated, eventsUpdated, apiCalls, activeCount: active.length, skipped: null };
+  const materialChanges = scoreChanges + eventsChanged;
+
+  return {
+    updated,
+    eventsUpdated,
+    scoreChanges,
+    eventsChanged,
+    materialChanges,
+    apiCalls,
+    activeCount: active.length,
+    skipped: null,
+  };
 }
