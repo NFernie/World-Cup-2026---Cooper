@@ -3,6 +3,8 @@ import { ChevronDown } from 'lucide-react'
 import { MatchOddsGrid } from '@/components/MatchOddsGrid'
 import { MatchEventsDropdown, type MatchEventRow } from '@/components/MatchEventsList'
 import { MatchInfoBar, type MatchInfo } from '@/components/MatchInfoBar'
+import { MatchElapsedClock } from '@/components/MatchElapsedClock'
+import type { MatchClock } from '@/lib/matchStatus'
 import {
   MatchTeamCompact,
   MatchTeamDetails,
@@ -30,6 +32,7 @@ export function MatchFixtureCard({
   events,
   homeApiId,
   showEvents = false,
+  clock,
 }: {
   home: MatchTeamSideTeam
   away: MatchTeamSideTeam
@@ -47,6 +50,7 @@ export function MatchFixtureCard({
   homeApiId?: number | null
   /** When true, render Match Events dropdown when events exist. */
   showEvents?: boolean
+  clock?: MatchClock
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false)
   const showScore = homeScore != null && awayScore != null
@@ -56,13 +60,16 @@ export function MatchFixtureCard({
     <div className="space-y-2">
       <div className="flex items-center gap-2 sm:gap-3">
         <MatchTeamCompact team={home} align="left" highlight={homeHighlight} />
-        {showScore ? (
-          <span className="shrink-0 px-1 text-2xl font-bold tabular-nums tracking-tight text-[var(--foreground)]">
-            {homeScore} - {awayScore}
-          </span>
-        ) : (
-          <span className="shrink-0 px-1 text-sm font-medium text-[var(--muted)]">vs</span>
-        )}
+        <div className="flex shrink-0 flex-col items-center justify-center gap-1 px-1 text-center">
+          {clock && <MatchElapsedClock clock={clock} />}
+          {showScore ? (
+            <span className="text-2xl font-bold tabular-nums tracking-tight text-[var(--foreground)]">
+              {homeScore} - {awayScore}
+            </span>
+          ) : (
+            <span className="text-sm font-medium text-[var(--muted)]">vs</span>
+          )}
+        </div>
         <MatchTeamCompact team={away} align="right" highlight={awayHighlight} />
       </div>
 

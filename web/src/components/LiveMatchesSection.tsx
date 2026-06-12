@@ -7,7 +7,6 @@ import { MatchFixtureCard } from '@/components/MatchFixtureCard'
 import { MatchStatusBadge } from '@/components/MatchStatusBadge'
 import { supabase } from '@/lib/supabase'
 import { formatStage } from '@/lib/poolBoards'
-import { formatLiveElapsedMinutes } from '@/lib/matchStatus'
 import {
   isPoolLiveSectionMatch,
   minutesUntilKickoff,
@@ -63,15 +62,7 @@ function formatKickoffLocal(iso: string) {
 
 function statusLabel(match: LiveMatch) {
   if (match.status === 'live') {
-    const elapsed =
-      formatLiveElapsedMinutes({
-        status: match.status,
-        apiStatusShort: match.api_status_short,
-        elapsedMinutes: match.elapsed_minutes,
-        extraMinutes: match.extra_minutes,
-        statusSyncedAt: match.status_synced_at,
-      }) ?? 'Live'
-    return { text: `${elapsed} · ${formatStage(match.stage)}`, live: true }
+    return { text: `Live · ${formatStage(match.stage)}`, live: true }
   }
   const mins = minutesUntilKickoff(match.kickoff_at)
   if (mins <= 0) {
@@ -270,6 +261,14 @@ export function LiveMatchesSection({ assignedTeamId, playerLineForTeam }: Props)
                 events={m.events}
                 homeApiId={m.home.api_football_team_id}
                 showEvents={m.status === 'live'}
+                clock={{
+                  status: m.status,
+                  apiStatusShort: m.api_status_short,
+                  elapsedMinutes: m.elapsed_minutes,
+                  extraMinutes: m.extra_minutes,
+                  statusSyncedAt: m.status_synced_at,
+                  stage: m.stage,
+                }}
               />
             </div>
           )

@@ -465,6 +465,14 @@ export function FixturesPage() {
                   events={m.events}
                   homeApiId={m.home.api_football_team_id}
                   showEvents={showEvents}
+                  clock={{
+                    status: m.status,
+                    apiStatusShort: m.api_status_short,
+                    elapsedMinutes: m.elapsed_minutes,
+                    extraMinutes: m.extra_minutes,
+                    statusSyncedAt: m.status_synced_at,
+                    stage: m.stage,
+                  }}
                 />
               </div>
             </Card>
