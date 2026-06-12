@@ -6,6 +6,11 @@ import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { MatchFixtureCard } from '@/components/MatchFixtureCard'
 import { supabase } from '@/lib/supabase'
 import { formatStage } from '@/lib/poolBoards'
+import {
+  isPoolLiveSectionMatch,
+  minutesUntilKickoff,
+  poolLiveSectionQueryBounds,
+} from '@/lib/matchWindows'
 
 type TeamSummary = {
   id: string
@@ -50,22 +55,66 @@ function formatKickoffLocal(iso: string) {
   })
 }
 
+function statusLabel(match: LiveMatch) {
+  if (match.status === 'live') {
+    return { text: `Live · ${formatStage(match.stage)}`, live: true }
+  }
+  const mins = minutesUntilKickoff(match.kickoff_at)
+  if (mins <= 0) {
+    return { text: `Kicking off · ${formatStage(match.stage)}`, live: false, soon: true }
+  }
+  if (mins === 1) {
+    return { text: `Kicks off in 1 min · ${formatStage(match.stage)}`, live: false, soon: true }
+  }
+  return {
+    text: `Kicks off in ${mins} mins · ${formatStage(match.stage)}`,
+    live: false,
+    soon: true,
+  }
+}
+
 export function LiveMatchesSection({ assignedTeamId, playerLineForTeam }: Props) {
   const liveQuery = useQuery({
-    queryKey: ['live-matches'],
-    refetchInterval: 60_000,
+    queryKey: ['pool-live-matches'],
+    refetchInterval: (query) => {
+      const rows = query.state.data
+      if (!rows?.length) return 60_000
+      const hasUpcoming = rows.some((m) => m.status === 'scheduled')
+      return hasUpcoming ? 30_000 : 60_000
+    },
     queryFn: async () => {
-      const { data: matches, error: mErr } = await supabase
-        .from('matches')
-        .select('*')
-        .eq('status', 'live')
-        .order('kickoff_at', { ascending: true })
-      if (mErr) throw mErr
-      if (!matches?.length) return [] as LiveMatch[]
+      const { preKickoff, postKickoffFloor } = poolLiveSectionQueryBounds()
 
-      const teamIds = [
-        ...new Set(matches.flatMap((m) => [m.home_team_id, m.away_team_id])),
-      ]
+      const [{ data: liveRows, error: liveErr }, { data: upcomingRows, error: upcomingErr }] =
+        await Promise.all([
+          supabase.from('matches').select('*').eq('status', 'live').order('kickoff_at', {
+            ascending: true,
+          }),
+          supabase
+            .from('matches')
+            .select('*')
+            .eq('status', 'scheduled')
+            .lte('kickoff_at', preKickoff)
+            .gte('kickoff_at', postKickoffFloor)
+            .order('kickoff_at', { ascending: true }),
+        ])
+      if (liveErr) throw liveErr
+      if (upcomingErr) throw upcomingErr
+
+      const byId = new Map<string, (typeof liveRows)[number]>()
+      for (const m of liveRows ?? []) byId.set(m.id, m)
+      for (const m of upcomingRows ?? []) {
+        if (isPoolLiveSectionMatch(m.status, m.kickoff_at)) {
+          byId.set(m.id, m)
+        }
+      }
+
+      const matches = [...byId.values()].sort(
+        (a, b) => new Date(a.kickoff_at).getTime() - new Date(b.kickoff_at).getTime(),
+      )
+      if (matches.length === 0) return [] as LiveMatch[]
+
+      const teamIds = [...new Set(matches.flatMap((m) => [m.home_team_id, m.away_team_id]))]
       const matchIds = matches.map((m) => m.id)
 
       const [{ data: teams, error: tErr }, { data: events, error: eErr }] = await Promise.all([
@@ -109,17 +158,35 @@ export function LiveMatchesSection({ assignedTeamId, playerLineForTeam }: Props)
   const liveMatches = liveQuery.data ?? []
   if (liveMatches.length === 0) return null
 
+  const liveCount = liveMatches.filter((m) => m.status === 'live').length
+  const upcomingCount = liveMatches.length - liveCount
+  const sectionTitle =
+    liveCount > 0 && upcomingCount > 0
+      ? 'Live & upcoming'
+      : liveCount > 0
+        ? 'Live now'
+        : 'Starting soon'
+  const sectionDescription =
+    liveCount > 0 && upcomingCount > 0
+      ? `${liveCount} live, ${upcomingCount} kicking off soon`
+      : liveCount > 0
+        ? `${liveCount} match${liveCount === 1 ? '' : 'es'} in progress`
+        : `${upcomingCount} match${upcomingCount === 1 ? '' : 'es'} kicking off within 15 minutes`
+
   return (
     <Card className="border-red-400/50 bg-[color-mix(in_srgb,red_6%,var(--card))] p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <span className="flex h-2 w-2 animate-pulse rounded-full bg-red-500" aria-hidden />
-            <CardTitle className="text-xl">Live now</CardTitle>
+            <span
+              className={`flex h-2 w-2 rounded-full ${
+                liveCount > 0 ? 'animate-pulse bg-red-500' : 'bg-amber-500'
+              }`}
+              aria-hidden
+            />
+            <CardTitle className="text-xl">{sectionTitle}</CardTitle>
           </div>
-          <CardDescription className="mt-1">
-            {liveMatches.length} match{liveMatches.length === 1 ? '' : 'es'} in progress
-          </CardDescription>
+          <CardDescription className="mt-1">{sectionDescription}</CardDescription>
         </div>
         <Button asChild variant="outline" size="sm">
           <Link to="fixtures">
@@ -134,6 +201,7 @@ export function LiveMatchesSection({ assignedTeamId, playerLineForTeam }: Props)
             assignedTeamId &&
             (m.home_team_id === assignedTeamId || m.away_team_id === assignedTeamId)
           const showScore = m.home_score != null && m.away_score != null
+          const status = statusLabel(m)
 
           return (
             <div
@@ -146,9 +214,19 @@ export function LiveMatchesSection({ assignedTeamId, playerLineForTeam }: Props)
             >
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--muted)]">
                 <time dateTime={m.kickoff_at}>{formatKickoffLocal(m.kickoff_at)}</time>
-                <span className="inline-flex items-center gap-1 font-semibold uppercase text-red-500">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
-                  Live · {formatStage(m.stage)}
+                <span
+                  className={`inline-flex items-center gap-1 font-semibold uppercase ${
+                    status.live
+                      ? 'text-red-500'
+                      : status.soon
+                        ? 'text-amber-600 dark:text-amber-400'
+                        : 'text-[var(--muted)]'
+                  }`}
+                >
+                  {status.live && (
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
+                  )}
+                  {status.text}
                 </span>
               </div>
               <MatchFixtureCard
@@ -169,7 +247,7 @@ export function LiveMatchesSection({ assignedTeamId, playerLineForTeam }: Props)
                 }}
                 events={m.events}
                 homeApiId={m.home.api_football_team_id}
-                showEvents
+                showEvents={m.status === 'live'}
               />
             </div>
           )
