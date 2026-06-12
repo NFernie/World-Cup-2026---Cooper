@@ -55,7 +55,7 @@ type FixtureRow = {
   fixture: {
     id: number;
     date: string;
-    status: { short: string };
+    status: { short: string; elapsed?: number | null; extra?: number | null };
     referee?: string | null;
     venue?: { name?: string | null; city?: string | null } | null;
     attendance?: number | null;
@@ -153,6 +153,23 @@ export async function upsertFixture(
   if (referee) row.referee = referee;
   if (typeof fx.fixture.attendance === "number" && fx.fixture.attendance > 0) {
     row.attendance = fx.fixture.attendance;
+  }
+
+  const apiShort = fx.fixture.status?.short?.trim().toUpperCase();
+  if (apiShort) row.api_status_short = apiShort;
+
+  if (status === "live") {
+    if (typeof fx.fixture.status?.elapsed === "number") {
+      row.elapsed_minutes = fx.fixture.status.elapsed;
+    }
+    if (typeof fx.fixture.status?.extra === "number") {
+      row.extra_minutes = fx.fixture.status.extra;
+    }
+    row.status_synced_at = new Date().toISOString();
+  } else {
+    row.elapsed_minutes = null;
+    row.extra_minutes = null;
+    row.status_synced_at = null;
   }
 
   if (homeScore != null && awayScore != null) {

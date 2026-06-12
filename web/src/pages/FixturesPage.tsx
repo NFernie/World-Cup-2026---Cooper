@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { MatchFixtureCard } from '@/components/MatchFixtureCard'
+import { MatchStatusBadge } from '@/components/MatchStatusBadge'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { useMatchSyncRealtime } from '@/hooks/useMatchSyncRealtime'
@@ -17,7 +18,6 @@ import {
 import {
   STAGE_FILTER_OPTIONS,
   formatDateFilterLabel,
-  formatStage,
   kickoffDateKey,
 } from '@/lib/poolBoards'
 import type { PoolOutletContext } from '@/pages/PoolShell'
@@ -57,6 +57,10 @@ type FixtureRow = {
   venue_city: string | null
   referee: string | null
   attendance: number | null
+  api_status_short: string | null
+  elapsed_minutes: number | null
+  extra_minutes: number | null
+  status_synced_at: string | null
   home: TeamRow
   away: TeamRow
   odds: {
@@ -158,7 +162,7 @@ export function FixturesPage() {
     },
     refetchInterval: (query) => {
       const rows = query.state.data
-      if (rows?.some((m) => m.status === 'live')) return 60_000
+      if (rows?.some((m) => m.status === 'live')) return 30_000
       return false
     },
   })
@@ -429,21 +433,16 @@ export function FixturesPage() {
             >
               <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--muted)]">
                 <time dateTime={m.kickoff_at}>{formatKickoffLocal(m.kickoff_at)}</time>
-                <span className="flex items-center gap-2">
-                  <span>{formatStage(m.stage)}</span>
-                  <span
-                    className={
-                      m.status === 'live'
-                        ? 'inline-flex items-center gap-1 font-semibold uppercase text-red-500'
-                        : 'uppercase'
-                    }
-                  >
-                    {m.status === 'live' && (
-                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
-                    )}
-                    {m.status.replace(/_/g, ' ')}
-                  </span>
-                </span>
+                <MatchStatusBadge
+                  clock={{
+                    status: m.status,
+                    apiStatusShort: m.api_status_short,
+                    elapsedMinutes: m.elapsed_minutes,
+                    extraMinutes: m.extra_minutes,
+                    statusSyncedAt: m.status_synced_at,
+                    stage: m.stage,
+                  }}
+                />
               </div>
 
               <div className="mt-4">

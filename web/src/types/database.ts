@@ -133,6 +133,10 @@ export interface Database {
           venue_city: string | null
           referee: string | null
           attendance: number | null
+          api_status_short: string | null
+          elapsed_minutes: number | null
+          extra_minutes: number | null
+          status_synced_at: string | null
           created_at: string
         }
       }

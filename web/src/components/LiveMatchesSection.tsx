@@ -4,8 +4,10 @@ import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { MatchFixtureCard } from '@/components/MatchFixtureCard'
+import { MatchStatusBadge } from '@/components/MatchStatusBadge'
 import { supabase } from '@/lib/supabase'
 import { formatStage } from '@/lib/poolBoards'
+import { formatLiveElapsedMinutes } from '@/lib/matchStatus'
 import {
   isPoolLiveSectionMatch,
   minutesUntilKickoff,
@@ -37,6 +39,10 @@ type LiveMatch = {
   venue_city: string | null
   referee: string | null
   attendance: number | null
+  api_status_short: string | null
+  elapsed_minutes: number | null
+  extra_minutes: number | null
+  status_synced_at: string | null
 }
 
 type Props = {
@@ -57,7 +63,15 @@ function formatKickoffLocal(iso: string) {
 
 function statusLabel(match: LiveMatch) {
   if (match.status === 'live') {
-    return { text: `Live · ${formatStage(match.stage)}`, live: true }
+    const elapsed =
+      formatLiveElapsedMinutes({
+        status: match.status,
+        apiStatusShort: match.api_status_short,
+        elapsedMinutes: match.elapsed_minutes,
+        extraMinutes: match.extra_minutes,
+        statusSyncedAt: match.status_synced_at,
+      }) ?? 'Live'
+    return { text: `${elapsed} · ${formatStage(match.stage)}`, live: true }
   }
   const mins = minutesUntilKickoff(match.kickoff_at)
   if (mins <= 0) {
@@ -214,20 +228,28 @@ export function LiveMatchesSection({ assignedTeamId, playerLineForTeam }: Props)
             >
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--muted)]">
                 <time dateTime={m.kickoff_at}>{formatKickoffLocal(m.kickoff_at)}</time>
-                <span
-                  className={`inline-flex items-center gap-1 font-semibold uppercase ${
-                    status.live
-                      ? 'text-red-500'
-                      : status.soon
+                {m.status === 'live' ? (
+                  <MatchStatusBadge
+                    clock={{
+                      status: m.status,
+                      apiStatusShort: m.api_status_short,
+                      elapsedMinutes: m.elapsed_minutes,
+                      extraMinutes: m.extra_minutes,
+                      statusSyncedAt: m.status_synced_at,
+                      stage: m.stage,
+                    }}
+                  />
+                ) : (
+                  <span
+                    className={`inline-flex items-center gap-1 font-semibold uppercase ${
+                      status.soon
                         ? 'text-amber-600 dark:text-amber-400'
                         : 'text-[var(--muted)]'
-                  }`}
-                >
-                  {status.live && (
-                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
-                  )}
-                  {status.text}
-                </span>
+                    }`}
+                  >
+                    {status.text}
+                  </span>
+                )}
               </div>
               <MatchFixtureCard
                 home={m.home}
