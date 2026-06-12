@@ -3,7 +3,6 @@ import { Radio } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
-import { MatchEventsList } from '@/components/MatchEventsList'
 import { MatchFixtureCard } from '@/components/MatchFixtureCard'
 import { supabase } from '@/lib/supabase'
 import { formatStage } from '@/lib/poolBoards'
@@ -29,6 +28,10 @@ type LiveMatch = {
   home: TeamSummary
   away: TeamSummary
   events: import('@/components/MatchEventsList').MatchEventRow[]
+  venue_name: string | null
+  venue_city: string | null
+  referee: string | null
+  attendance: number | null
 }
 
 type Props = {
@@ -158,15 +161,16 @@ export function LiveMatchesSection({ assignedTeamId, playerLineForTeam }: Props)
                 homePlayerLine={playerLineForTeam(m.home_team_id)}
                 awayPlayerLine={playerLineForTeam(m.away_team_id)}
                 showOdds={false}
+                matchInfo={{
+                  venueName: m.venue_name,
+                  venueCity: m.venue_city,
+                  referee: m.referee,
+                  attendance: m.attendance,
+                }}
+                events={m.events}
+                homeApiId={m.home.api_football_team_id}
+                showEvents
               />
-              {m.events.length > 0 && (
-                <MatchEventsList
-                  events={m.events}
-                  homeApiId={m.home.api_football_team_id}
-                  home={m.home}
-                  away={m.away}
-                />
-              )}
             </div>
           )
         })}

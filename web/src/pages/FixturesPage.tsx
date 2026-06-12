@@ -5,7 +5,6 @@ import { ArrowLeft, Filter, Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
-import { MatchEventsList } from '@/components/MatchEventsList'
 import { MatchFixtureCard } from '@/components/MatchFixtureCard'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
@@ -53,6 +52,10 @@ type FixtureRow = {
   away_score: number | null
   status: string
   stage: string
+  venue_name: string | null
+  venue_city: string | null
+  referee: string | null
+  attendance: number | null
   home: TeamRow
   away: TeamRow
   odds: {
@@ -410,8 +413,7 @@ export function FixturesPage() {
             assignedTeamId &&
             (m.home_team_id === assignedTeamId || m.away_team_id === assignedTeamId)
           const showScore = m.home_score != null && m.away_score != null
-          const showEvents =
-            (m.status === 'live' || m.status === 'finished') && m.events.length > 0
+          const showEvents = m.status === 'live' || m.status === 'finished'
 
           return (
             <Card
@@ -452,17 +454,17 @@ export function FixturesPage() {
                   homePlayerLine={playerLineForTeam(m.home_team_id)}
                   awayPlayerLine={playerLineForTeam(m.away_team_id)}
                   odds={m.odds}
-                />
-              </div>
-
-              {showEvents && (
-                <MatchEventsList
+                  matchInfo={{
+                    venueName: m.venue_name,
+                    venueCity: m.venue_city,
+                    referee: m.referee,
+                    attendance: m.attendance,
+                  }}
                   events={m.events}
                   homeApiId={m.home.api_football_team_id}
-                  home={m.home}
-                  away={m.away}
+                  showEvents={showEvents}
                 />
-              )}
+              </div>
             </Card>
           )
         })}

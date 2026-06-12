@@ -52,7 +52,14 @@ export function mapApiStage(round: string | undefined): TournamentStage {
 }
 
 type FixtureRow = {
-  fixture: { id: number; date: string; status: { short: string } };
+  fixture: {
+    id: number;
+    date: string;
+    status: { short: string };
+    referee?: string | null;
+    venue?: { name?: string | null; city?: string | null } | null;
+    attendance?: number | null;
+  };
   teams: { home: { id: number }; away: { id: number } };
   goals: { home: number | null; away: number | null };
   league: { round?: string };
@@ -137,6 +144,16 @@ export async function upsertFixture(
     status,
     stage,
   };
+
+  const venueName = fx.fixture.venue?.name?.trim();
+  const venueCity = fx.fixture.venue?.city?.trim();
+  const referee = fx.fixture.referee?.trim();
+  if (venueName) row.venue_name = venueName;
+  if (venueCity) row.venue_city = venueCity;
+  if (referee) row.referee = referee;
+  if (typeof fx.fixture.attendance === "number" && fx.fixture.attendance > 0) {
+    row.attendance = fx.fixture.attendance;
+  }
 
   if (homeScore != null && awayScore != null) {
     row.home_score = homeScore;

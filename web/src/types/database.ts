@@ -129,6 +129,10 @@ export interface Database {
           odds_synced_at: string | null
           scores_synced_at: string | null
           events_synced_at: string | null
+          venue_name: string | null
+          venue_city: string | null
+          referee: string | null
+          attendance: number | null
           created_at: string
         }
       }

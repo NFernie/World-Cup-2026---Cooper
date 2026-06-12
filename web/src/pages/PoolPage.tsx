@@ -449,7 +449,7 @@ export function PoolPage() {
             </div>
             <CardTitle className="text-xl">Fixtures &amp; results</CardTitle>
             <CardDescription className="mx-auto mt-2 max-w-sm">
-              Full World Cup schedule with flags, filters, live scores, odds, and goal scorers.
+              Full World Cup schedule with flags, filters, live scores, odds, and match events.
             </CardDescription>
             <Button asChild size="lg" className="mx-auto mt-5 w-full max-w-xs shadow-sm">
               <Link to="fixtures">
