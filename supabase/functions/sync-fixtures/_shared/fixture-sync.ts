@@ -131,7 +131,15 @@ export async function upsertFixture(
   const awayTeamId = await resolveTeamId(supabase, awayApiId);
   if (!homeTeamId || !awayTeamId) return "skipped";
 
-  const status = mapApiStatus(fx.fixture.status?.short);
+  const kickoffAt = fx.fixture.date;
+  const kickoffMs = new Date(kickoffAt).getTime();
+  const hasKickedOff = kickoffMs <= Date.now() + 15 * 60 * 1000;
+
+  let status = mapApiStatus(fx.fixture.status?.short);
+  if (!hasKickedOff) {
+    status = "scheduled";
+  }
+
   const stage = mapApiStage(fx.league?.round);
   const homeScore = fx.goals.home;
   const awayScore = fx.goals.away;
@@ -140,7 +148,7 @@ export async function upsertFixture(
     external_id: externalId,
     home_team_id: homeTeamId,
     away_team_id: awayTeamId,
-    kickoff_at: fx.fixture.date,
+    kickoff_at: kickoffAt,
     status,
     stage,
   };

@@ -131,7 +131,15 @@ export async function upsertFixture(
   const awayTeamId = await resolveTeamId(supabase, awayApiId);
   if (!homeTeamId || !awayTeamId) return "skipped";
 
-  const status = mapApiStatus(fx.fixture.status?.short);
+  const kickoffAt = fx.fixture.date;
+  const kickoffMs = new Date(kickoffAt).getTime();
+  const hasKickedOff = kickoffMs <= Date.now() + 15 * 60 * 1000;
+
+  let status = mapApiStatus(fx.fixture.status?.short);
+  if (!hasKickedOff) {
+    status = "scheduled";
+  }
+
   const stage = mapApiStage(fx.league?.round);
   const homeScore = fx.goals.home;
   const awayScore = fx.goals.away;
@@ -140,7 +148,7 @@ export async function upsertFixture(
     external_id: externalId,
     home_team_id: homeTeamId,
     away_team_id: awayTeamId,
-    kickoff_at: fx.fixture.date,
+    kickoff_at: kickoffAt,
     status,
     stage,
   };
@@ -158,7 +166,14 @@ export async function upsertFixture(
   const apiShort = fx.fixture.status?.short?.trim().toUpperCase();
   if (apiShort) row.api_status_short = apiShort;
 
-  if (status === "live") {
+  if (!hasKickedOff) {
+    row.home_score = null;
+    row.away_score = null;
+    row.elapsed_minutes = null;
+    row.extra_minutes = null;
+    row.status_synced_at = null;
+    row.scores_synced_at = null;
+  } else if (status === "live") {
     let clockUpdated = false;
     if (typeof fx.fixture.status?.elapsed === "number") {
       row.elapsed_minutes = fx.fixture.status.elapsed;
@@ -175,18 +190,23 @@ export async function upsertFixture(
     if (clockUpdated) {
       row.status_synced_at = new Date().toISOString();
     }
+
+    if (homeScore != null && awayScore != null) {
+      row.home_score = homeScore;
+      row.away_score = awayScore;
+    }
   } else {
     row.elapsed_minutes = null;
     row.extra_minutes = null;
     row.status_synced_at = null;
-  }
 
-  if (homeScore != null && awayScore != null) {
-    row.home_score = homeScore;
-    row.away_score = awayScore;
-  }
-  if (status === "finished") {
-    row.scores_synced_at = new Date().toISOString();
+    if (homeScore != null && awayScore != null) {
+      row.home_score = homeScore;
+      row.away_score = awayScore;
+    }
+    if (status === "finished") {
+      row.scores_synced_at = new Date().toISOString();
+    }
   }
 
   const existing = await findExistingMatch(
