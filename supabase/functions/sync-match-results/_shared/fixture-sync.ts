@@ -159,13 +159,22 @@ export async function upsertFixture(
   if (apiShort) row.api_status_short = apiShort;
 
   if (status === "live") {
+    let clockUpdated = false;
     if (typeof fx.fixture.status?.elapsed === "number") {
       row.elapsed_minutes = fx.fixture.status.elapsed;
+      clockUpdated = true;
     }
     if (typeof fx.fixture.status?.extra === "number") {
       row.extra_minutes = fx.fixture.status.extra;
+      clockUpdated = true;
     }
-    row.status_synced_at = new Date().toISOString();
+    if (apiShort) {
+      clockUpdated = true;
+    }
+    // Only re-anchor when the API clock fields change — not on score-only updates.
+    if (clockUpdated) {
+      row.status_synced_at = new Date().toISOString();
+    }
   } else {
     row.elapsed_minutes = null;
     row.extra_minutes = null;
