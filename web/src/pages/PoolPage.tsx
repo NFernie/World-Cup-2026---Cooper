@@ -28,6 +28,7 @@ import { RevealNamesPoll } from '@/components/RevealNamesPoll'
 import { TeamFlag } from '@/components/TeamFlag'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
+import { useMatchSyncRealtime } from '@/hooks/useMatchSyncRealtime'
 import { isHostAssignmentMode } from '@/lib/poolAssignment'
 import { formatPlayerLine, isRevealNamesEnabled, maskMemberName } from '@/lib/poolNames'
 import { getGroupJoinUrl } from '@/lib/urls'
@@ -54,6 +55,8 @@ export function PoolPage() {
   const { user, isSuperAdmin } = useAuth()
   const queryClient = useQueryClient()
   const [rulesOpen, setRulesOpen] = useState(false)
+
+  useMatchSyncRealtime()
 
   const poolQuery = useQuery({
     queryKey: ['pool', poolId],

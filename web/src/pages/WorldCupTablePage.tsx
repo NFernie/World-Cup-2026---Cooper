@@ -15,6 +15,7 @@ import {
   type KnockoutMatch,
   type TeamInfo,
 } from '@/lib/worldCupStandings'
+import { useMatchSyncRealtime } from '@/hooks/useMatchSyncRealtime'
 import type { PoolOutletContext } from '@/pages/PoolShell'
 
 type ViewMode = 'groups' | 'knockout'
@@ -33,6 +34,8 @@ export function WorldCupTablePage() {
   const [groupFilter, setGroupFilter] = useState('')
   const [teamFilter, setTeamFilter] = useState('')
   const [myTeamOnly, setMyTeamOnly] = useState(false)
+
+  useMatchSyncRealtime()
 
   const dataQuery = useQuery({
     queryKey: ['world-cup-table'],

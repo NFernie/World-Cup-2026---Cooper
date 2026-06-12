@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { MatchFixtureCard } from '@/components/MatchFixtureCard'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
+import { useMatchSyncRealtime } from '@/hooks/useMatchSyncRealtime'
 import {
   formatPlayerLine,
   isRevealNamesEnabled,
@@ -101,6 +102,8 @@ export function FixturesPage() {
   const [groupFilter, setGroupFilter] = useState('')
   const [teamFilter, setTeamFilter] = useState('')
   const [myTeamOnly, setMyTeamOnly] = useState(false)
+
+  useMatchSyncRealtime()
 
   const fixturesQuery = useQuery({
     queryKey: ['fixtures-full'],
