@@ -21,10 +21,6 @@ export type MatchClockAnchor = {
 
 const TICKING_PERIODS = new Set(['1H', '2H', 'ET', 'LIVE', 'INT'])
 
-function pad2(n: number) {
-  return String(n).padStart(2, '0')
-}
-
 function isStoppage(clock: MatchClock): boolean {
   return (clock.extraMinutes ?? 0) > 0 && clock.elapsedMinutes != null
 }
@@ -72,7 +68,6 @@ export function mergeMatchClockAnchor(
         (inStoppage && extra > prev.extraMinutes)
 
       if (apiMinuteAdvanced) {
-        // Trust the new API minute; keep sub-minute offset when reasonable.
         const subMinute = Math.min(59, Math.max(0, interpolated - apiBase))
         baseSeconds = apiBase + subMinute
       } else if (
@@ -80,11 +75,9 @@ export function mergeMatchClockAnchor(
         extra === prev.extraMinutes &&
         short === prev.apiStatusShort
       ) {
-        // Same API minute — never snap backward; cap at +59s within minute.
         baseSeconds = Math.max(apiBase, interpolated)
         baseSeconds = Math.min(baseSeconds, apiBase + 59)
       } else {
-        // Stale API reading — keep interpolating forward.
         baseSeconds = Math.max(interpolated, apiBase)
       }
     }
@@ -109,7 +102,7 @@ export function getElapsedSecondsFromAnchor(
   return anchor.baseSeconds + Math.max(0, Math.floor((nowMs - anchor.syncedAtMs) / 1000))
 }
 
-/** Live clock with seconds; uses anchor for smooth ticking between API syncs. */
+/** Minutes-only live clock (e.g. 67', 45+2'). */
 export function formatLiveElapsedFromAnchor(
   anchor: MatchClockAnchor,
   nowMs = Date.now(),
@@ -118,15 +111,14 @@ export function formatLiveElapsedFromAnchor(
 
   if (anchor.inStoppage) {
     const regulationSeconds = anchor.elapsedMinutes * 60
-    const stoppageSeconds = Math.max(0, totalSeconds - regulationSeconds)
-    const stoppageMin = Math.floor(stoppageSeconds / 60)
-    const stoppageSec = stoppageSeconds % 60
-    return `${anchor.elapsedMinutes}+${stoppageMin}:${pad2(stoppageSec)}`
+    const stoppageMins = Math.floor(Math.max(0, totalSeconds - regulationSeconds) / 60)
+    return stoppageMins > 0
+      ? `${anchor.elapsedMinutes}+${stoppageMins}'`
+      : `${anchor.elapsedMinutes}'`
   }
 
   const mins = Math.floor(totalSeconds / 60)
-  const secs = totalSeconds % 60
-  return `${mins}:${pad2(secs)}`
+  return `${mins}'`
 }
 
 /** @deprecated Prefer anchor-based formatting in MatchElapsedClock. */

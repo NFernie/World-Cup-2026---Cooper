@@ -20,6 +20,7 @@ import { formatFifaWorldRanking } from '@/lib/globalRank'
 import { getTeamStaff } from '@/lib/teamStaff'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
+import { useMatchSyncRealtime } from '@/hooks/useMatchSyncRealtime'
 import { formatPoints } from '@/lib/utils'
 import type { PoolOutletContext } from '@/pages/PoolShell'
 
@@ -89,6 +90,8 @@ export function LeaderboardsPage() {
     paramBoard && leaderboardOptions.some((o) => o.id === paramBoard) ? paramBoard : 'all'
   const [board, setBoard] = useState<LeaderboardId>(initialBoard)
 
+  useMatchSyncRealtime()
+
   const show = (id: SingleBoardId) => board === 'all' || board === id
 
   const memberQuery = useQuery({
@@ -135,8 +138,9 @@ export function LeaderboardsPage() {
         .from('leaderboard_tournament_standing')
         .select('*')
         .eq('pool_id', poolId!)
-        .order('tournament_rank', { ascending: true, nullsFirst: false })
         .order('group_points', { ascending: false })
+        .order('group_goal_difference', { ascending: false })
+        .order('tournament_rank', { ascending: true, nullsFirst: false })
       if (error) throw error
       return data ?? []
     },
@@ -264,7 +268,7 @@ export function LeaderboardsPage() {
         <section className={board === 'all' ? 'space-y-3 border-b border-[var(--border)] pb-8' : ''}>
           <h2 className="mb-2 text-lg font-semibold">Overall leaderboard</h2>
           <p className="mb-3 text-sm text-[var(--muted)]">
-            Your nation&apos;s progress in the World Cup, with global FIFA ranking for each team.
+            Your nation&apos;s progress in the World Cup, ranked by group points and goal difference.
           </p>
           <div className="space-y-2">
             {tournamentLb.data?.map((row, i) => {
@@ -287,9 +291,10 @@ export function LeaderboardsPage() {
                           <span className="ml-1 text-xs font-normal text-fifa-green">(you)</span>
                         )}
                       </span>
-                      {row.tournament_rank != null && (
+                      {row.group_letter && (
                         <p className="text-xs text-[var(--muted)]">
-                          Tournament position #{row.tournament_rank}
+                          Group {row.group_letter}
+                          {row.group_position != null ? ` · #${row.group_position}` : ''}
                         </p>
                       )}
                       <p className="mt-0.5 text-xs text-[var(--muted)]">
@@ -309,9 +314,18 @@ export function LeaderboardsPage() {
                       </p>
                     </div>
                   </div>
-                  <span className="shrink-0 text-xs uppercase text-[var(--muted)]">
-                    {formatStage(row.tournament_stage)}
-                  </span>
+                  <div className="shrink-0 text-right">
+                    <p className="font-bold text-[var(--team-primary)]">
+                      {row.group_points} pts
+                    </p>
+                    <p className="text-xs text-[var(--muted)]">
+                      GD {row.group_goal_difference >= 0 ? '+' : ''}
+                      {row.group_goal_difference}
+                    </p>
+                    <p className="mt-1 text-xs uppercase text-[var(--muted)]">
+                      {formatStage(row.tournament_stage)}
+                    </p>
+                  </div>
                 </LeaderboardRow>
               )
             })}

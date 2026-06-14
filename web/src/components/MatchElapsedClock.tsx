@@ -13,7 +13,7 @@ export function MatchElapsedClock({ clock }: { clock: MatchClock }) {
 
   useEffect(() => {
     if (clock.status !== 'live') return
-    const id = window.setInterval(() => setNowMs(Date.now()), 1000)
+    const id = window.setInterval(() => setNowMs(Date.now()), 60_000)
     return () => window.clearInterval(id)
   }, [
     clock.status,

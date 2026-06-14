@@ -14,6 +14,7 @@ export function useMatchSyncRealtime(enabled = true) {
       void queryClient.invalidateQueries({ queryKey: ['pool-live-matches'] })
       void queryClient.invalidateQueries({ queryKey: ['fixtures-full'] })
       void queryClient.invalidateQueries({ queryKey: ['world-cup-table'] })
+      void queryClient.invalidateQueries({ queryKey: ['leaderboard-tournament'] })
       void queryClient.invalidateQueries({
         predicate: (query) => query.queryKey[0] === 'next-team-match',
       })
@@ -29,6 +30,11 @@ export function useMatchSyncRealtime(enabled = true) {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'match_events' },
+        invalidateMatchQueries,
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'teams' },
         invalidateMatchQueries,
       )
       .subscribe()

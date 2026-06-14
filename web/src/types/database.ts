@@ -379,6 +379,10 @@ export interface Database {
         Args: { p_match_id?: string }
         Returns: void
       }
+      recalculate_group_standings: {
+        Args: Record<string, never>
+        Returns: void
+      }
     }
   }
 }

@@ -222,6 +222,7 @@ export async function upsertFixture(
     if (error) return "skipped";
     if (status === "finished" && recalculateOnFinish) {
       await supabase.rpc("recalculate_pool_member_points", { p_match_id: existing.id });
+      await supabase.rpc("recalculate_group_standings");
       return "finished";
     }
     return "upserted";
@@ -236,6 +237,7 @@ export async function upsertFixture(
   if (error || !inserted) return "skipped";
   if (status === "finished" && recalculateOnFinish) {
     await supabase.rpc("recalculate_pool_member_points", { p_match_id: inserted.id });
+    await supabase.rpc("recalculate_group_standings");
     return "finished";
   }
   return "upserted";

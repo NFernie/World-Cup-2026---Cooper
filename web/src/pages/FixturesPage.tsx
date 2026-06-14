@@ -106,6 +106,7 @@ export function FixturesPage() {
   const [groupFilter, setGroupFilter] = useState('')
   const [teamFilter, setTeamFilter] = useState('')
   const [myTeamOnly, setMyTeamOnly] = useState(false)
+  const [hideFinished, setHideFinished] = useState(false)
 
   useMatchSyncRealtime()
 
@@ -260,12 +261,13 @@ export function FixturesPage() {
         if (m.home.group_letter !== groupFilter && m.away.group_letter !== groupFilter) return false
       }
       if (teamFilter && m.home_team_id !== teamFilter && m.away_team_id !== teamFilter) return false
+      if (hideFinished && m.status === 'finished') return false
       return true
     })
-  }, [allFixtures, myTeamOnly, assignedTeamId, dateFilter, roundFilter, groupFilter, teamFilter])
+  }, [allFixtures, myTeamOnly, assignedTeamId, dateFilter, roundFilter, groupFilter, teamFilter, hideFinished])
 
   const hasActiveFilters =
-    myTeamOnly || Boolean(dateFilter || roundFilter || groupFilter || teamFilter)
+    myTeamOnly || hideFinished || Boolean(dateFilter || roundFilter || groupFilter || teamFilter)
 
   function clearFilters() {
     setDateFilter('')
@@ -273,6 +275,7 @@ export function FixturesPage() {
     setGroupFilter('')
     setTeamFilter('')
     setMyTeamOnly(false)
+    setHideFinished(false)
   }
 
   return (
@@ -387,6 +390,16 @@ export function FixturesPage() {
             {myTeamOnly ? `Showing ${assignedTeamName ?? 'your team'} only` : 'My team fixtures'}
           </Button>
         )}
+
+        <Button
+          type="button"
+          variant={hideFinished ? 'default' : 'outline'}
+          size="sm"
+          className="w-full sm:w-auto"
+          onClick={() => setHideFinished((v) => !v)}
+        >
+          {hideFinished ? 'Showing upcoming & live only' : 'Hide finished matches'}
+        </Button>
       </Card>
 
       <div className="space-y-3">
