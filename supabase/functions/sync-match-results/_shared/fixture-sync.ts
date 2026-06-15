@@ -51,6 +51,26 @@ export function mapApiStage(round: string | undefined): TournamentStage {
   return "group";
 }
 
+function periodCapMinutes(apiShort: string, elapsed: number): number | null {
+  const short = apiShort.toUpperCase();
+  if (short === "1H") return 45;
+  if (short === "2H") return 90;
+  if (short === "ET") return elapsed <= 105 ? 105 : 120;
+  return null;
+}
+
+/** API-Football `extra` is only meaningful at the end of a half (e.g. 90+4, not 55+6). */
+function isApiStoppageTime(
+  apiShort: string | undefined,
+  elapsed: number | undefined,
+  extra: number | undefined,
+): boolean {
+  if (extra == null || extra <= 0 || elapsed == null) return false;
+  const cap = periodCapMinutes(apiShort ?? "", elapsed);
+  if (cap == null) return false;
+  return elapsed >= cap;
+}
+
 type FixtureRow = {
   fixture: {
     id: number;
@@ -168,14 +188,20 @@ export async function upsertFixture(
 
   if (status === "live") {
     let clockUpdated = false;
-    if (typeof fx.fixture.status?.elapsed === "number") {
-      row.elapsed_minutes = fx.fixture.status.elapsed;
+    const elapsed =
+      typeof fx.fixture.status?.elapsed === "number" ? fx.fixture.status.elapsed : undefined;
+    const rawExtra =
+      typeof fx.fixture.status?.extra === "number" ? fx.fixture.status.extra : undefined;
+
+    if (elapsed != null) {
+      row.elapsed_minutes = elapsed;
       clockUpdated = true;
     }
-    if (typeof fx.fixture.status?.extra === "number") {
-      row.extra_minutes = fx.fixture.status.extra;
-      clockUpdated = true;
-    }
+
+    const stoppageExtra = isApiStoppageTime(apiShort, elapsed, rawExtra) ? rawExtra : null;
+    row.extra_minutes = stoppageExtra;
+    if (rawExtra != null) clockUpdated = true;
+
     if (apiShort) {
       clockUpdated = true;
     }
