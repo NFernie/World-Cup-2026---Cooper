@@ -10,7 +10,9 @@ import { KnockoutBracket } from '@/components/worldCupTable/KnockoutBracket'
 import { supabase } from '@/lib/supabase'
 import {
   GROUP_LETTERS,
+  TBD_TEAM,
   buildKnockoutRounds,
+  collectQualifiedTeams,
   computeGroupStandings,
   type KnockoutMatch,
   type TeamInfo,
@@ -58,9 +60,8 @@ export function WorldCupTablePage() {
       const knockoutMatches: KnockoutMatch[] = []
       for (const m of matches ?? []) {
         if (m.stage === 'group') continue
-        const home = teamMap.get(m.home_team_id)
-        const away = teamMap.get(m.away_team_id)
-        if (!home || !away) continue
+        const home = teamMap.get(m.home_team_id) ?? TBD_TEAM
+        const away = teamMap.get(m.away_team_id) ?? TBD_TEAM
         knockoutMatches.push({
           id: m.id,
           home_team_id: m.home_team_id,
@@ -103,10 +104,10 @@ export function WorldCupTablePage() {
     [dataQuery.data],
   )
 
-  const knockoutRounds = useMemo(
-    () => buildKnockoutRounds(dataQuery.data?.knockoutMatches ?? []),
-    [dataQuery.data],
-  )
+  const knockoutRounds = useMemo(() => {
+    const qualified = collectQualifiedTeams(standingsByGroup)
+    return buildKnockoutRounds(dataQuery.data?.knockoutMatches ?? [], qualified)
+  }, [dataQuery.data, standingsByGroup])
 
   const teamOptions = useMemo(() => {
     return [...(dataQuery.data?.teams ?? [])].sort((a, b) => a.name.localeCompare(b.name))
@@ -262,9 +263,9 @@ export function WorldCupTablePage() {
       {dataQuery.data && view === 'groups' && (
         <section className="space-y-3">
           <p className="text-sm text-[var(--muted)]">
-            Standings update from finished group matches.{' '}
-            <span className="font-medium text-[var(--primary)]">Q</span> marks the top two when a
-            group is complete.
+            Standings update when group matches finish.{' '}
+            <span className="font-medium text-[var(--primary)]">Q</span> marks teams who have
+            clinched or earned a top-two finish.
           </p>
           <GroupStandingsGrid
             standingsByGroup={standingsByGroup}
@@ -278,8 +279,8 @@ export function WorldCupTablePage() {
       {dataQuery.data && view === 'knockout' && (
         <section className="space-y-3">
           <p className="text-sm text-[var(--muted)]">
-            Knockout slots fill in as fixtures sync. Empty slots show as TBD until teams are
-            confirmed for each round.
+            Qualified nations fill Round of 32 slots as they clinch. Empty slots stay TBD until
+            fixtures sync from the API.
           </p>
           <KnockoutBracket
             rounds={knockoutRounds}

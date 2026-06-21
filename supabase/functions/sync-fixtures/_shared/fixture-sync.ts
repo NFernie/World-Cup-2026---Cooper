@@ -186,7 +186,14 @@ export async function upsertFixture(
   const apiShort = fx.fixture.status?.short?.trim().toUpperCase();
   if (apiShort) row.api_status_short = apiShort;
 
-  if (status === "live") {
+  if (!hasKickedOff) {
+    row.home_score = null;
+    row.away_score = null;
+    row.elapsed_minutes = null;
+    row.extra_minutes = null;
+    row.status_synced_at = null;
+    row.scores_synced_at = null;
+  } else if (status === "live") {
     let clockUpdated = false;
     const elapsed =
       typeof fx.fixture.status?.elapsed === "number" ? fx.fixture.status.elapsed : undefined;
@@ -209,18 +216,23 @@ export async function upsertFixture(
     if (clockUpdated) {
       row.status_synced_at = new Date().toISOString();
     }
+
+    if (homeScore != null && awayScore != null) {
+      row.home_score = homeScore;
+      row.away_score = awayScore;
+    }
   } else {
     row.elapsed_minutes = null;
     row.extra_minutes = null;
     row.status_synced_at = null;
-  }
 
-  if (homeScore != null && awayScore != null) {
-    row.home_score = homeScore;
-    row.away_score = awayScore;
-  }
-  if (status === "finished") {
-    row.scores_synced_at = new Date().toISOString();
+    if (homeScore != null && awayScore != null) {
+      row.home_score = homeScore;
+      row.away_score = awayScore;
+    }
+    if (status === "finished") {
+      row.scores_synced_at = new Date().toISOString();
+    }
   }
 
   const existing = await findExistingMatch(
@@ -232,12 +244,26 @@ export async function upsertFixture(
   );
 
   if (existing) {
+    const { data: prior } = await supabase
+      .from("matches")
+      .select("status, stage")
+      .eq("id", existing.id)
+      .maybeSingle();
+
     const { error } = await supabase.from("matches").update(row).eq("id", existing.id);
     if (error) return "skipped";
-    if (status === "finished" && recalculateOnFinish) {
+
+    const shouldRecalcStandings =
+      recalculateOnFinish &&
+      stage === "group" &&
+      status === "finished" &&
+      homeScore != null &&
+      awayScore != null;
+
+    if (shouldRecalcStandings) {
       await supabase.rpc("recalculate_pool_member_points", { p_match_id: existing.id });
       await supabase.rpc("recalculate_group_standings");
-      return "finished";
+      return prior?.status === "finished" ? "upserted" : "finished";
     }
     return "upserted";
   }
@@ -249,7 +275,13 @@ export async function upsertFixture(
     .single();
 
   if (error || !inserted) return "skipped";
-  if (status === "finished" && recalculateOnFinish) {
+  if (
+    recalculateOnFinish &&
+    stage === "group" &&
+    status === "finished" &&
+    homeScore != null &&
+    awayScore != null
+  ) {
     await supabase.rpc("recalculate_pool_member_points", { p_match_id: inserted.id });
     await supabase.rpc("recalculate_group_standings");
     return "finished";
@@ -401,6 +433,18 @@ export function isInLivePollWindow(
   }
 
   return false;
+}
+
+/** Full sync re-polls recent finished matches so standings update after every result. */
+export function isInRecentFinishedPollWindow(
+  kickoffAt: string,
+  status: string,
+  nowMs = Date.now(),
+): boolean {
+  if (status !== "finished") return false;
+  const kickoff = new Date(kickoffAt).getTime();
+  const tournamentWindowMs = 60 * 24 * 60 * 60 * 1000;
+  return nowMs - kickoff < tournamentWindowMs;
 }
 
 /** Live / imminently-kicking-off matches only — no finished backfill (fast poll cron). */
@@ -578,7 +622,7 @@ export async function syncActiveMatchScores(
             m.scores_synced_at,
             m.home_score,
             m.away_score,
-          )
+          ) || isInRecentFinishedPollWindow(m.kickoff_at, m.status, nowMs)
     )
     .sort((a, b) => {
       if (a.status === "live" && b.status !== "live") return -1;

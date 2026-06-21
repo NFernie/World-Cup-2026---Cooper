@@ -18,8 +18,15 @@ import {
 import {
   STAGE_FILTER_OPTIONS,
   formatDateFilterLabel,
+  formatStage,
   kickoffDateKey,
 } from '@/lib/poolBoards'
+import {
+  KNOCKOUT_MATCH_COUNTS,
+  KNOCKOUT_ROUND_ORDER,
+  isKnockoutStage,
+  type KnockoutRound,
+} from '@/lib/worldCupStandings'
 import type { PoolOutletContext } from '@/pages/PoolShell'
 
 type TeamRow = {
@@ -69,6 +76,16 @@ type FixtureRow = {
     away_win_decimal: number
   } | null
   events: MatchEventRow[]
+  isPlaceholder?: boolean
+}
+
+const TBD_FIXTURE_TEAM: TeamRow = {
+  id: 'tbd',
+  name: 'TBD',
+  fifa_code: 'TBD',
+  group_letter: null,
+  api_football_team_id: null,
+  global_fifa_rank: null,
 }
 
 type PoolMemberSummary = {
@@ -146,10 +163,11 @@ export function FixturesPage() {
         }
       }
 
-      return (matches ?? [])
+      const mapped = (matches ?? [])
         .map((m) => {
-          const home = teamMap.get(m.home_team_id)
-          const away = teamMap.get(m.away_team_id)
+          const knockout = isKnockoutStage(m.stage)
+          const home = teamMap.get(m.home_team_id) ?? (knockout ? TBD_FIXTURE_TEAM : undefined)
+          const away = teamMap.get(m.away_team_id) ?? (knockout ? TBD_FIXTURE_TEAM : undefined)
           if (!home || !away) return null
           return {
             ...m,
@@ -160,6 +178,46 @@ export function FixturesPage() {
           }
         })
         .filter((m): m is FixtureRow => m != null)
+
+      const knockoutCounts = new Map<KnockoutRound, number>()
+      for (const m of mapped) {
+        if (isKnockoutStage(m.stage)) {
+          const stage = m.stage as KnockoutRound
+          knockoutCounts.set(stage, (knockoutCounts.get(stage) ?? 0) + 1)
+        }
+      }
+
+      const placeholders: FixtureRow[] = []
+      for (const stage of KNOCKOUT_ROUND_ORDER) {
+        const existing = knockoutCounts.get(stage) ?? 0
+        for (let i = existing; i < KNOCKOUT_MATCH_COUNTS[stage]; i++) {
+          placeholders.push({
+            id: `${stage}-placeholder-${i}`,
+            home_team_id: 'tbd',
+            away_team_id: 'tbd',
+            kickoff_at: '',
+            home_score: null,
+            away_score: null,
+            status: 'scheduled',
+            stage,
+            venue_name: null,
+            venue_city: null,
+            referee: null,
+            attendance: null,
+            api_status_short: null,
+            elapsed_minutes: null,
+            extra_minutes: null,
+            status_synced_at: null,
+            home: TBD_FIXTURE_TEAM,
+            away: TBD_FIXTURE_TEAM,
+            odds: null,
+            events: [],
+            isPlaceholder: true,
+          })
+        }
+      }
+
+      return [...mapped, ...placeholders]
     },
     refetchInterval: (query) => {
       const rows = query.state.data
@@ -255,7 +313,8 @@ export function FixturesPage() {
         if (m.home_team_id !== assignedTeamId && m.away_team_id !== assignedTeamId) return false
       }
       if (dateFilter && kickoffDateKey(m.kickoff_at) !== dateFilter) return false
-      if (roundFilter && m.stage !== roundFilter) return false
+      if (roundFilter === 'knockout' && m.stage === 'group') return false
+      if (roundFilter && roundFilter !== 'knockout' && m.stage !== roundFilter) return false
       if (groupFilter) {
         if (m.stage !== 'group') return false
         if (m.home.group_letter !== groupFilter && m.away.group_letter !== groupFilter) return false
@@ -431,9 +490,12 @@ export function FixturesPage() {
           if (!m.home || !m.away) return null
           const involvesAssigned =
             assignedTeamId &&
+            !m.isPlaceholder &&
             (m.home_team_id === assignedTeamId || m.away_team_id === assignedTeamId)
-          const showScore = m.home_score != null && m.away_score != null
-          const showEvents = m.status === 'live' || m.status === 'finished'
+          const showScore =
+            !m.isPlaceholder && m.home_score != null && m.away_score != null
+          const showEvents =
+            !m.isPlaceholder && (m.status === 'live' || m.status === 'finished')
 
           return (
             <Card
@@ -441,21 +503,30 @@ export function FixturesPage() {
               className={
                 involvesAssigned
                   ? 'border-2 border-[var(--team-primary)] bg-[var(--team-primary)]/8 p-4'
-                  : 'p-4'
+                  : m.isPlaceholder
+                    ? 'border border-dashed border-[var(--border)] p-4'
+                    : 'p-4'
               }
             >
               <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--muted)]">
-                <time dateTime={m.kickoff_at}>{formatKickoffLocal(m.kickoff_at)}</time>
-                <MatchStatusBadge
-                  clock={{
-                    status: m.status,
-                    apiStatusShort: m.api_status_short,
-                    elapsedMinutes: m.elapsed_minutes,
-                    extraMinutes: m.extra_minutes,
-                    statusSyncedAt: m.status_synced_at,
-                    stage: m.stage,
-                  }}
-                />
+                {m.kickoff_at ? (
+                  <time dateTime={m.kickoff_at}>{formatKickoffLocal(m.kickoff_at)}</time>
+                ) : (
+                  <span>Kickoff TBD</span>
+                )}
+                <span className="inline-flex items-center gap-2 uppercase">
+                  <span>{formatStage(m.stage)}</span>
+                  <MatchStatusBadge
+                    clock={{
+                      status: m.status,
+                      apiStatusShort: m.api_status_short,
+                      elapsedMinutes: m.elapsed_minutes,
+                      extraMinutes: m.extra_minutes,
+                      statusSyncedAt: m.status_synced_at,
+                      stage: m.stage,
+                    }}
+                  />
+                </span>
               </div>
 
               <div className="mt-4">

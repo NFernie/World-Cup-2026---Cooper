@@ -102,6 +102,76 @@ export function isGroupStageComplete(
   )
 }
 
+function remainingGroupGames(
+  teamId: string,
+  teamIds: Set<string>,
+  matches: GroupMatch[],
+): number {
+  return matches.filter(
+    (m) =>
+      m.stage === 'group' &&
+      m.status !== 'finished' &&
+      teamIds.has(m.home_team_id) &&
+      teamIds.has(m.away_team_id) &&
+      (m.home_team_id === teamId || m.away_team_id === teamId),
+  ).length
+}
+
+/** True when a team is guaranteed a top-two finish in its group. */
+export function hasClinchedTopTwo(
+  teamId: string,
+  groupStandings: GroupStanding[],
+  groupMatches: GroupMatch[],
+): boolean {
+  const sorted = [...groupStandings].sort(compareStandings)
+  const idx = sorted.findIndex((s) => s.team.id === teamId)
+  if (idx < 0 || idx > 1) return false
+
+  const ours = sorted[idx]
+  const teamIds = new Set(groupStandings.map((s) => s.team.id))
+
+  let rivalsCanPass = 0
+  for (const rival of sorted) {
+    if (rival.team.id === teamId) continue
+    const rivalMax = rival.points + 3 * remainingGroupGames(rival.team.id, teamIds, groupMatches)
+    if (
+      rivalMax > ours.points ||
+      (rivalMax === ours.points && compareStandings(rival, ours) < 0)
+    ) {
+      rivalsCanPass++
+    }
+  }
+
+  return rivalsCanPass < 2
+}
+
+export const TBD_TEAM: TeamInfo = {
+  id: 'tbd',
+  name: 'TBD',
+  fifa_code: 'TBD',
+  group_letter: null,
+}
+
+export function isKnockoutStage(stage: string): stage is KnockoutRound {
+  return (KNOCKOUT_ROUND_ORDER as readonly string[]).includes(stage)
+}
+
+export function collectQualifiedTeams(
+  standingsByGroup: Map<string, GroupStanding[]>,
+): TeamInfo[] {
+  const teams: TeamInfo[] = []
+  for (const letter of GROUP_LETTERS) {
+    for (const row of standingsByGroup.get(letter) ?? []) {
+      if (row.qualified) teams.push(row.team)
+    }
+  }
+  return teams.sort(
+    (a, b) =>
+      (a.group_letter ?? '').localeCompare(b.group_letter ?? '') ||
+      a.name.localeCompare(b.name),
+  )
+}
+
 export function computeGroupStandings(
   teams: TeamInfo[],
   matches: GroupMatch[],
@@ -166,11 +236,18 @@ export function computeGroupStandings(
   for (const [letter, groupMap] of byGroup) {
     const rows = [...groupMap.values()].sort(compareStandings)
     const complete = isGroupStageComplete(letter, matches, teams)
-    if (complete) {
-      rows.forEach((row, index) => {
-        row.qualified = index < 2
-      })
-    }
+    const groupMatches = matches.filter(
+      (m) =>
+        m.stage === 'group' &&
+        rows.some((r) => r.team.id === m.home_team_id || r.team.id === m.away_team_id),
+    )
+    rows.forEach((row, index) => {
+      if (complete && index < 2) {
+        row.qualified = true
+      } else if (!complete && hasClinchedTopTwo(row.team.id, rows, groupMatches)) {
+        row.qualified = true
+      }
+    })
     result.set(letter, rows)
   }
 
@@ -201,8 +278,12 @@ export function getMatchWinner(
   return null
 }
 
-export function buildKnockoutRounds(matches: KnockoutMatch[]): Map<KnockoutRound, BracketSlot[]> {
+export function buildKnockoutRounds(
+  matches: KnockoutMatch[],
+  qualifiedTeams: TeamInfo[] = [],
+): Map<KnockoutRound, BracketSlot[]> {
   const rounds = new Map<KnockoutRound, BracketSlot[]>()
+  let qualifiedQueue = [...qualifiedTeams]
 
   for (const stage of KNOCKOUT_ROUND_ORDER) {
     const stageMatches = matches
@@ -211,8 +292,8 @@ export function buildKnockoutRounds(matches: KnockoutMatch[]): Map<KnockoutRound
 
     const slots: BracketSlot[] = stageMatches.map((m) => ({
       id: m.id,
-      home: m.home,
-      away: m.away,
+      home: m.home.id === TBD_TEAM.id ? null : m.home,
+      away: m.away.id === TBD_TEAM.id ? null : m.away,
       homeScore: m.home_score,
       awayScore: m.away_score,
       status: m.status,
@@ -232,6 +313,20 @@ export function buildKnockoutRounds(matches: KnockoutMatch[]): Map<KnockoutRound
         kickoff_at: null,
         isPlaceholder: true,
       })
+    }
+
+    if (stage === 'round_of_32' && qualifiedQueue.length > 0) {
+      for (const slot of slots) {
+        if (!slot.home && qualifiedQueue.length > 0) {
+          slot.home = qualifiedQueue.shift() ?? null
+          slot.isPlaceholder = !slot.home && !slot.away
+        }
+        if (!slot.away && qualifiedQueue.length > 0) {
+          slot.away = qualifiedQueue.shift() ?? null
+          slot.isPlaceholder = !slot.home && !slot.away
+        }
+        if (slot.home || slot.away) slot.isPlaceholder = false
+      }
     }
 
     rounds.set(stage, slots)

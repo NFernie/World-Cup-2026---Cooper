@@ -24,6 +24,7 @@ export const STAGE_LABELS: Record<string, string> = {
 export const STAGE_FILTER_OPTIONS = [
   { value: '', label: 'All rounds' },
   { value: 'group', label: 'Group stage' },
+  { value: 'knockout', label: 'All knockout' },
   { value: 'round_of_32', label: 'Round of 32' },
   { value: 'round_of_16', label: 'Round of 16' },
   { value: 'quarter_final', label: 'Quarter-final' },
