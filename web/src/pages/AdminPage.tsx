@@ -90,9 +90,11 @@ export function AdminPage() {
       })
 
       await supabase.rpc('recalculate_pool_member_points', { p_match_id: matchId })
+      await supabase.rpc('recalculate_group_standings')
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['leaderboard-odds'] })
+      queryClient.invalidateQueries({ queryKey: ['leaderboard-tournament'] })
       queryClient.invalidateQueries({ queryKey: ['admin-matches'] })
     },
   })

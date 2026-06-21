@@ -336,9 +336,14 @@ export async function syncAllFixturesFromApi(
   let skipped = 0;
 
   for (const fx of fixtures) {
-    const result = await upsertFixture(supabase, fx, false);
+    const result = await upsertFixture(supabase, fx, true);
     if (result === "skipped") skipped++;
     else imported++;
+  }
+
+  if (imported > 0) {
+    await supabase.rpc("recalculate_group_standings");
+    await supabase.rpc("recalculate_pool_member_points");
   }
 
   let demoRemoved = 0;
@@ -381,6 +386,9 @@ export function isInLivePollWindow(
   status: string,
   nowMs = Date.now(),
   eventsSyncedAt?: string | null,
+  scoresSyncedAt?: string | null,
+  homeScore?: number | null,
+  awayScore?: number | null,
 ): boolean {
   if (status === "cancelled" || status === "postponed") return false;
 
@@ -391,6 +399,13 @@ export function isInLivePollWindow(
 
   // From kickoff until ~3h after (scheduled past kickoff until API marks live/finished).
   if (nowMs >= kickoff && nowMs <= matchEnd && status !== "finished") return true;
+
+  // Stale: kickoff passed but still scheduled (missed live window).
+  if (status === "scheduled" && nowMs > kickoff) return true;
+
+  // Finished without API score sync or missing scores.
+  if (status === "finished" && !scoresSyncedAt) return true;
+  if (status === "finished" && (homeScore == null || awayScore == null)) return true;
 
   // Backfill goals/cards for finished matches that never received an events sync.
   if (status === "finished" && !eventsSyncedAt) {
@@ -558,14 +573,24 @@ export async function syncActiveMatchScores(
 
   const { data: matches } = await supabase
     .from("matches")
-    .select("external_id, kickoff_at, status, events_synced_at")
+    .select(
+      "external_id, kickoff_at, status, events_synced_at, scores_synced_at, home_score, away_score",
+    )
     .not("external_id", "is", null);
 
   const active = (matches ?? [])
     .filter((m) =>
       mode === "live"
         ? isInFastLivePollWindow(m.kickoff_at, m.status, nowMs)
-        : isInLivePollWindow(m.kickoff_at, m.status, nowMs, m.events_synced_at)
+        : isInLivePollWindow(
+            m.kickoff_at,
+            m.status,
+            nowMs,
+            m.events_synced_at,
+            m.scores_synced_at,
+            m.home_score,
+            m.away_score,
+          )
     )
     .sort((a, b) => {
       if (a.status === "live" && b.status !== "live") return -1;
