@@ -4,7 +4,7 @@
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { syncAllFixturesFromApi } from "./_shared/fixture-sync.ts";
-import { syncApiFootballTeamIds, syncCleanSheetsFromMatchResults } from "./_shared/awards-sync.ts";
+import { syncApiFootballTeamIds, syncCleanSheetsFromMatchResults, syncGoldenBootFromMatchEvents } from "./_shared/awards-sync.ts";
 
 Deno.serve(async () => {
   const apiKey = Deno.env.get("API_FOOTBALL_KEY");
@@ -34,9 +34,10 @@ Deno.serve(async () => {
   }
 
   const result = await syncAllFixturesFromApi(supabase, apiKey, leagueId, season);
-  const cleanSheets = result.imported > 0
-    ? await syncCleanSheetsFromMatchResults(supabase)
-    : 0;
+  const [cleanSheets, goldenBootFromEvents] = await Promise.all([
+    syncCleanSheetsFromMatchResults(supabase),
+    syncGoldenBootFromMatchEvents(supabase),
+  ]);
 
   return new Response(
     JSON.stringify({
@@ -46,6 +47,7 @@ Deno.serve(async () => {
       leagueId,
       season,
       cleanSheets,
+      goldenBootFromEvents,
       ...result,
       hint: result.apiFixtureCount === 0
         ? "API returned 0 fixtures — check probes[].errors (rate limit?) or API_FOOTBALL_SEASON=2026."

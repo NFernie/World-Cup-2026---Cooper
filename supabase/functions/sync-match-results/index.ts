@@ -4,6 +4,7 @@
  * scores or events change so goals/cards surface without waiting for the next cron.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { syncAwardsAfterMatch } from "./_shared/awards-sync.ts";
 import { syncActiveMatchScores } from "./_shared/fixture-sync.ts";
 
 const MAX_PASSES = 2;
@@ -38,6 +39,8 @@ Deno.serve(async (req) => {
   }
 
   const supabase = createClient(supabaseUrl, serviceKey);
+  const leagueId = Deno.env.get("API_FOOTBALL_LEAGUE_ID") ?? "1";
+  const season = Deno.env.get("API_FOOTBALL_SEASON") ?? "2026";
 
   const passes: Awaited<ReturnType<typeof syncActiveMatchScores>>[] = [];
   let pass = 0;
@@ -55,6 +58,12 @@ Deno.serve(async (req) => {
     activeCount = result.activeCount;
     pass++;
   } while (materialChanges > 0 && pass < MAX_PASSES && activeCount > 0);
+
+  const totalMaterialChanges = passes.reduce((sum, p) => sum + p.materialChanges, 0);
+  let awards: Awaited<ReturnType<typeof syncAwardsAfterMatch>> | null = null;
+  if (totalMaterialChanges > 0) {
+    awards = await syncAwardsAfterMatch(supabase, apiKey, leagueId, season);
+  }
 
   const last = passes[passes.length - 1] ?? {
     updated: 0,
@@ -80,6 +89,7 @@ Deno.serve(async (req) => {
       materialChanges: passes.reduce((sum, p) => sum + p.materialChanges, 0),
       eventsUpdated: passes.reduce((sum, p) => sum + p.eventsUpdated, 0),
       updated: passes.reduce((sum, p) => sum + p.updated, 0),
+      awards,
     }),
     { headers: { "Content-Type": "application/json" } },
   );
