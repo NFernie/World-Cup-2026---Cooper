@@ -145,6 +145,39 @@ export function hasClinchedTopTwo(
   return rivalsCanPass < 2
 }
 
+/** True when a team cannot finish in the top two of its group. */
+export function isEliminatedFromTopTwo(
+  teamId: string,
+  groupStandings: GroupStanding[],
+  groupMatches: GroupMatch[],
+): boolean {
+  if (hasClinchedTopTwo(teamId, groupStandings, groupMatches)) return false
+
+  const sorted = [...groupStandings].sort(compareStandings)
+  const ours = sorted.find((s) => s.team.id === teamId)
+  if (!ours) return false
+
+  const teamIds = new Set(groupStandings.map((s) => s.team.id))
+  const ourMax = ours.points + 3 * remainingGroupGames(teamId, teamIds, groupMatches)
+
+  let teamsCanFinishAhead = 0
+  for (const rival of sorted) {
+    if (rival.team.id === teamId) continue
+    if (rival.points > ourMax) {
+      teamsCanFinishAhead++
+      continue
+    }
+    const rivalMax = rival.points + 3 * remainingGroupGames(rival.team.id, teamIds, groupMatches)
+    if (rivalMax > ourMax) {
+      teamsCanFinishAhead++
+    } else if (rivalMax === ourMax && compareStandings(rival, ours) < 0) {
+      teamsCanFinishAhead++
+    }
+  }
+
+  return teamsCanFinishAhead >= 2
+}
+
 export const TBD_TEAM: TeamInfo = {
   id: 'tbd',
   name: 'TBD',

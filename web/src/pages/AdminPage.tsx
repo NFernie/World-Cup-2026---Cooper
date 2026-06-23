@@ -95,6 +95,8 @@ export function AdminPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['leaderboard-odds'] })
       queryClient.invalidateQueries({ queryKey: ['leaderboard-tournament'] })
+      queryClient.invalidateQueries({ queryKey: ['board-eliminations'] })
+      queryClient.invalidateQueries({ queryKey: ['board-knockout'] })
       queryClient.invalidateQueries({ queryKey: ['admin-matches'] })
     },
   })
