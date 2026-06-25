@@ -642,6 +642,7 @@ export async function syncActiveMatchScores(
   scoreChanges: number;
   eventsChanged: number;
   materialChanges: number;
+  finishesApplied: number;
   apiCalls: number;
   activeCount: number;
   skipped: string | null;
@@ -691,6 +692,7 @@ export async function syncActiveMatchScores(
       scoreChanges: 0,
       eventsChanged: 0,
       materialChanges: 0,
+      finishesApplied: 0,
       apiCalls: 0,
       activeCount: 0,
       skipped: mode === "live"
@@ -704,6 +706,7 @@ export async function syncActiveMatchScores(
   let eventsUpdated = 0;
   let scoreChanges = 0;
   let eventsChanged = 0;
+  let finishesApplied = 0;
   let apiCalls = 0;
 
   const chunkSize = 20;
@@ -733,6 +736,7 @@ export async function syncActiveMatchScores(
       }
 
       const result = await upsertFixture(supabase, fx, true);
+      if (result === "finished") finishesApplied++;
       if (result === "finished" || result === "upserted") updated++;
       if (result === "skipped" || !matchId) continue;
 
@@ -762,6 +766,7 @@ export async function syncActiveMatchScores(
     scoreChanges,
     eventsChanged,
     materialChanges,
+    finishesApplied,
     apiCalls,
     activeCount: active.length,
     skipped: null,

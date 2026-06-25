@@ -60,6 +60,13 @@ Deno.serve(async (req) => {
   } while (materialChanges > 0 && pass < MAX_PASSES && activeCount > 0);
 
   const totalMaterialChanges = passes.reduce((sum, p) => sum + p.materialChanges, 0);
+  const totalFinishes = passes.reduce((sum, p) => sum + p.finishesApplied, 0);
+  const totalScoreChanges = passes.reduce((sum, p) => sum + p.scoreChanges, 0);
+
+  if (totalFinishes > 0 || totalScoreChanges > 0) {
+    await supabase.rpc("recalculate_group_standings");
+  }
+
   let awards: Awaited<ReturnType<typeof syncAwardsAfterMatch>> | null = null;
   if (totalMaterialChanges > 0) {
     awards = await syncAwardsAfterMatch(supabase, apiKey, leagueId, season);
@@ -87,6 +94,7 @@ Deno.serve(async (req) => {
       scoreChanges: passes.reduce((sum, p) => sum + p.scoreChanges, 0),
       eventsChanged: passes.reduce((sum, p) => sum + p.eventsChanged, 0),
       materialChanges: passes.reduce((sum, p) => sum + p.materialChanges, 0),
+      finishesApplied: passes.reduce((sum, p) => sum + p.finishesApplied, 0),
       eventsUpdated: passes.reduce((sum, p) => sum + p.eventsUpdated, 0),
       updated: passes.reduce((sum, p) => sum + p.updated, 0),
       awards,

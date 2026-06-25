@@ -176,6 +176,7 @@ export function LeaderboardsPage() {
 
   const eliminationsQuery = useQuery({
     queryKey: ['board-eliminations'],
+    refetchInterval: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('board_group_eliminations')
@@ -189,6 +190,7 @@ export function LeaderboardsPage() {
 
   const knockoutQuery = useQuery({
     queryKey: ['board-knockout'],
+    refetchInterval: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('board_knockout_qualifiers')
