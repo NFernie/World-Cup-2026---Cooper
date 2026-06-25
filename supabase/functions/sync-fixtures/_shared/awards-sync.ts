@@ -55,6 +55,9 @@ function isCountableBootGoal(detail: string | null | undefined): boolean {
   return d !== "own goal" && d !== "missed penalty";
 }
 
+/** Post-full-time window aligned with match-results sync (6h). */
+const RECENT_FINISHED_WINDOW_MS = 6 * 60 * 60 * 1000;
+
 /** True when any match is live or recently finished (awards should refresh). */
 export async function isInAwardsSyncWindow(supabase: SupabaseClient): Promise<boolean> {
   const { data: matches } = await supabase
@@ -63,17 +66,14 @@ export async function isInAwardsSyncWindow(supabase: SupabaseClient): Promise<bo
     .not("external_id", "is", null);
 
   const nowMs = Date.now();
-  const tournamentWindowMs = 60 * 24 * 60 * 60 * 1000;
 
   for (const m of matches ?? []) {
     const kickoff = new Date(m.kickoff_at).getTime();
     const matchEnd = kickoff + 180 * 60 * 1000;
 
     if (m.status === "live") return true;
-    if (m.status === "finished" && nowMs - kickoff < tournamentWindowMs) return true;
-    if (m.status === "scheduled" && nowMs > kickoff && nowMs < matchEnd + tournamentWindowMs) {
-      return true;
-    }
+    if (m.status === "finished" && nowMs - kickoff < RECENT_FINISHED_WINDOW_MS) return true;
+    if (m.status === "scheduled" && nowMs > kickoff && nowMs < matchEnd) return true;
   }
 
   return false;

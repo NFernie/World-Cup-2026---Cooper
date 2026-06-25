@@ -5,6 +5,9 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1
 
 const API_BASE = "https://v3.football.api-sports.io";
 
+/** Post-full-time window for finished-match re-polls (narrowed from 60 days to cut egress). */
+export const RECENT_FINISHED_WINDOW_MS = 6 * 60 * 60 * 1000;
+
 type MatchStatus = "scheduled" | "live" | "finished" | "postponed" | "cancelled";
 type TournamentStage =
   | "group"
@@ -69,6 +72,22 @@ function isApiStoppageTime(
   const cap = periodCapMinutes(apiShort ?? "", elapsed);
   if (cap == null) return false;
   return elapsed >= cap;
+}
+
+function rowValueEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (a == null && b == null) return true;
+  return false;
+}
+
+function isMatchRowMateriallyUnchanged(
+  prior: Record<string, unknown>,
+  row: Record<string, unknown>,
+): boolean {
+  for (const key of Object.keys(row)) {
+    if (!rowValueEqual(prior[key], row[key])) return false;
+  }
+  return true;
 }
 
 type FixtureRow = {
@@ -230,9 +249,6 @@ export async function upsertFixture(
       row.home_score = homeScore;
       row.away_score = awayScore;
     }
-    if (status === "finished") {
-      row.scores_synced_at = new Date().toISOString();
-    }
   }
 
   const existing = await findExistingMatch(
@@ -246,9 +262,23 @@ export async function upsertFixture(
   if (existing) {
     const { data: prior } = await supabase
       .from("matches")
-      .select("status, stage")
+      .select(
+        "status, stage, home_score, away_score, elapsed_minutes, extra_minutes, api_status_short, venue_name, venue_city, referee, attendance",
+      )
       .eq("id", existing.id)
       .maybeSingle();
+
+    if (status === "finished" && homeScore != null && awayScore != null) {
+      const scoresChanged = prior?.home_score !== homeScore || prior?.away_score !== awayScore;
+      const newlyFinished = prior?.status !== "finished";
+      if (scoresChanged || newlyFinished) {
+        row.scores_synced_at = new Date().toISOString();
+      }
+    }
+
+    if (prior && isMatchRowMateriallyUnchanged(prior, row)) {
+      return "skipped";
+    }
 
     const { error } = await supabase.from("matches").update(row).eq("id", existing.id);
     if (error) return "skipped";
@@ -258,7 +288,10 @@ export async function upsertFixture(
       stage === "group" &&
       status === "finished" &&
       homeScore != null &&
-      awayScore != null;
+      awayScore != null &&
+      (prior?.status !== "finished" ||
+        prior.home_score !== homeScore ||
+        prior.away_score !== awayScore);
 
     if (shouldRecalcStandings) {
       await supabase.rpc("recalculate_pool_member_points", { p_match_id: existing.id });
@@ -435,16 +468,26 @@ export function isInLivePollWindow(
   return false;
 }
 
-/** Full sync re-polls recent finished matches so standings update after every result. */
+/**
+ * Brief post-FT re-poll for standings backfill. Stops once scores and events are synced,
+ * or after RECENT_FINISHED_WINDOW_MS (6h) from kickoff.
+ */
 export function isInRecentFinishedPollWindow(
   kickoffAt: string,
   status: string,
   nowMs = Date.now(),
+  eventsSyncedAt?: string | null,
+  scoresSyncedAt?: string | null,
+  homeScore?: number | null,
+  awayScore?: number | null,
 ): boolean {
   if (status !== "finished") return false;
   const kickoff = new Date(kickoffAt).getTime();
-  const tournamentWindowMs = 60 * 24 * 60 * 60 * 1000;
-  return nowMs - kickoff < tournamentWindowMs;
+  if (nowMs - kickoff >= RECENT_FINISHED_WINDOW_MS) return false;
+
+  if (!scoresSyncedAt || homeScore == null || awayScore == null) return true;
+  if (!eventsSyncedAt) return true;
+  return false;
 }
 
 /** Live / imminently-kicking-off matches only — no finished backfill (fast poll cron). */
@@ -542,6 +585,9 @@ export async function syncMatchEvents(
   }));
 
   const changed = eventRowsSignature(existingRows ?? []) !== eventRowsSignature(nextRows);
+  if (!changed) {
+    return { inserted: 0, changed: false };
+  }
 
   await supabase.from("match_events").delete().eq("match_id", matchId);
 
@@ -567,7 +613,7 @@ export async function syncMatchEvents(
     .update({ events_synced_at: new Date().toISOString() })
     .eq("id", matchId);
 
-  return { inserted, changed };
+  return { inserted, changed: true };
 }
 
 /** @deprecated Use syncMatchEvents */
@@ -622,7 +668,15 @@ export async function syncActiveMatchScores(
             m.scores_synced_at,
             m.home_score,
             m.away_score,
-          ) || isInRecentFinishedPollWindow(m.kickoff_at, m.status, nowMs)
+          ) || isInRecentFinishedPollWindow(
+            m.kickoff_at,
+            m.status,
+            nowMs,
+            m.events_synced_at,
+            m.scores_synced_at,
+            m.home_score,
+            m.away_score,
+          )
     )
     .sort((a, b) => {
       if (a.status === "live" && b.status !== "live") return -1;
@@ -680,24 +734,23 @@ export async function syncActiveMatchScores(
 
       const result = await upsertFixture(supabase, fx, true);
       if (result === "finished" || result === "upserted") updated++;
+      if (result === "skipped" || !matchId) continue;
 
-      if (matchId) {
-        if (beforeScores) {
-          const homeScore = fx.goals.home;
-          const awayScore = fx.goals.away;
-          if (
-            homeScore != null &&
-            awayScore != null &&
-            (beforeScores.home_score !== homeScore || beforeScores.away_score !== awayScore)
-          ) {
-            scoreChanges++;
-          }
+      if (beforeScores) {
+        const homeScore = fx.goals.home;
+        const awayScore = fx.goals.away;
+        if (
+          homeScore != null &&
+          awayScore != null &&
+          (beforeScores.home_score !== homeScore || beforeScores.away_score !== awayScore)
+        ) {
+          scoreChanges++;
         }
-
-        const eventResult = await syncMatchEvents(supabase, matchId, fx.events);
-        eventsUpdated += eventResult.inserted;
-        if (eventResult.changed) eventsChanged++;
       }
+
+      const eventResult = await syncMatchEvents(supabase, matchId, fx.events);
+      eventsUpdated += eventResult.inserted;
+      if (eventResult.changed) eventsChanged++;
     }
   }
 
