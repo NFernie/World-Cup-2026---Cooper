@@ -284,7 +284,34 @@ export function computeGroupStandings(
     result.set(letter, rows)
   }
 
+  promoteBestThirdPlaceQualifiers(result, teams, matches)
+
   return result
+}
+
+/** When every group is complete, the 8 best third-placed teams also qualify for R32. */
+function promoteBestThirdPlaceQualifiers(
+  standingsByGroup: Map<string, GroupStanding[]>,
+  teams: TeamInfo[],
+  matches: GroupMatch[],
+): void {
+  const lettersWithTeams = GROUP_LETTERS.filter((letter) =>
+    teams.some((t) => t.group_letter === letter),
+  )
+  if (lettersWithTeams.length === 0) return
+  if (!lettersWithTeams.every((letter) => isGroupStageComplete(letter, matches, teams))) {
+    return
+  }
+
+  const thirdPlaced: GroupStanding[] = []
+  for (const letter of lettersWithTeams) {
+    const sorted = [...(standingsByGroup.get(letter) ?? [])].sort(compareStandings)
+    if (sorted[2]) thirdPlaced.push(sorted[2])
+  }
+
+  for (const row of [...thirdPlaced].sort(compareStandings).slice(0, 8)) {
+    row.qualified = true
+  }
 }
 
 function findStanding(

@@ -38,6 +38,7 @@ Deno.serve(async () => {
     syncCleanSheetsFromMatchResults(supabase),
     syncGoldenBootFromMatchEvents(supabase),
   ]);
+  await supabase.rpc("recalculate_group_standings");
 
   return new Response(
     JSON.stringify({

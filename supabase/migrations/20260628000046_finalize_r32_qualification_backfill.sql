@@ -1,5 +1,4 @@
--- People's Champion: mark any team that has clinched top two (not only 6+ pts).
--- Wooden Spoon: unchanged mathematical elimination for incomplete groups.
+-- Finalize R32 qualification: top two per group + 8 best third-placed teams; backfill leaderboards.
 
 create or replace function public.recalculate_group_standings()
 returns void
