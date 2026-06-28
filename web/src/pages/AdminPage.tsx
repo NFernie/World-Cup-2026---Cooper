@@ -95,8 +95,8 @@ export function AdminPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['leaderboard-odds'] })
       queryClient.invalidateQueries({ queryKey: ['leaderboard-tournament'] })
-      queryClient.invalidateQueries({ queryKey: ['board-eliminations'] })
-      queryClient.invalidateQueries({ queryKey: ['board-knockout'] })
+      queryClient.invalidateQueries({ queryKey: ['leaderboard-wooden-spoon'] })
+      queryClient.invalidateQueries({ queryKey: ['leaderboard-peoples-champion'] })
       queryClient.invalidateQueries({ queryKey: ['admin-matches'] })
     },
   })
@@ -131,8 +131,8 @@ export function AdminPage() {
       queryClient.invalidateQueries({ queryKey: ['teams'] })
       queryClient.invalidateQueries({ queryKey: ['leaderboard-golden-boot'] })
       queryClient.invalidateQueries({ queryKey: ['leaderboard-golden-glove'] })
-      queryClient.invalidateQueries({ queryKey: ['board-eliminations'] })
-      queryClient.invalidateQueries({ queryKey: ['board-knockout'] })
+      queryClient.invalidateQueries({ queryKey: ['leaderboard-wooden-spoon'] })
+      queryClient.invalidateQueries({ queryKey: ['leaderboard-peoples-champion'] })
       queryClient.invalidateQueries({ queryKey: ['leaderboard-tournament'] })
     },
   })

@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
-import { Link, useOutletContext, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { TeamFlag } from '@/components/TeamFlag'
-import { getFlagUrl } from '@/lib/flags'
+import { TeamLeaderboardRow } from '@/components/TeamLeaderboardRow'
 import {
   formatPlayerLine,
   isRevealNamesEnabled,
@@ -22,7 +22,6 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { useMatchSyncRealtime } from '@/hooks/useMatchSyncRealtime'
 import { formatPoints } from '@/lib/utils'
-import type { PoolOutletContext } from '@/pages/PoolShell'
 
 const BASE_LEADERBOARD_OPTIONS = [
   { id: 'all', label: 'All leaderboards' },
@@ -67,7 +66,6 @@ export function LeaderboardsPage() {
   const { poolId } = useParams<{ poolId: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
   const { user } = useAuth()
-  const { assignedTeamId } = useOutletContext<PoolOutletContext>()
 
   const poolQuery = useQuery({
     queryKey: ['pool', poolId],
@@ -174,29 +172,31 @@ export function LeaderboardsPage() {
     },
   })
 
-  const eliminationsQuery = useQuery({
-    queryKey: ['board-eliminations'],
+  const woodenSpoonLb = useQuery({
+    queryKey: ['leaderboard-wooden-spoon', poolId],
+    enabled: Boolean(poolId),
     refetchInterval: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('board_group_eliminations')
+        .from('leaderboard_wooden_spoon')
         .select('*')
-        .order('global_fifa_rank', { ascending: true, nullsFirst: false })
-        .order('team_name', { ascending: true })
+        .eq('pool_id', poolId!)
+        .order('spoon_rank', { ascending: true })
       if (error) throw error
       return data ?? []
     },
   })
 
-  const knockoutQuery = useQuery({
-    queryKey: ['board-knockout'],
+  const peoplesChampionLb = useQuery({
+    queryKey: ['leaderboard-peoples-champion', poolId],
+    enabled: Boolean(poolId),
     refetchInterval: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('board_knockout_qualifiers')
+        .from('leaderboard_peoples_champion')
         .select('*')
-        .order('global_fifa_rank', { ascending: false, nullsFirst: false })
-        .order('team_name', { ascending: true })
+        .eq('pool_id', poolId!)
+        .order('champion_rank', { ascending: true })
       if (error) throw error
       return data ?? []
     },
@@ -205,8 +205,8 @@ export function LeaderboardsPage() {
   const member = memberQuery.data
   const bootLeader = goldenBootLb.data?.[0]
   const gloveLeader = goldenGloveLb.data?.[0]
-  const woodenSpoonHolder = eliminationsQuery.data?.[0]
-  const peoplesChampion = knockoutQuery.data?.[0]
+  const woodenSpoonHolder = woodenSpoonLb.data?.[0]
+  const peoplesChampion = peoplesChampionLb.data?.[0]
 
   const boardMeta = useMemo(
     () => leaderboardOptions.find((o) => o.id === board) ?? leaderboardOptions[0],
@@ -410,29 +410,32 @@ export function LeaderboardsPage() {
             {goldenBootLb.data?.map((row) => {
               const you = isYourTeamRow(member?.id, row.pool_member_ids)
               return (
-                <LeaderboardRow key={row.team_id} highlight={you}>
-                  <div className="flex min-w-0 items-center gap-3">
-                    <img
-                      src={getFlagUrl(row.fifa_code, 80)}
-                      alt=""
-                      className="h-8 w-12 shrink-0 rounded object-cover"
-                    />
-                    <div className="min-w-0">
-                      <span className="font-medium">
-                        #{row.boot_rank} {row.golden_boot_player_name}
-                      </span>
-                      <p className="truncate text-xs text-[var(--muted)]">
-                        {row.team_name} #{row.boot_rank}
-                      </p>
-                      <p className="truncate text-xs text-[var(--muted)]">
-                        {formatFifaWorldRanking(row.global_fifa_rank)}
-                      </p>
-                    </div>
-                  </div>
-                  <span className="shrink-0 font-bold text-[var(--team-primary)]">
-                    {row.golden_boot_goals} goals
-                  </span>
-                </LeaderboardRow>
+                <TeamLeaderboardRow
+                  key={row.team_id}
+                  rank={row.boot_rank}
+                  teamName={row.team_name}
+                  fifaCode={row.fifa_code}
+                  groupLetter={row.group_letter}
+                  groupPosition={row.group_position}
+                  managerNames={row.manager_names}
+                  poolMemberIds={row.pool_member_ids}
+                  coManagerCount={row.co_manager_count}
+                  globalFifaRank={row.global_fifa_rank}
+                  nameVisibility={nameVisibility}
+                  viewerMemberId={member?.id}
+                  highlight={you}
+                  isYou={you}
+                  awardLine={
+                    row.golden_boot_player_name
+                      ? `Top scorer: ${row.golden_boot_player_name}`
+                      : undefined
+                  }
+                  right={
+                    <span className="font-bold text-[var(--team-primary)]">
+                      {row.golden_boot_goals} goals
+                    </span>
+                  }
+                />
               )
             })}
           </div>
@@ -455,29 +458,32 @@ export function LeaderboardsPage() {
             {goldenGloveLb.data?.map((row) => {
               const you = isYourTeamRow(member?.id, row.pool_member_ids)
               return (
-                <LeaderboardRow key={row.team_id} highlight={you}>
-                  <div className="flex min-w-0 items-center gap-3">
-                    <img
-                      src={getFlagUrl(row.fifa_code, 80)}
-                      alt=""
-                      className="h-8 w-12 shrink-0 rounded object-cover"
-                    />
-                    <div className="min-w-0">
-                      <span className="font-medium">
-                        #{row.glove_rank} {row.golden_glove_player_name}
-                      </span>
-                      <p className="truncate text-xs text-[var(--muted)]">
-                        {row.team_name} #{row.glove_rank}
-                      </p>
-                      <p className="truncate text-xs text-[var(--muted)]">
-                        {formatFifaWorldRanking(row.global_fifa_rank)}
-                      </p>
-                    </div>
-                  </div>
-                  <span className="shrink-0 font-bold text-[var(--team-primary)]">
-                    {row.golden_glove_clean_sheets} CS
-                  </span>
-                </LeaderboardRow>
+                <TeamLeaderboardRow
+                  key={row.team_id}
+                  rank={row.glove_rank}
+                  teamName={row.team_name}
+                  fifaCode={row.fifa_code}
+                  groupLetter={row.group_letter}
+                  groupPosition={row.group_position}
+                  managerNames={row.manager_names}
+                  poolMemberIds={row.pool_member_ids}
+                  coManagerCount={row.co_manager_count}
+                  globalFifaRank={row.global_fifa_rank}
+                  nameVisibility={nameVisibility}
+                  viewerMemberId={member?.id}
+                  highlight={you}
+                  isYou={you}
+                  awardLine={
+                    row.golden_glove_player_name
+                      ? `Goalkeeper: ${row.golden_glove_player_name}`
+                      : undefined
+                  }
+                  right={
+                    <span className="font-bold text-[var(--team-primary)]">
+                      {row.golden_glove_clean_sheets} CS
+                    </span>
+                  }
+                />
               )
             })}
           </div>
@@ -496,30 +502,29 @@ export function LeaderboardsPage() {
             </p>
           )}
           <div className="space-y-2">
-            {eliminationsQuery.data?.map((row, i) => {
-              const isSpoon = row.team_id === woodenSpoonHolder?.team_id
-              const you = assignedTeamId === row.team_id
+            {woodenSpoonLb.data?.map((row) => {
+              const isSpoon = row.spoon_rank === 1
+              const you = isYourTeamRow(member?.id, row.pool_member_ids)
               return (
-                <LeaderboardRow key={row.team_id} highlight={you || isSpoon}>
-                  <div className="flex items-center gap-3">
-                    <img
-                      src={getFlagUrl(row.fifa_code, 80)}
-                      alt=""
-                      className="h-8 w-12 rounded object-cover"
-                    />
-                    <div className="min-w-0">
-                      <span className="font-medium">
-                        {row.team_name} #{i + 1}
-                      </span>
-                      <p className="text-xs text-[var(--muted)]">
-                        {formatFifaWorldRanking(row.global_fifa_rank)}
-                      </p>
-                    </div>
-                  </div>
-                  <span className="text-xs text-[var(--muted)]">
-                    {row.group_letter ? `Group ${row.group_letter}` : 'eliminated'}
-                  </span>
-                </LeaderboardRow>
+                <TeamLeaderboardRow
+                  key={row.team_id}
+                  rank={row.spoon_rank}
+                  teamName={row.team_name}
+                  fifaCode={row.fifa_code}
+                  groupLetter={row.group_letter}
+                  groupPosition={row.group_position}
+                  managerNames={row.manager_names}
+                  poolMemberIds={row.pool_member_ids}
+                  coManagerCount={row.co_manager_count}
+                  globalFifaRank={row.global_fifa_rank}
+                  nameVisibility={nameVisibility}
+                  viewerMemberId={member?.id}
+                  highlight={you || isSpoon}
+                  isYou={you}
+                  right={
+                    <span className="text-xs uppercase text-[var(--muted)]">eliminated</span>
+                  }
+                />
               )
             })}
           </div>
@@ -539,30 +544,31 @@ export function LeaderboardsPage() {
             </p>
           )}
           <div className="space-y-2">
-            {knockoutQuery.data?.map((row, i) => {
-              const isChampion = row.team_id === peoplesChampion?.team_id
-              const you = assignedTeamId === row.team_id
+            {peoplesChampionLb.data?.map((row) => {
+              const isChampion = row.champion_rank === 1
+              const you = isYourTeamRow(member?.id, row.pool_member_ids)
               return (
-                <LeaderboardRow key={row.team_id} highlight={you || isChampion}>
-                  <div className="flex items-center gap-3">
-                    <img
-                      src={getFlagUrl(row.fifa_code, 80)}
-                      alt=""
-                      className="h-8 w-12 rounded object-cover"
-                    />
-                    <div className="min-w-0">
-                      <span className="font-medium">
-                        {row.team_name} #{i + 1}
-                      </span>
-                      <p className="text-xs text-[var(--muted)]">
-                        {formatFifaWorldRanking(row.global_fifa_rank)}
-                      </p>
-                    </div>
-                  </div>
-                  <span className="text-xs uppercase text-[var(--muted)]">
-                    {formatStage(row.tournament_stage)}
-                  </span>
-                </LeaderboardRow>
+                <TeamLeaderboardRow
+                  key={row.team_id}
+                  rank={row.champion_rank}
+                  teamName={row.team_name}
+                  fifaCode={row.fifa_code}
+                  groupLetter={row.group_letter}
+                  groupPosition={row.group_position}
+                  managerNames={row.manager_names}
+                  poolMemberIds={row.pool_member_ids}
+                  coManagerCount={row.co_manager_count}
+                  globalFifaRank={row.global_fifa_rank}
+                  nameVisibility={nameVisibility}
+                  viewerMemberId={member?.id}
+                  highlight={you || isChampion}
+                  isYou={you}
+                  right={
+                    <span className="text-xs uppercase text-[var(--muted)]">
+                      {formatStage(row.tournament_stage)}
+                    </span>
+                  }
+                />
               )
             })}
           </div>

@@ -305,6 +305,10 @@ export interface Database {
           global_fifa_rank: number | null
           pool_member_ids: string[]
           boot_rank: number
+          group_letter: string | null
+          group_position: number | null
+          manager_names: string[]
+          co_manager_count: number
         }
       }
       leaderboard_golden_glove: {
@@ -318,6 +322,42 @@ export interface Database {
           global_fifa_rank: number | null
           pool_member_ids: string[]
           glove_rank: number
+          group_letter: string | null
+          group_position: number | null
+          manager_names: string[]
+          co_manager_count: number
+        }
+      }
+      leaderboard_wooden_spoon: {
+        Row: {
+          pool_id: string
+          team_id: string
+          team_name: string
+          fifa_code: string
+          tournament_stage: string
+          global_fifa_rank: number | null
+          group_letter: string | null
+          group_position: number | null
+          manager_names: string[]
+          pool_member_ids: string[]
+          co_manager_count: number
+          spoon_rank: number
+        }
+      }
+      leaderboard_peoples_champion: {
+        Row: {
+          pool_id: string
+          team_id: string
+          team_name: string
+          fifa_code: string
+          tournament_stage: string
+          global_fifa_rank: number | null
+          group_letter: string | null
+          group_position: number | null
+          manager_names: string[]
+          pool_member_ids: string[]
+          co_manager_count: number
+          champion_rank: number
         }
       }
       board_group_eliminations: {
