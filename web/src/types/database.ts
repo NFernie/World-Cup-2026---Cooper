@@ -137,6 +137,7 @@ export interface Database {
           elapsed_minutes: number | null
           extra_minutes: number | null
           status_synced_at: string | null
+          match_number: number | null
           winner_team_id: string | null
           created_at: string
         }

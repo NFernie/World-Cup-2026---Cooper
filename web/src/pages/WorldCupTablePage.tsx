@@ -45,7 +45,7 @@ export function WorldCupTablePage() {
       const [{ data: teams, error: tErr }, { data: matches, error: mErr }] = await Promise.all([
         supabase
           .from('teams')
-          .select('id, name, fifa_code, group_letter')
+          .select('id, name, fifa_code, group_letter, group_position')
           .not('group_letter', 'is', null)
           .order('group_letter')
           .order('name'),
@@ -73,6 +73,7 @@ export function WorldCupTablePage() {
           kickoff_at: m.kickoff_at,
           winner_team_id: m.winner_team_id,
           api_status_short: m.api_status_short,
+          match_number: m.match_number,
           home,
           away,
         })

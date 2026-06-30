@@ -2,6 +2,11 @@
  * Map API-Football fixtures to public.matches rows.
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import {
+  inferRoundOf32MatchNumber,
+  parseFifaMatchNumber,
+  teamSlotCode,
+} from "./fifa-bracket.ts";
 
 const API_BASE = "https://v3.football.api-sports.io";
 
@@ -124,6 +129,30 @@ async function resolveTeamId(
     .eq("api_football_team_id", apiTeamId)
     .maybeSingle();
   return data?.id ?? null;
+}
+
+async function resolveMatchNumber(
+  supabase: SupabaseClient,
+  stage: TournamentStage,
+  homeTeamId: string,
+  awayTeamId: string,
+  apiRound: string | undefined,
+): Promise<number | null> {
+  let matchNumber = parseFifaMatchNumber(apiRound);
+  if (matchNumber != null) return matchNumber;
+  if (stage !== "round_of_32") return null;
+
+  const { data: teams } = await supabase
+    .from("teams")
+    .select("id, group_letter, group_position")
+    .in("id", [homeTeamId, awayTeamId]);
+
+  const home = teams?.find((t) => t.id === homeTeamId);
+  const away = teams?.find((t) => t.id === awayTeamId);
+  const homeSlot = teamSlotCode(home?.group_letter ?? null, home?.group_position ?? null);
+  const awaySlot = teamSlotCode(away?.group_letter ?? null, away?.group_position ?? null);
+  if (!homeSlot || !awaySlot) return null;
+  return inferRoundOf32MatchNumber(homeSlot, awaySlot);
 }
 
 async function findExistingMatch(
@@ -265,6 +294,15 @@ export async function upsertFixture(
     if (homeScore > awayScore) row.winner_team_id = homeTeamId;
     else if (awayScore > homeScore) row.winner_team_id = awayTeamId;
   }
+
+  const matchNumber = await resolveMatchNumber(
+    supabase,
+    stage,
+    homeTeamId,
+    awayTeamId,
+    fx.league?.round,
+  );
+  if (matchNumber != null) row.match_number = matchNumber;
 
   const existing = await findExistingMatch(
     supabase,
