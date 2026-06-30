@@ -34,6 +34,7 @@ jobs:
 
       # Applies auth.email settings from supabase/config.toml (enable_confirmations = false).
       - name: Push Supabase config (auth)
+        continue-on-error: true
         run: supabase config push --yes
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
