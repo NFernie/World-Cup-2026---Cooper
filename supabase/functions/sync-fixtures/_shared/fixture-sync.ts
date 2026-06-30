@@ -99,7 +99,7 @@ type FixtureRow = {
     venue?: { name?: string | null; city?: string | null } | null;
     attendance?: number | null;
   };
-  teams: { home: { id: number }; away: { id: number } };
+  teams: { home: { id: number; winner?: boolean | null }; away: { id: number; winner?: boolean | null } };
   goals: { home: number | null; away: number | null };
   league: { round?: string };
   events?: ApiEvent[];
@@ -156,11 +156,17 @@ async function findExistingMatch(
   return byTeams;
 }
 
+export type UpsertFixtureResult =
+  | "upserted"
+  | "skipped"
+  | "finished-group"
+  | "finished-knockout";
+
 export async function upsertFixture(
   supabase: SupabaseClient,
   fx: FixtureRow,
   recalculateOnFinish: boolean,
-): Promise<"upserted" | "skipped" | "finished"> {
+): Promise<UpsertFixtureResult> {
   const externalId = String(fx.fixture.id);
   const homeApiId = fx.teams.home.id;
   const awayApiId = fx.teams.away.id;
@@ -251,6 +257,15 @@ export async function upsertFixture(
     }
   }
 
+  if (fx.teams.home.winner) {
+    row.winner_team_id = homeTeamId;
+  } else if (fx.teams.away.winner) {
+    row.winner_team_id = awayTeamId;
+  } else if (status === "finished" && homeScore != null && awayScore != null) {
+    if (homeScore > awayScore) row.winner_team_id = homeTeamId;
+    else if (awayScore > homeScore) row.winner_team_id = awayTeamId;
+  }
+
   const existing = await findExistingMatch(
     supabase,
     externalId,
@@ -263,7 +278,7 @@ export async function upsertFixture(
     const { data: prior } = await supabase
       .from("matches")
       .select(
-        "status, stage, home_score, away_score, elapsed_minutes, extra_minutes, api_status_short, venue_name, venue_city, referee, attendance",
+        "status, stage, home_score, away_score, winner_team_id, elapsed_minutes, extra_minutes, api_status_short, venue_name, venue_city, referee, attendance",
       )
       .eq("id", existing.id)
       .maybeSingle();
@@ -293,10 +308,26 @@ export async function upsertFixture(
         prior.home_score !== homeScore ||
         prior.away_score !== awayScore);
 
+    const shouldAdvanceKnockout =
+      recalculateOnFinish &&
+      stage !== "group" &&
+      status === "finished" &&
+      homeScore != null &&
+      awayScore != null &&
+      (prior?.status !== "finished" ||
+        prior.home_score !== homeScore ||
+        prior.away_score !== awayScore ||
+        prior.winner_team_id !== row.winner_team_id);
+
     if (shouldRecalcStandings) {
       await supabase.rpc("recalculate_pool_member_points", { p_match_id: existing.id });
       await supabase.rpc("recalculate_group_standings");
-      return prior?.status === "finished" ? "upserted" : "finished";
+      return prior?.status === "finished" ? "upserted" : "finished-group";
+    }
+
+    if (shouldAdvanceKnockout) {
+      await supabase.rpc("advance_knockout_winners", { p_match_id: existing.id });
+      return prior?.status === "finished" ? "upserted" : "finished-knockout";
     }
     return "upserted";
   }
@@ -317,7 +348,18 @@ export async function upsertFixture(
   ) {
     await supabase.rpc("recalculate_pool_member_points", { p_match_id: inserted.id });
     await supabase.rpc("recalculate_group_standings");
-    return "finished";
+    return "finished-group";
+  }
+
+  if (
+    recalculateOnFinish &&
+    stage !== "group" &&
+    status === "finished" &&
+    homeScore != null &&
+    awayScore != null
+  ) {
+    await supabase.rpc("advance_knockout_winners", { p_match_id: inserted.id });
+    return "finished-knockout";
   }
   return "upserted";
 }
@@ -397,6 +439,7 @@ export async function syncAllFixturesFromApi(
   if (imported > 0) {
     await supabase.rpc("recalculate_group_standings");
     await supabase.rpc("recalculate_pool_member_points");
+    await supabase.rpc("advance_knockout_winners");
   }
 
   let demoRemoved = 0;
@@ -424,10 +467,38 @@ export async function syncScoresByStatus(
 
   for (const fx of fixtures) {
     const result = await upsertFixture(supabase, fx, recalculateOnFinish);
-    if (result === "finished" || result === "upserted") updated++;
+    if (result === "finished-group" || result === "finished-knockout" || result === "upserted") {
+      updated++;
+    }
   }
 
   return updated;
+}
+
+/** Import knockout fixtures from API (teams assigned to R16+ slots). */
+export async function syncKnockoutFixturesFromApi(
+  supabase: SupabaseClient,
+  apiKey: string,
+  leagueId: string,
+  season: string,
+): Promise<{ imported: number; skipped: number }> {
+  const { fixtures } = await fetchAllFixtures(apiKey, leagueId, season);
+  let imported = 0;
+  let skipped = 0;
+
+  for (const fx of fixtures) {
+    const stage = mapApiStage(fx.league?.round);
+    if (stage === "group") continue;
+    const result = await upsertFixture(supabase, fx, true);
+    if (result === "skipped") skipped++;
+    else imported++;
+  }
+
+  if (imported > 0) {
+    await supabase.rpc("advance_knockout_winners");
+  }
+
+  return { imported, skipped };
 }
 
 /**
@@ -643,6 +714,8 @@ export async function syncActiveMatchScores(
   eventsChanged: number;
   materialChanges: number;
   finishesApplied: number;
+  groupFinishesApplied: number;
+  knockoutFinishesApplied: number;
   apiCalls: number;
   activeCount: number;
   skipped: string | null;
@@ -693,6 +766,8 @@ export async function syncActiveMatchScores(
       eventsChanged: 0,
       materialChanges: 0,
       finishesApplied: 0,
+      groupFinishesApplied: 0,
+      knockoutFinishesApplied: 0,
       apiCalls: 0,
       activeCount: 0,
       skipped: mode === "live"
@@ -707,6 +782,8 @@ export async function syncActiveMatchScores(
   let scoreChanges = 0;
   let eventsChanged = 0;
   let finishesApplied = 0;
+  let groupFinishesApplied = 0;
+  let knockoutFinishesApplied = 0;
   let apiCalls = 0;
 
   const chunkSize = 20;
@@ -736,8 +813,21 @@ export async function syncActiveMatchScores(
       }
 
       const result = await upsertFixture(supabase, fx, true);
-      if (result === "finished") finishesApplied++;
-      if (result === "finished" || result === "upserted") updated++;
+      if (result === "finished-group") {
+        finishesApplied++;
+        groupFinishesApplied++;
+      }
+      if (result === "finished-knockout") {
+        finishesApplied++;
+        knockoutFinishesApplied++;
+      }
+      if (
+        result === "finished-group" ||
+        result === "finished-knockout" ||
+        result === "upserted"
+      ) {
+        updated++;
+      }
       if (result === "skipped" || !matchId) continue;
 
       if (beforeScores) {
@@ -767,6 +857,8 @@ export async function syncActiveMatchScores(
     eventsChanged,
     materialChanges,
     finishesApplied,
+    groupFinishesApplied,
+    knockoutFinishesApplied,
     apiCalls,
     activeCount: active.length,
     skipped: null,

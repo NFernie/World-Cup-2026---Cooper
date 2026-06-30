@@ -39,6 +39,7 @@ Deno.serve(async () => {
     syncGoldenBootFromMatchEvents(supabase),
   ]);
   await supabase.rpc("recalculate_group_standings");
+  await supabase.rpc("advance_knockout_winners");
 
   return new Response(
     JSON.stringify({

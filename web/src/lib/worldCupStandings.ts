@@ -35,6 +35,8 @@ export type KnockoutMatch = GroupMatch & {
   kickoff_at: string
   home: TeamInfo
   away: TeamInfo
+  winner_team_id?: string | null
+  api_status_short?: string | null
 }
 
 export type BracketSlot = {
@@ -46,6 +48,8 @@ export type BracketSlot = {
   status: string
   kickoff_at: string | null
   isPlaceholder: boolean
+  winnerTeamId?: string | null
+  apiStatusShort?: string | null
 }
 
 export const GROUP_LETTERS = 'ABCDEFGHIJKL'.split('')
@@ -331,11 +335,84 @@ export function getMatchWinner(
   homeScore: number | null,
   awayScore: number | null,
   status: string,
+  winnerTeamId?: string | null,
 ): string | null {
   if (status !== 'finished' || homeScore == null || awayScore == null) return null
+  if (winnerTeamId) return winnerTeamId
   if (homeScore > awayScore) return homeTeamId
   if (awayScore > homeScore) return awayTeamId
   return null
+}
+
+const BRACKET_FEEDER_STAGES: KnockoutRound[] = [
+  'round_of_32',
+  'round_of_16',
+  'quarter_final',
+  'semi_final',
+]
+
+function nextKnockoutStage(stage: KnockoutRound): KnockoutRound | null {
+  switch (stage) {
+    case 'round_of_32':
+      return 'round_of_16'
+    case 'round_of_16':
+      return 'quarter_final'
+    case 'quarter_final':
+      return 'semi_final'
+    case 'semi_final':
+      return 'final'
+    default:
+      return null
+  }
+}
+
+function propagateWinnersThroughBracket(rounds: Map<KnockoutRound, BracketSlot[]>) {
+  for (const stage of BRACKET_FEEDER_STAGES) {
+    const slots = rounds.get(stage) ?? []
+    const nextStage = nextKnockoutStage(stage)
+    if (!nextStage) continue
+
+    const nextSlots = rounds.get(nextStage) ?? []
+    const thirdPlaceSlots = rounds.get('third_place') ?? []
+
+    slots.forEach((slot, matchIndex) => {
+      if (!slot.home || !slot.away) return
+      const winnerId = getMatchWinner(
+        slot.home.id,
+        slot.away.id,
+        slot.homeScore,
+        slot.awayScore,
+        slot.status,
+        slot.winnerTeamId,
+      )
+      if (!winnerId) return
+
+      const winner = winnerId === slot.home.id ? slot.home : slot.away
+      const loser = winnerId === slot.home.id ? slot.away : slot.home
+      const feederIndex = Math.floor(matchIndex / 2)
+      const slotSide = matchIndex % 2
+
+      const target = nextSlots[feederIndex]
+      if (target) {
+        if (slotSide === 0) {
+          target.home = winner
+        } else {
+          target.away = winner
+        }
+        target.isPlaceholder = false
+      }
+
+      if (stage === 'semi_final' && thirdPlaceSlots[0]) {
+        const thirdPlace = thirdPlaceSlots[0]
+        if (matchIndex === 0) {
+          thirdPlace.home = loser
+        } else if (matchIndex === 1) {
+          thirdPlace.away = loser
+        }
+        thirdPlace.isPlaceholder = false
+      }
+    })
+  }
 }
 
 export function buildKnockoutRounds(
@@ -359,6 +436,8 @@ export function buildKnockoutRounds(
       status: m.status,
       kickoff_at: m.kickoff_at,
       isPlaceholder: false,
+      winnerTeamId: m.winner_team_id,
+      apiStatusShort: m.api_status_short,
     }))
 
     const expected = KNOCKOUT_MATCH_COUNTS[stage]
@@ -391,6 +470,8 @@ export function buildKnockoutRounds(
 
     rounds.set(stage, slots)
   }
+
+  propagateWinnersThroughBracket(rounds)
 
   return rounds
 }

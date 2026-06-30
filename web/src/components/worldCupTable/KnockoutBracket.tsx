@@ -70,6 +70,7 @@ function BracketMatchCard({
           slot.homeScore,
           slot.awayScore,
           slot.status,
+          slot.winnerTeamId,
         )
       : null
 

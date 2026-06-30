@@ -71,6 +71,8 @@ export function WorldCupTablePage() {
           status: m.status,
           stage: m.stage,
           kickoff_at: m.kickoff_at,
+          winner_team_id: m.winner_team_id,
+          api_status_short: m.api_status_short,
           home,
           away,
         })
@@ -279,8 +281,8 @@ export function WorldCupTablePage() {
       {dataQuery.data && view === 'knockout' && (
         <section className="space-y-3">
           <p className="text-sm text-[var(--muted)]">
-            Qualified nations fill Round of 32 slots as they clinch. Empty slots stay TBD until
-            fixtures sync from the API.
+            Winners advance into later rounds as knockout matches finish. Empty slots stay TBD
+            until the previous round is complete or fixtures sync from the API.
           </p>
           <KnockoutBracket
             rounds={knockoutRounds}

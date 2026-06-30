@@ -5,7 +5,10 @@
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { syncAwardsAfterMatch } from "./_shared/awards-sync.ts";
-import { syncActiveMatchScores } from "./_shared/fixture-sync.ts";
+import {
+  syncActiveMatchScores,
+  syncKnockoutFixturesFromApi,
+} from "./_shared/fixture-sync.ts";
 
 const MAX_PASSES = 2;
 const FOLLOW_UP_DELAY_MS = 30_000;
@@ -61,10 +64,38 @@ Deno.serve(async (req) => {
 
   const totalMaterialChanges = passes.reduce((sum, p) => sum + p.materialChanges, 0);
   const totalFinishes = passes.reduce((sum, p) => sum + p.finishesApplied, 0);
+  const totalGroupFinishes = passes.reduce((sum, p) => sum + p.groupFinishesApplied, 0);
+  const totalKnockoutFinishes = passes.reduce(
+    (sum, p) => sum + p.knockoutFinishesApplied,
+    0,
+  );
   const totalScoreChanges = passes.reduce((sum, p) => sum + p.scoreChanges, 0);
 
-  if (totalFinishes > 0 || totalScoreChanges > 0) {
+  let knockoutFixtures: Awaited<ReturnType<typeof syncKnockoutFixturesFromApi>> | null = null;
+
+  if (totalGroupFinishes > 0) {
     await supabase.rpc("recalculate_group_standings");
+  }
+
+  if (totalKnockoutFinishes > 0) {
+    await supabase.rpc("advance_knockout_winners");
+    knockoutFixtures = await syncKnockoutFixturesFromApi(
+      supabase,
+      apiKey,
+      leagueId,
+      season,
+    );
+  } else if (totalScoreChanges > 0) {
+    const { count: activeKnockout } = await supabase
+      .from("matches")
+      .select("id", { count: "exact", head: true })
+      .neq("stage", "group")
+      .in("status", ["live", "scheduled"])
+      .lte("kickoff_at", new Date().toISOString());
+
+    if ((activeKnockout ?? 0) > 0) {
+      await supabase.rpc("advance_knockout_winners");
+    }
   }
 
   let awards: Awaited<ReturnType<typeof syncAwardsAfterMatch>> | null = null;
@@ -95,6 +126,9 @@ Deno.serve(async (req) => {
       eventsChanged: passes.reduce((sum, p) => sum + p.eventsChanged, 0),
       materialChanges: passes.reduce((sum, p) => sum + p.materialChanges, 0),
       finishesApplied: passes.reduce((sum, p) => sum + p.finishesApplied, 0),
+      groupFinishesApplied: totalGroupFinishes,
+      knockoutFinishesApplied: totalKnockoutFinishes,
+      knockoutFixtures,
       eventsUpdated: passes.reduce((sum, p) => sum + p.eventsUpdated, 0),
       updated: passes.reduce((sum, p) => sum + p.updated, 0),
       awards,
