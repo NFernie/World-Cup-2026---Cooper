@@ -106,9 +106,36 @@ type FixtureRow = {
   };
   teams: { home: { id: number; winner?: boolean | null }; away: { id: number; winner?: boolean | null } };
   goals: { home: number | null; away: number | null };
+  score?: { penalty?: { home: number | null; away: number | null } };
   league: { round?: string };
   events?: ApiEvent[];
 };
+
+function resolveKnockoutWinnerId(
+  fx: FixtureRow,
+  stage: TournamentStage,
+  status: MatchStatus,
+  homeTeamId: string,
+  awayTeamId: string,
+  homeScore: number | null,
+  awayScore: number | null,
+): string | null {
+  if (fx.teams.home.winner) return homeTeamId;
+  if (fx.teams.away.winner) return awayTeamId;
+  if (status !== "finished" || homeScore == null || awayScore == null) return null;
+  if (homeScore > awayScore) return homeTeamId;
+  if (awayScore > homeScore) return awayTeamId;
+  if (stage === "group") return null;
+
+  const penHome = fx.score?.penalty?.home;
+  const penAway = fx.score?.penalty?.away;
+  if (penHome != null && penAway != null) {
+    if (penHome > penAway) return homeTeamId;
+    if (penAway > penHome) return awayTeamId;
+  }
+
+  return null;
+}
 
 type ApiEvent = {
   time?: { elapsed?: number; extra?: number | null };
@@ -286,14 +313,16 @@ export async function upsertFixture(
     }
   }
 
-  if (fx.teams.home.winner) {
-    row.winner_team_id = homeTeamId;
-  } else if (fx.teams.away.winner) {
-    row.winner_team_id = awayTeamId;
-  } else if (status === "finished" && homeScore != null && awayScore != null) {
-    if (homeScore > awayScore) row.winner_team_id = homeTeamId;
-    else if (awayScore > homeScore) row.winner_team_id = awayTeamId;
-  }
+  const winnerTeamId = resolveKnockoutWinnerId(
+    fx,
+    stage,
+    status,
+    homeTeamId,
+    awayTeamId,
+    homeScore,
+    awayScore,
+  );
+  if (winnerTeamId) row.winner_team_id = winnerTeamId;
 
   const matchNumber = await resolveMatchNumber(
     supabase,
@@ -329,7 +358,13 @@ export async function upsertFixture(
       }
     }
 
-    if (prior && isMatchRowMateriallyUnchanged(prior, row)) {
+    const missingKnockoutWinner =
+      stage !== "group" &&
+      status === "finished" &&
+      prior?.winner_team_id == null &&
+      row.winner_team_id != null;
+
+    if (prior && isMatchRowMateriallyUnchanged(prior, row) && !missingKnockoutWinner) {
       return "skipped";
     }
 

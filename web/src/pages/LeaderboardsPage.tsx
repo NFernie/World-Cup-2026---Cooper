@@ -136,8 +136,6 @@ export function LeaderboardsPage() {
         .from('leaderboard_tournament_standing')
         .select('*')
         .eq('pool_id', poolId!)
-        .order('group_points', { ascending: false })
-        .order('group_goal_difference', { ascending: false })
         .order('tournament_rank', { ascending: true, nullsFirst: false })
       if (error) throw error
       return data ?? []
