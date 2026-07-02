@@ -54,8 +54,15 @@ export function mapApiStage(round: string | undefined): TournamentStage {
   if (r === "final" || r.includes("world cup - final")) return "final";
   if (r.includes("semi")) return "semi_final";
   if (r.includes("quarter")) return "quarter_final";
-  if (r.includes("round of 16")) return "round_of_16";
-  if (r.includes("round of 32") || (r.includes("32") && !r.includes("16"))) return "round_of_32";
+  if (r.includes("round of 16") || r.includes("1/8") || r.includes("1-8")) return "round_of_16";
+  if (
+    r.includes("round of 32") ||
+    r.includes("1/16") ||
+    r.includes("1-16") ||
+    (/\b32\b/.test(r) && !r.includes("16"))
+  ) {
+    return "round_of_32";
+  }
   return "group";
 }
 
