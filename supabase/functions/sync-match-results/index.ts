@@ -77,14 +77,12 @@ Deno.serve(async (req) => {
     await supabase.rpc("recalculate_group_standings");
   }
 
-  if (totalKnockoutFinishes > 0) {
+  // Full cron pass: always reconcile knockout stages from finished matches (not only
+  // when a match newly finishes — otherwise teams stay at round_of_32 after deploy/backfill).
+  if (mode === "full") {
     await supabase.rpc("advance_knockout_winners");
-    knockoutFixtures = await syncKnockoutFixturesFromApi(
-      supabase,
-      apiKey,
-      leagueId,
-      season,
-    );
+  } else if (totalKnockoutFinishes > 0) {
+    await supabase.rpc("advance_knockout_winners");
   } else if (totalScoreChanges > 0) {
     const { count: activeKnockout } = await supabase
       .from("matches")
@@ -96,6 +94,15 @@ Deno.serve(async (req) => {
     if ((activeKnockout ?? 0) > 0) {
       await supabase.rpc("advance_knockout_winners");
     }
+  }
+
+  if (totalKnockoutFinishes > 0) {
+    knockoutFixtures = await syncKnockoutFixturesFromApi(
+      supabase,
+      apiKey,
+      leagueId,
+      season,
+    );
   }
 
   let awards: Awaited<ReturnType<typeof syncAwardsAfterMatch>> | null = null;
