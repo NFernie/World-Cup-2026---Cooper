@@ -21,8 +21,6 @@ export function useMatchSyncRealtime(enabled = true) {
       void queryClient.invalidateQueries({ queryKey: ['fixtures-full'] })
       void queryClient.invalidateQueries({ queryKey: ['world-cup-table'] })
       void queryClient.invalidateQueries({ queryKey: ['leaderboard-tournament'] })
-      void queryClient.invalidateQueries({ queryKey: ['leaderboard-wooden-spoon'] })
-      void queryClient.invalidateQueries({ queryKey: ['leaderboard-peoples-champion'] })
       void queryClient.invalidateQueries({ queryKey: ['leaderboard-golden-boot'] })
       void queryClient.invalidateQueries({ queryKey: ['leaderboard-golden-glove'] })
       void queryClient.invalidateQueries({
@@ -32,8 +30,6 @@ export function useMatchSyncRealtime(enabled = true) {
 
     const invalidateStandingsQueries = () => {
       void queryClient.invalidateQueries({ queryKey: ['leaderboard-tournament'] })
-      void queryClient.invalidateQueries({ queryKey: ['leaderboard-wooden-spoon'] })
-      void queryClient.invalidateQueries({ queryKey: ['leaderboard-peoples-champion'] })
       void queryClient.invalidateQueries({ queryKey: ['leaderboard-golden-boot'] })
       void queryClient.invalidateQueries({ queryKey: ['leaderboard-golden-glove'] })
       void queryClient.invalidateQueries({ queryKey: ['world-cup-table'] })
