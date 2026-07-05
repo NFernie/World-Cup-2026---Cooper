@@ -11,7 +11,7 @@ create table if not exists public.frozen_group_stage_award_board (
   group_letter char(1),
   group_position int,
   board_rank int not null,
-  frozen_at timestamptz not null default '2026-06-29 00:00:00+00',
+  frozen_at timestamptz not null default '2026-06-29 00:00:00+00'::timestamptz,
   primary key (board, team_id)
 );
 
@@ -231,7 +231,7 @@ select
   group_letter,
   group_position,
   board_rank,
-  '2026-06-29 00:00:00+00'
+  '2026-06-29 00:00:00+00'::timestamptz
 from wooden_spoon_rows
 union all
 select
@@ -245,7 +245,7 @@ select
   group_letter,
   group_position,
   board_rank,
-  '2026-06-29 00:00:00+00'
+  '2026-06-29 00:00:00+00'::timestamptz
 from peoples_champion_rows;
 
 create or replace view public.leaderboard_wooden_spoon as
