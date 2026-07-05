@@ -172,6 +172,7 @@ export function LeaderboardsPage() {
 
   const eliminationsQuery = useQuery({
     queryKey: ['board-eliminations'],
+    staleTime: Infinity,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('board_group_eliminations')
@@ -185,6 +186,7 @@ export function LeaderboardsPage() {
 
   const knockoutQuery = useQuery({
     queryKey: ['board-knockout'],
+    staleTime: Infinity,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('board_knockout_qualifiers')
@@ -473,6 +475,7 @@ export function LeaderboardsPage() {
           <h2 className="mb-2 text-lg font-semibold">Wooden spoon</h2>
           <p className="mb-3 text-sm text-[var(--muted)]">
             Group-stage exits ranked highest FIFA rank first — the top team holds the wooden spoon.
+            Locked at the end of the group stage (before Round of 32 kick-off on 29 June).
           </p>
           {woodenSpoonHolder && (
             <p className="mb-3 rounded-lg border border-[var(--team-primary)]/40 px-3 py-2 text-sm">
@@ -515,7 +518,8 @@ export function LeaderboardsPage() {
           <h2 className="mb-2 text-lg font-semibold">People&apos;s champion</h2>
           <p className="mb-3 text-sm text-[var(--muted)]">
             Teams through the group stage, ranked lowest FIFA rank first — the top team is
-            people&apos;s champion.
+            people&apos;s champion. Locked at the end of the group stage (before Round of 32
+            kick-off on 29 June).
           </p>
           {peoplesChampion && (
             <p className="mb-3 rounded-lg border border-[var(--team-primary)]/40 px-3 py-2 text-sm">

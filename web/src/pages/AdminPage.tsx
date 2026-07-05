@@ -127,8 +127,6 @@ export function AdminPage() {
       queryClient.invalidateQueries({ queryKey: ['teams'] })
       queryClient.invalidateQueries({ queryKey: ['leaderboard-golden-boot'] })
       queryClient.invalidateQueries({ queryKey: ['leaderboard-golden-glove'] })
-      queryClient.invalidateQueries({ queryKey: ['board-eliminations'] })
-      queryClient.invalidateQueries({ queryKey: ['board-knockout'] })
       queryClient.invalidateQueries({ queryKey: ['leaderboard-tournament'] })
     },
   })
