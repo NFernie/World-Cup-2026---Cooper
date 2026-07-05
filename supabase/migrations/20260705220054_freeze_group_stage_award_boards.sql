@@ -10,7 +10,7 @@ create table if not exists public.frozen_group_stage_award_board (
   tournament_rank int,
   group_letter char(1),
   group_position int,
-  board_rank int not null,
+  board_rank bigint not null,
   frozen_at timestamptz not null default '2026-06-29 00:00:00+00'::timestamptz,
   primary key (board, team_id)
 );
@@ -189,7 +189,7 @@ wooden_spoon_rows as (
     ge.*,
     row_number() over (
       order by ge.global_fifa_rank asc nulls last, ge.name asc
-    )::int as board_rank
+    )::bigint as board_rank
   from group_eliminated ge
 ),
 peoples_champion_rows as (
@@ -203,7 +203,7 @@ peoples_champion_rows as (
     gr.group_position,
     row_number() over (
       order by gr.global_fifa_rank desc nulls last, gr.name asc
-    )::int as board_rank
+    )::bigint as board_rank
   from group_ranked gr
   where gr.id in (select id from qualifiers)
 )
@@ -248,7 +248,12 @@ select
   '2026-06-29 00:00:00+00'::timestamptz
 from peoples_champion_rows;
 
-create or replace view public.leaderboard_wooden_spoon as
+drop view if exists public.leaderboard_wooden_spoon;
+drop view if exists public.leaderboard_peoples_champion;
+drop view if exists public.board_group_eliminations;
+drop view if exists public.board_knockout_qualifiers;
+
+create view public.leaderboard_wooden_spoon as
 select
   pm.pool_id,
   f.team_id,
@@ -261,14 +266,14 @@ select
   array_agg(pm.display_name order by pm.join_order) as manager_names,
   array_agg(pm.id order by pm.join_order) as pool_member_ids,
   count(pm.id)::int as co_manager_count,
-  f.board_rank as spoon_rank
+  f.board_rank::bigint as spoon_rank
 from public.pool_members pm
 join public.frozen_group_stage_award_board f on f.team_id = pm.assigned_team_id
 where f.board = 'wooden_spoon'
 group by pm.pool_id, f.team_id, f.team_name, f.fifa_code, f.tournament_stage,
          f.global_fifa_rank, f.group_letter, f.group_position, f.board_rank;
 
-create or replace view public.leaderboard_peoples_champion as
+create view public.leaderboard_peoples_champion as
 select
   pm.pool_id,
   f.team_id,
@@ -281,14 +286,14 @@ select
   array_agg(pm.display_name order by pm.join_order) as manager_names,
   array_agg(pm.id order by pm.join_order) as pool_member_ids,
   count(pm.id)::int as co_manager_count,
-  f.board_rank as champion_rank
+  f.board_rank::bigint as champion_rank
 from public.pool_members pm
 join public.frozen_group_stage_award_board f on f.team_id = pm.assigned_team_id
 where f.board = 'peoples_champion'
 group by pm.pool_id, f.team_id, f.team_name, f.fifa_code, f.tournament_stage,
          f.global_fifa_rank, f.group_letter, f.group_position, f.board_rank;
 
-create or replace view public.board_group_eliminations as
+create view public.board_group_eliminations as
 select
   f.team_id,
   f.team_name,
@@ -302,7 +307,7 @@ from public.frozen_group_stage_award_board f
 where f.board = 'wooden_spoon'
 order by f.board_rank;
 
-create or replace view public.board_knockout_qualifiers as
+create view public.board_knockout_qualifiers as
 select
   f.team_id,
   f.team_name,
